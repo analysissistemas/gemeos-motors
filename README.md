@@ -7,6 +7,9 @@ carro**, acessórios e assistência técnica própria.
 **No ar:** https://gemeos-motors.vercel.app — abre a loja; a equipe entra em
 `/login`.
 
+**Código:** https://github.com/analysissistemas/gemeos-motors, branch
+`vitrine-html` (a branch `main` é outro sistema, do Leo — não misture as duas).
+
 > **Antes era a Gêmeos do iPhone.** Em 08/09/2026 os donos passaram o sistema
 > para a loja de moto elétrica. O sistema de celular está guardado inteiro na
 > branch `celulares-apple` — nada foi perdido.

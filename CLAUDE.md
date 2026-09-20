@@ -23,10 +23,16 @@ de sempre, agora em `public/vitrine.html`.
 | | |
 |---|---|
 | Conta | **analysissistemas** (a empresa, não a conta pessoal) |
-| Repositório | `analysissistemas/gemeos-do-iphone` |
+| Repositório | `analysissistemas/gemeos-motors` |
 | Branch | **`vitrine-html`** |
 
-O nome do repositório ainda é o antigo (`gemeos-do-iphone`).
+O repositório se chamava `gemeos-do-iphone` e foi renomeado para `gemeos-motors`
+em 20/09/2026, a pedido do dono (o nome antigo confundia no GitHub). O GitHub
+redireciona o endereço antigo sozinho, então quem já tinha o projeto baixado
+continua conseguindo dar `git push` — mas vale trocar o endereço:
+`git remote set-url origin https://github.com/analysissistemas/gemeos-motors`.
+A **pasta local** aqui ainda se chama `gemeos-do-iphone`; só o nome, nada
+depende disso.
 
 **A branch `main` do mesmo repositório é OUTRO sistema**, feito em Next.js +
 Supabase pelo **Leo** (sócio do dono), com a IA de atendimento "Milton". Nunca
