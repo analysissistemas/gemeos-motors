@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
-import { obterProvedor } from "@/lib/mensageria/provedores";
+import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
+import { blobDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
 import type { MensagemEntrante, TipoMensagem } from "@/lib/mensageria/tipos";
 
@@ -36,7 +37,8 @@ type ValorMeta = {
 };
 
 export async function POST(req: NextRequest) {
-  const { appSecret } = await lerConfigWhatsApp();
+  const cfg = await lerConfigWhatsApp();
+  const { appSecret } = cfg;
   if ((await obterProvedor()).simulado || !appSecret) return desligado();
   const bruto = await req.text();
   const assinatura = req.headers.get("x-hub-signature-256") ?? "";
@@ -53,7 +55,6 @@ export async function POST(req: NextRequest) {
       for (const m of v.messages ?? []) {
         const nome = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? null;
         const tipo: TipoMensagem = m.type === "text" ? "texto" : m.type === "image" ? "imagem" : m.type === "document" ? "documento" : m.type === "audio" ? "audio" : "texto";
-        /* mídia real chega como id da Meta; baixar e guardar é o próximo passo da integração */
         recebidas.push({
           canal: "whatsapp",
           provedor: "whatsapp_cloud",
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
           externoId: m.id,
           tipo,
           conteudo: m.text?.body ?? m.image?.caption ?? m.document?.caption ?? (tipo === "texto" ? `[${m.type}]` : null),
+          midia: await baixarEGuardar(cfg, m),
           metadados: { mediaId: m.image?.id ?? m.document?.id ?? m.audio?.id, mime: m.image?.mime_type ?? m.document?.mime_type ?? m.audio?.mime_type, arquivo: m.document?.filename },
         });
       }
@@ -77,4 +79,22 @@ export async function POST(req: NextRequest) {
     for (const id of new Set(conversas)) await executarTriagem(id);
   });
   return NextResponse.json({ ok: true });
+}
+
+type MensagemMeta = NonNullable<ValorMeta["messages"]>[number];
+
+/* A Meta manda só o id da mídia: baixamos com o token e guardamos no Blob
+   privado. Se falhar, a mensagem entra mesmo assim, sem o arquivo. */
+async function baixarEGuardar(cfg: Awaited<ReturnType<typeof lerConfigWhatsApp>>, m: MensagemMeta) {
+  const anexo = m.image ?? m.document ?? m.audio;
+  if (!anexo || !blobDisponivel()) return null;
+  try {
+    const arq = await new ProvedorWhatsAppCloud(cfg).baixarMidia(anexo.id);
+    if (!arq) return null;
+    const ext = arq.mime.split("/")[1]?.split(";")[0] ?? "bin";
+    const nome = (m.document && m.document.filename) || `${m.type}-${m.id.slice(-8)}.${ext}`;
+    return await guardarMidia(arq.bytes, nome, arq.mime);
+  } catch {
+    return null;
+  }
 }

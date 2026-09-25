@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
+import { lerBytes } from "./midia";
 
 /* ============================================================
    PROVEDOR SIMULADO (MOCK)
@@ -40,13 +41,43 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     return !!(this.cfg.token && this.cfg.phoneNumberId);
   }
 
+  private async subirMidia(m: NonNullable<PedidoEnvio["midia"]>): Promise<{ id: string } | { erro: string }> {
+    const arq = await lerBytes(m.url);
+    if (!arq) return { erro: "Arquivo não encontrado para envio." };
+    const mime = m.mime ?? arq.mime;
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", mime);
+    form.append("file", new Blob([new Uint8Array(arq.bytes)], { type: mime }), m.nome ?? "arquivo");
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/media`, { method: "POST", headers: { Authorization: `Bearer ${this.cfg.token}` }, body: form });
+    const j = (await r.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+    if (!r.ok || !j.id) return { erro: j.error?.message ?? `Falha ao enviar o arquivo (HTTP ${r.status})` };
+    return { id: j.id };
+  }
+
+  /** Baixa uma mídia recebida (a Meta manda só o id) e devolve os bytes. */
+  async baixarMidia(mediaId: string): Promise<{ bytes: Buffer; mime: string } | null> {
+    const h = { Authorization: `Bearer ${this.cfg.token}` };
+    const meta = await fetch(`https://graph.facebook.com/${this.versao}/${mediaId}`, { headers: h });
+    if (!meta.ok) return null;
+    const { url, mime_type } = (await meta.json()) as { url?: string; mime_type?: string };
+    if (!url) return null;
+    const arq = await fetch(url, { headers: h });
+    if (!arq.ok) return null;
+    return { bytes: Buffer.from(await arq.arrayBuffer()), mime: mime_type ?? arq.headers.get("content-type") ?? "application/octet-stream" };
+  }
+
   async enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio> {
     if (!this.configurado()) return { externoId: null, status: "failed", erro: "WhatsApp Business não configurado" };
     const corpo: Record<string, unknown> = { messaging_product: "whatsapp", to: pedido.telefone };
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
     if (pedido.tipo === "texto") Object.assign(corpo, { type: "text", text: { body: pedido.conteudo ?? "", preview_url: true } });
-    else if (pedido.tipo === "imagem" && pedido.midia) Object.assign(corpo, { type: "image", image: { link: pedido.midia.url, caption: pedido.conteudo ?? undefined } });
-    else if (pedido.tipo === "documento" && pedido.midia) Object.assign(corpo, { type: "document", document: { link: pedido.midia.url, filename: pedido.midia.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
+    else if ((pedido.tipo === "imagem" || pedido.tipo === "documento") && pedido.midia) {
+      const up = await this.subirMidia(pedido.midia);
+      if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
+      if (pedido.tipo === "imagem") Object.assign(corpo, { type: "image", image: { id: up.id, caption: pedido.conteudo ?? undefined } });
+      else Object.assign(corpo, { type: "document", document: { id: up.id, filename: pedido.midia.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
+    }
     else return { externoId: null, status: "failed", erro: `Tipo ${pedido.tipo} ainda não suportado no envio real` };
 
     const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {

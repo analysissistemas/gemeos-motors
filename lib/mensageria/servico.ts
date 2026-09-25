@@ -9,6 +9,7 @@ import { triarConversa } from "@/lib/ia/diagnosticos";
 import { IaIndisponivel } from "@/lib/ia/cliente";
 import { criarNegocio } from "@/lib/servicos/negocios";
 import { obterProvedor } from "./provedores";
+import { persistirMidia } from "./midia";
 import { mensagemSistema } from "./anotacoes";
 export { mensagemSistema, anotarNegocioNaConversa } from "./anotacoes";
 import type { MensagemEntrante, Midia, TipoMensagem } from "./tipos";
@@ -190,12 +191,13 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
   const [c] = await db.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
   if (!c) throw new ErroRegra("Conversa não encontrada.");
   const prov = await obterProvedor();
+  const midia = await persistirMidia(e.midia);
   let respostaExterno: string | null = null;
   if (e.respostaA) {
     const [orig] = await db.select({ externoId: schema.mensagens.externoId }).from(schema.mensagens).where(eq(schema.mensagens.id, e.respostaA)).limit(1);
     respostaExterno = orig?.externoId ?? null;
   }
-  const env = await prov.enviar({ telefone: c.contatoTelefone, tipo: e.tipo, conteudo: texto, midia: e.midia, respostaAExternoId: respostaExterno });
+  const env = await prov.enviar({ telefone: c.contatoTelefone, tipo: e.tipo, conteudo: texto, midia, respostaAExternoId: respostaExterno });
   return db.transaction(async (tx) => {
     if (c.modo === "ia") await assumirNaTransacao(tx, u, c, true);
     const [msg] = await tx
@@ -207,10 +209,10 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
         usuarioId: u.id,
         tipo: e.tipo,
         conteudo: texto,
-        midiaUrl: e.midia?.url ?? null,
-        midiaNome: e.midia?.nome ?? null,
-        midiaMime: e.midia?.mime ?? null,
-        midiaTamanho: e.midia?.tamanho ?? null,
+        midiaUrl: midia?.url ?? null,
+        midiaNome: midia?.nome ?? null,
+        midiaMime: midia?.mime ?? null,
+        midiaTamanho: midia?.tamanho ?? null,
         status: env.status,
         externoId: env.externoId,
         respostaA: e.respostaA ?? null,
@@ -221,7 +223,7 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
       .update(schema.conversas)
       .set({
         ultimaMensagemEm: new Date(),
-        ultimaMensagemTexto: resumoMensagem(e.tipo, texto, e.midia),
+        ultimaMensagemTexto: resumoMensagem(e.tipo, texto, midia),
         ultimaMensagemDirecao: "outgoing",
         naoLidas: 0,
         status: c.status === "follow_up" ? "follow_up" : "aguardando_cliente",
