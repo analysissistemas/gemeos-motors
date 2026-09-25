@@ -6,7 +6,8 @@ import type { NextConfig } from "next";
    login.html e, com sessão, para index.html; os dois agora caem no app novo. */
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@react-pdf/renderer"],
-  experimental: { authInterrupts: true },
+  /* anexos do chat (até 2 MB) viajam codificados, ~35% maiores; a Vercel corta em 4,5 MB */
+  experimental: { authInterrupts: true, serverActions: { bodySizeLimit: "4mb" } },
   async redirects() {
     return [
       { source: "/", destination: "/vitrine", permanent: false },
