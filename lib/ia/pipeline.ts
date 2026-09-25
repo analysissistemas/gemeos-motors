@@ -7,6 +7,16 @@
    A IA só produz dados (SaidaModelo): quem age são as etapas.
    Os fluxos compartilham ETAPAS_DE_SAIDA (fatos, validador, permissão, envio):
    nenhum fluxo novo consegue contornar essas camadas.
+
+   RESPONSABILIDADES (não misturar):
+   - WhatsApp/Meta ........ TRANSPORTE. Já existe e funciona (webhook, lib/mensageria).
+                            Este fluxo não recebe nem envia nada sozinho: só pede o
+                            envio por `deps.enviar`, que no futuro será o provedor atual.
+   - Fluxo de IA .......... INTELIGÊNCIA E ORQUESTRAÇÃO (este arquivo e fluxo.ts).
+   - Validador + permissões  SEGURANÇA (validador.ts, permissoes.ts, ETAPAS_DE_SAIDA).
+   - Atendimento .......... INTERFACE E HISTÓRICO (telas, conversas, mensagens).
+   O fluxo ainda NÃO está ligado ao webhook. Quando for, será uma camada sobre a
+   integração existente, sem alterar como a Meta entrega e recebe as mensagens.
    ============================================================ */
 import type { ControleIa } from "./permissoes.ts";
 import { norm, type ConsultaEstoque, type ResultadoEstoque } from "./estoque-tipos.ts";
