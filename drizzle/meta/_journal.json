@@ -15,6 +15,13 @@
       "when": 1790347352577,
       "tag": "0001_ia_central",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790354605091,
+      "tag": "0002_ia_execucoes",
+      "breakpoints": true
     }
   ]
 }

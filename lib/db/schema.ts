@@ -628,3 +628,20 @@ export const iaConhecimento = pgTable(
   },
   (t) => [index("ia_conhecimento_categoria_idx").on(t.categoria)],
 );
+
+/* ---------- registro de cada resposta gerada pela IA (enviada ou bloqueada) ---------- */
+export const iaExecucoes = pgTable(
+  "ia_execucoes",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    conversaId: integer().references(() => conversas.id, { onDelete: "set null" }),
+    origem: text().notNull(), // triagem | ...
+    texto: text().notNull(),
+    aprovada: boolean().notNull(), // passou no validador
+    enviada: boolean().notNull(),
+    motivo: text(), // null = enviada | sem_permissao | validador | falha_envio
+    violacoes: jsonb().$type<{ regra: string; rotulo: string; detalhe: string }[]>(),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("ia_execucoes_criado_idx").on(t.criadoEm), index("ia_execucoes_conversa_idx").on(t.conversaId)],
+);

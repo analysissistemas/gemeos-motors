@@ -10,6 +10,8 @@ import { AreaTexto, Alternar, Campo, Entrada, Selecao } from "@/components/ui/ca
 import { Dialogo } from "@/components/ui/dialogo";
 import { cn } from "@/lib/cn";
 import { CATEGORIAS_CONHECIMENTO } from "@/lib/ia/secoes";
+import type { ControleIa } from "@/lib/ia/permissoes";
+import { AbaControle, type Execucao } from "./controle";
 import { acaoAlternarConhecimento, acaoDescartarRascunho, acaoExcluirConhecimento, acaoPublicar, acaoRestaurarComoRascunho, acaoSalvarConhecimento, acaoSalvarRascunho } from "./acoes";
 
 type Versao = { id: number; versao: number; conteudo: string; status: string; nota: string | null; criadoEm: Date; publicadoEm: Date | null };
@@ -18,8 +20,8 @@ type Item = { id: number; categoria: string; titulo: string; conteudo: string; a
 
 const data = (d: Date | null) => (d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 
-export function TelaIa({ prompts, conhecimento }: { prompts: Setor[]; conhecimento: Item[] }) {
-  const [aba, setAba] = useState<"prompt" | "conhecimento">("prompt");
+export function TelaIa({ prompts, conhecimento, controle, execucoes }: { prompts: Setor[]; conhecimento: Item[]; controle: ControleIa; execucoes: Execucao[] }) {
+  const [aba, setAba] = useState<"prompt" | "conhecimento" | "controle">("prompt");
   return (
     <>
       <CabecalhoPagina titulo="Inteligência artificial" subtitulo="Ensine a IA de atendimento: prompt por setor e base de conhecimento. Nada muda para os clientes até você publicar." />
@@ -30,9 +32,10 @@ export function TelaIa({ prompts, conhecimento }: { prompts: Setor[]; conhecimen
         abas={[
           { id: "prompt", rotulo: "Prompt por setor" },
           { id: "conhecimento", rotulo: "Base de conhecimento", contador: conhecimento.length },
+          { id: "controle", rotulo: controle.ligada ? "Controle (IA ligada)" : "Controle (IA desligada)" },
         ]}
       />
-      {aba === "prompt" ? <AbaPrompt setores={prompts} /> : <AbaConhecimento itens={conhecimento} />}
+      {aba === "prompt" ? <AbaPrompt setores={prompts} /> : aba === "conhecimento" ? <AbaConhecimento itens={conhecimento} /> : <AbaControle controle={controle} execucoes={execucoes} />}
     </>
   );
 }

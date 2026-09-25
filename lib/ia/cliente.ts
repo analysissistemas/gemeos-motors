@@ -1,6 +1,7 @@
 import "server-only";
 import { generateText, Output } from "ai";
 import type { z } from "zod";
+import { iaLigada } from "./controle";
 
 /* ============================================================
    PORTA ÚNICA PARA A IA
@@ -14,6 +15,11 @@ import type { z } from "zod";
 export const MODELO_IA = process.env.IA_MODELO || "anthropic/claude-sonnet-5";
 
 export class IaIndisponivel extends Error {}
+
+/* Chave geral: com a IA desligada, nenhuma chamada ao modelo acontece, para nada. */
+async function exigirIaLigada() {
+  if (!(await iaLigada())) throw new IaIndisponivel("A IA está desligada. Ligue em Inteligência artificial > Controle.");
+}
 
 function traduzirErro(e: unknown): IaIndisponivel {
   const texto = String((e as { message?: string })?.message ?? e);
@@ -31,6 +37,7 @@ function traduzirErro(e: unknown): IaIndisponivel {
 }
 
 export async function gerarObjeto<S extends z.ZodType>(p: { schema: S; sistema: string; prompt: string; maxTokens?: number }): Promise<z.infer<S>> {
+  await exigirIaLigada();
   try {
     const r = await generateText({
       model: MODELO_IA,

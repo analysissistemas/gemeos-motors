@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env.local scripts/migrar.mjs",
     "db:seed": "node --env-file=.env.local scripts/semear.mjs",
+    "test:ia": "node --test \"tests/unit/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:limpar": "node --env-file=.env.local scripts/limpar-e2e.mjs"
   },

@@ -8,6 +8,9 @@ import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { proximaVersao } from "@/lib/ia/prompt";
 import { CHAVES_SECOES, secaoPorChave } from "@/lib/ia/secoes";
+import { salvarControle } from "@/lib/ia/controle";
+import { PERMISSOES_IA } from "@/lib/ia/permissoes";
+import { validarResposta } from "@/lib/ia/validador";
 
 const secaoValida = z.string().refine((s) => CHAVES_SECOES.includes(s), "Setor inválido");
 const P = schema.iaPromptVersoes;
@@ -130,5 +133,36 @@ export async function acaoAlternarConhecimento(id: number, ativo: boolean) {
     await registrarLog(u, { acao: "ia.conhecimento", entidade: "configuracao", descricao: `${ativo ? "Ativou" : "Desativou"} o item de conhecimento "${r.titulo}"` });
     revalidatePath("/sistema/ia");
     return null;
+  });
+}
+
+/* ---------------- controle: chave geral, permissões e validador ---------------- */
+
+const esquemaControle = z.object({
+  ligada: z.boolean(),
+  permissoes: z.object(Object.fromEntries(PERMISSOES_IA.map((p) => [p.chave, z.boolean()])) as Record<(typeof PERMISSOES_IA)[number]["chave"], z.ZodBoolean>),
+});
+
+export async function acaoSalvarControle(dados: unknown) {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const c = esquemaControle.parse(dados);
+    await salvarControle(c, u.id);
+    const ativas = PERMISSOES_IA.filter((p) => c.permissoes[p.chave]).map((p) => p.rotulo);
+    await registrarLog(u, {
+      acao: "ia.controle",
+      entidade: "configuracao",
+      descricao: `${c.ligada ? "Ligou" : "Desligou"} a IA. Permissões ativas: ${ativas.length ? ativas.join(", ") : "nenhuma"}`,
+    });
+    revalidatePath("/sistema/ia");
+    return null;
+  }, "Controle da IA salvo");
+}
+
+/** Testa um texto contra o validador, sem enviar nada. */
+export async function acaoValidarTexto(texto: string) {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    return validarResposta(z.string().max(4000).parse(texto));
   });
 }

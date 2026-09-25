@@ -10,6 +10,8 @@ import { IaIndisponivel } from "@/lib/ia/cliente";
 import { criarNegocio } from "@/lib/servicos/negocios";
 import { obterProvedor } from "./provedores";
 import { persistirMidia } from "./midia";
+import { iaLigada } from "@/lib/ia/controle";
+import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { mensagemSistema } from "./anotacoes";
 export { mensagemSistema, anotarNegocioNaConversa } from "./anotacoes";
 import type { MensagemEntrante, Midia, TipoMensagem } from "./tipos";
@@ -136,10 +138,11 @@ export async function receberMensagem(m: MensagemEntrante) {
 /* ---------------- triagem automática ---------------- */
 export async function triagemAutomaticaLigada() {
   const [c] = await db.select({ valor: schema.configuracoes.valor }).from(schema.configuracoes).where(eq(schema.configuracoes.chave, "ia.triagem_automatica")).limit(1);
-  return c?.valor !== false;
+  return (await iaLigada()) && c?.valor !== false;
 }
 
 export async function executarTriagem(conversaId: number) {
+  if (!(await iaLigada())) return { ok: false as const, motivo: "A IA está desligada (Inteligência artificial > Controle)." };
   const [conversa] = await db.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
   if (!conversa || conversa.modo !== "ia") return { ok: false as const, motivo: "Conversa já está com atendimento humano." };
   const catalogo = (await db.select({ nome: schema.modelos.nome }).from(schema.modelos)).map((x) => x.nome);
@@ -157,9 +160,8 @@ export async function executarTriagem(conversaId: number) {
   await db.transaction(async (tx) => {
     await tx.update(schema.conversas).set({ triagemIa: triagem, triagemEm: new Date(), atualizadoEm: new Date(), ...(triagem.prontoParaHumano && { prioridade: triagem.intencaoCompra === "alta" ? "alta" : "normal" }) }).where(eq(schema.conversas.id, conversaId));
     if (proximaMensagem) {
-      const env = await (await obterProvedor()).enviar({ telefone: conversa.contatoTelefone, tipo: "texto", conteudo: proximaMensagem });
-      await tx.insert(schema.mensagens).values({ conversaId, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: proximaMensagem, status: env.status, externoId: env.externoId, metadados: env.erro ? { erro: env.erro } : undefined });
-      await tx.update(schema.conversas).set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: proximaMensagem.slice(0, 160), ultimaMensagemDirecao: "outgoing" }).where(eq(schema.conversas.id, conversaId));
+      const envio = await enviarRespostaDaIa(tx, { conversaId, telefone: conversa.contatoTelefone, texto: proximaMensagem, origem: "triagem" });
+      if (!envio.enviada) await mensagemSistema(tx, conversaId, `Resposta da IA não enviada: ${envio.explicacao}. Um consultor precisa assumir.`);
     }
     if (triagem.prontoParaHumano) {
       await mensagemSistema(tx, conversaId, `Triagem da IA concluída: ${triagem.resumo} — aguardando consultor.`, { triagem: true });
