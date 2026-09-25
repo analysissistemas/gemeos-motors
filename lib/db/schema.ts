@@ -592,3 +592,39 @@ export const logs = pgTable(
     index("logs_usuario_idx").on(t.usuarioId),
   ],
 );
+
+/* ---------- central de IA: prompt por setor (com versões) e conhecimento ---------- */
+export const iaPromptVersoes = pgTable(
+  "ia_prompt_versoes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    secao: text().notNull(), // chave do setor, ver lib/ia/secoes.ts
+    versao: integer().notNull(),
+    conteudo: text().notNull(),
+    status: text().notNull(), // rascunho | publicada | arquivada
+    nota: text(),
+    criadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    publicadoEm: quando(),
+  },
+  (t) => [
+    uniqueIndex("ia_prompt_secao_versao_uq").on(t.secao, t.versao),
+    uniqueIndex("ia_prompt_um_rascunho_uq").on(t.secao).where(sql`${t.status} = 'rascunho'`),
+    uniqueIndex("ia_prompt_uma_publicada_uq").on(t.secao).where(sql`${t.status} = 'publicada'`),
+  ],
+);
+
+export const iaConhecimento = pgTable(
+  "ia_conhecimento",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    categoria: text().notNull(),
+    titulo: text().notNull(),
+    conteudo: text().notNull(),
+    ativo: boolean().notNull().default(true),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+    atualizadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+  },
+  (t) => [index("ia_conhecimento_categoria_idx").on(t.categoria)],
+);

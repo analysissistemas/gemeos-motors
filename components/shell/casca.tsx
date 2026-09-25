@@ -15,6 +15,7 @@ import {
   Receipt,
   ScrollText,
   Settings,
+  Sparkles,
   SquareKanban,
   Sun,
   UserCog,
@@ -43,6 +44,7 @@ const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   logs: ScrollText,
   usuarios: UserCog,
   config: Settings,
+  ia: Sparkles,
 };
 
 function ativo(pathname: string, href: string) {
