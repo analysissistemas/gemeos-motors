@@ -7,6 +7,7 @@ import { CabecalhoPagina, Painel, Selo, TituloSecao } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, Entrada } from "@/components/ui/campos";
 import { Dialogo } from "@/components/ui/dialogo";
+import { PainelApiOficial, type ApiOficial } from "./api-oficial";
 import { acaoCarregarDemo, acaoExcluirResposta, acaoLimparDemo, acaoSalvarEmpresa, acaoSalvarResposta, acaoTriagemAutomatica } from "./acoes";
 
 type Empresa = Record<string, unknown> | null;
@@ -18,12 +19,16 @@ export function TelaConfiguracoes({
   triagemLigada,
   conversasDemo,
   info,
+  apiOficial,
+  urlCallback,
 }: {
   empresa: Empresa;
   respostas: Resposta[];
   triagemLigada: boolean;
   conversasDemo: number;
   info: { provedor: string; simulado: boolean; modeloIa: string };
+  apiOficial: ApiOficial;
+  urlCallback: string;
 }) {
   const router = useRouter();
   const [e, setE] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(empresa ?? {}).map(([k, v]) => [k, v == null ? "" : String(v)])));
@@ -44,6 +49,10 @@ export function TelaConfiguracoes({
   return (
     <>
       <CabecalhoPagina titulo="Configurações" subtitulo="Dados da empresa, atendimento, IA e demonstração." />
+
+      <div className="mb-4">
+        <PainelApiOficial inicial={apiOficial} urlCallback={urlCallback} />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Painel className="p-5 lg:col-span-2">
@@ -111,7 +120,7 @@ export function TelaConfiguracoes({
             />
             {info.simulado && (
               <p className="mt-3 text-[12px] leading-relaxed text-ink-3">
-                O WhatsApp está em modo simulado: nenhuma mensagem sai do sistema. A integração real (Cloud API da Meta) já está preparada e liga com as credenciais WHATSAPP_* na Vercel.
+                O WhatsApp está em modo simulado: nenhuma mensagem sai do sistema. Para ligar o WhatsApp real, preencha o painel WhatsApp — API Oficial (Meta), no topo desta página.
               </p>
             )}
           </Painel>

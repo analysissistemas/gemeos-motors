@@ -2,24 +2,28 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
 import { obterProvedor } from "@/lib/mensageria/provedores";
+import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
 import type { MensagemEntrante, TipoMensagem } from "@/lib/mensageria/tipos";
 
 /* ============================================================
-   WEBHOOK DO WHATSAPP (Cloud API da Meta) — PREPARADO
-   ------------------------------------------------------------
-   Enquanto o sistema estiver no modo simulado, este endereço responde
-   503 e não aceita nada: não existe integração falsa.
-   Para ligar: configurar WHATSAPP_* e MENSAGERIA_PROVEDOR=whatsapp_cloud
-   e cadastrar https://<site>/api/webhooks/whatsapp no app da Meta.
+   WEBHOOK DO WHATSAPP (Cloud API da Meta)
+   Cadastrado no app da Meta com o endereço e o token de verificação que
+   aparecem em Configurações > WhatsApp API Oficial. A verificação (GET)
+   funciona assim que o token existe; as mensagens (POST) só são aceitas
+   com a API Oficial ATIVA e o segredo do app salvo, porque a assinatura
+   de cada chamada é conferida.
    ============================================================ */
 
 const desligado = () => NextResponse.json({ erro: "WhatsApp real não configurado (sistema em modo simulado)" }, { status: 503 });
 
 /** Validação do webhook pela Meta (hub.challenge). */
 export async function GET(req: NextRequest) {
-  if (obterProvedor().simulado || !process.env.WHATSAPP_VERIFY_TOKEN) return desligado();
+  const { verifyToken } = await lerConfigWhatsApp();
+  if (!verifyToken) return desligado();
   const p = req.nextUrl.searchParams;
-  if (p.get("hub.mode") === "subscribe" && p.get("hub.verify_token") === process.env.WHATSAPP_VERIFY_TOKEN) {
+  const enviado = p.get("hub.verify_token") ?? "";
+  const confere = enviado.length === verifyToken.length && timingSafeEqual(Buffer.from(enviado), Buffer.from(verifyToken));
+  if (p.get("hub.mode") === "subscribe" && confere) {
     return new Response(p.get("hub.challenge") ?? "", { status: 200 });
   }
   return NextResponse.json({ erro: "token de verificação não confere" }, { status: 403 });
@@ -32,10 +36,11 @@ type ValorMeta = {
 };
 
 export async function POST(req: NextRequest) {
-  if (obterProvedor().simulado || !process.env.WHATSAPP_APP_SECRET) return desligado();
+  const { appSecret } = await lerConfigWhatsApp();
+  if ((await obterProvedor()).simulado || !appSecret) return desligado();
   const bruto = await req.text();
   const assinatura = req.headers.get("x-hub-signature-256") ?? "";
-  const esperado = "sha256=" + createHmac("sha256", process.env.WHATSAPP_APP_SECRET).update(bruto).digest("hex");
+  const esperado = "sha256=" + createHmac("sha256", appSecret).update(bruto).digest("hex");
   if (assinatura.length !== esperado.length || !timingSafeEqual(Buffer.from(assinatura), Buffer.from(esperado))) {
     return NextResponse.json({ erro: "assinatura inválida" }, { status: 401 });
   }

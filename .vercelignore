@@ -39,3 +39,6 @@ public/video/iphone-*.mp4
 public/fotos/**/*.png
 public/fotos/**/*.jpg
 public/fotos/**/*.jpeg
+
+# credenciais coladas em texto: nunca sobem
+configuracoes-api-oficial.txt

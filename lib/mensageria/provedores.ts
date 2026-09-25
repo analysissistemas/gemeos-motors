@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
+import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 
 /* ============================================================
    PROVEDOR SIMULADO (MOCK)
@@ -22,13 +23,10 @@ export class ProvedorSimulado implements ProvedorMensagens {
 }
 
 /* ============================================================
-   PROVEDOR WHATSAPP CLOUD API (Meta) — PREPARADO, DESLIGADO
-   Só é usado quando MENSAGERIA_PROVEDOR=whatsapp_cloud E as credenciais
-   existem. Sem elas, o sistema continua no simulado e não finge conexão.
-     WHATSAPP_TOKEN            token de acesso do app da Meta
-     WHATSAPP_PHONE_NUMBER_ID  id do número no WhatsApp Business
-     WHATSAPP_VERIFY_TOKEN     texto combinado para validar o webhook
-     WHATSAPP_APP_SECRET       segredo do app (confere a assinatura do webhook)
+   PROVEDOR WHATSAPP CLOUD API (Meta)
+   Só é usado quando a API Oficial está ATIVA em Configurações e o token e o
+   ID do número estão salvos. Sem isso, o sistema continua no simulado e não
+   finge conexão. (As variáveis WHATSAPP_* da Vercel ainda servem de reserva.)
    ============================================================ */
 export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   readonly id = "whatsapp_cloud" as const;
@@ -36,8 +34,10 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   readonly simulado = false;
   private versao = process.env.WHATSAPP_API_VERSAO || "v21.0";
 
+  constructor(private cfg: ConfigWhatsApp) {}
+
   configurado() {
-    return !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+    return !!(this.cfg.token && this.cfg.phoneNumberId);
   }
 
   async enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio> {
@@ -49,9 +49,9 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     else if (pedido.tipo === "documento" && pedido.midia) Object.assign(corpo, { type: "document", document: { link: pedido.midia.url, filename: pedido.midia.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
     else return { externoId: null, status: "failed", erro: `Tipo ${pedido.tipo} ainda não suportado no envio real` };
 
-    const r = await fetch(`https://graph.facebook.com/${this.versao}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
     });
     const j = (await r.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
@@ -60,10 +60,9 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   }
 }
 
-let cache: ProvedorMensagens | null = null;
-export function obterProvedor(): ProvedorMensagens {
-  if (cache) return cache;
-  const real = new ProvedorWhatsAppCloud();
-  cache = process.env.MENSAGERIA_PROVEDOR === "whatsapp_cloud" && real.configurado() ? real : new ProvedorSimulado();
-  return cache;
+export async function obterProvedor(): Promise<ProvedorMensagens> {
+  const cfg = await lerConfigWhatsApp();
+  const ativo = cfg.ativo || process.env.MENSAGERIA_PROVEDOR === "whatsapp_cloud";
+  const real = new ProvedorWhatsAppCloud(cfg);
+  return ativo && real.configurado() ? real : new ProvedorSimulado();
 }

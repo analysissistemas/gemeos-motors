@@ -156,7 +156,7 @@ export async function executarTriagem(conversaId: number) {
   await db.transaction(async (tx) => {
     await tx.update(schema.conversas).set({ triagemIa: triagem, triagemEm: new Date(), atualizadoEm: new Date(), ...(triagem.prontoParaHumano && { prioridade: triagem.intencaoCompra === "alta" ? "alta" : "normal" }) }).where(eq(schema.conversas.id, conversaId));
     if (proximaMensagem) {
-      const env = await obterProvedor().enviar({ telefone: conversa.contatoTelefone, tipo: "texto", conteudo: proximaMensagem });
+      const env = await (await obterProvedor()).enviar({ telefone: conversa.contatoTelefone, tipo: "texto", conteudo: proximaMensagem });
       await tx.insert(schema.mensagens).values({ conversaId, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: proximaMensagem, status: env.status, externoId: env.externoId, metadados: env.erro ? { erro: env.erro } : undefined });
       await tx.update(schema.conversas).set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: proximaMensagem.slice(0, 160), ultimaMensagemDirecao: "outgoing" }).where(eq(schema.conversas.id, conversaId));
     }
@@ -189,7 +189,7 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
   if (texto && texto.length > 4096) throw new ErroRegra("Mensagem longa demais (máximo 4.096 caracteres).");
   const [c] = await db.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
   if (!c) throw new ErroRegra("Conversa não encontrada.");
-  const prov = obterProvedor();
+  const prov = await obterProvedor();
   let respostaExterno: string | null = null;
   if (e.respostaA) {
     const [orig] = await db.select({ externoId: schema.mensagens.externoId }).from(schema.mensagens).where(eq(schema.mensagens.id, e.respostaA)).limit(1);
@@ -239,7 +239,7 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
 
 /** Andamento simulado das mensagens enviadas: entregue em ~2 s, lida em ~8 s. */
 export async function simularAndamento(conversaId?: number) {
-  if (!obterProvedor().simulado) return;
+  if (!(await obterProvedor()).simulado) return;
   const filtro = conversaId ? eq(schema.mensagens.conversaId, conversaId) : undefined;
   await db
     .update(schema.mensagens)
@@ -415,7 +415,7 @@ export async function abrirConversaDoCliente(u: Quem, clienteId: number) {
     const negocioId = await negocioAbertoDoCliente(tx, clienteId);
     const [c] = await tx
       .insert(schema.conversas)
-      .values({ canal: "whatsapp", provedor: obterProvedor().id, contatoTelefone: telefone, contatoNome: cli.nome, clienteId, negocioId, responsavelId: u.id, modo: "humano", status: "em_atendimento", atendimentoHumanoPor: u.id, atendimentoHumanoEm: new Date(), demo: cli.demo })
+      .values({ canal: "whatsapp", provedor: (await obterProvedor()).id, contatoTelefone: telefone, contatoNome: cli.nome, clienteId, negocioId, responsavelId: u.id, modo: "humano", status: "em_atendimento", atendimentoHumanoPor: u.id, atendimentoHumanoEm: new Date(), demo: cli.demo })
       .returning({ id: schema.conversas.id });
     await mensagemSistema(tx, c.id, `Conversa iniciada pela loja (por ${u.nome})`);
     await registrarLog(u, { acao: "conversa.criada", entidade: "conversa", entidadeId: c.id, descricao: `Iniciou conversa com ${cli.nome}` }, tx);
