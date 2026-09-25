@@ -92,6 +92,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
 }
 
 export async function obterProvedor(): Promise<ProvedorMensagens> {
+  /* Modo de teste: nada sai para fora, mesmo que o banco tenha a API Oficial ativa. */
+  if (process.env.MENSAGERIA_PROVEDOR === "teste") return new ProvedorSimulado();
   const cfg = await lerConfigWhatsApp();
   const ativo = cfg.ativo || process.env.MENSAGERIA_PROVEDOR === "whatsapp_cloud";
   const real = new ProvedorWhatsAppCloud(cfg);

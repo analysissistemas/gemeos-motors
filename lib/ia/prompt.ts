@@ -39,6 +39,12 @@ export async function proximaVersao(secao: string, tx: Pick<typeof db, "select">
   return (r?.m ?? 0) + 1;
 }
 
+/** Versão publicada de cada setor (null = texto padrão), para gravar no registro de cada execução. */
+export async function versoesEmUso(): Promise<Record<string, number | null>> {
+  const pub = await db.select({ secao: schema.iaPromptVersoes.secao, versao: schema.iaPromptVersoes.versao }).from(schema.iaPromptVersoes).where(eq(schema.iaPromptVersoes.status, "publicada"));
+  return Object.fromEntries(SECOES_PROMPT.map((s) => [s.chave, pub.find((p) => p.secao === s.chave)?.versao ?? null]));
+}
+
 /** Texto final que vai para a IA: setores publicados (ou o padrão) + conhecimento ativo. */
 export async function montarPromptSistema() {
   const publicadas = await db

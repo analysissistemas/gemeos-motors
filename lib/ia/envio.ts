@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { db, schema, type Tx } from "@/lib/db";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { lerControle } from "./controle";
-import { montarPromptSistema } from "./prompt";
+import { MODELO_IA } from "./cliente";
+import { montarPromptSistema, versoesEmUso } from "./prompt";
 import { validarResposta, type Violacao } from "./validador";
 
 export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "validador" | "falha_envio" | null; violacoes: Violacao[]; explicacao: string | null };
@@ -46,6 +47,6 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
   }
 
   const enviada = motivo === null;
-  await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: p.texto, aprovada: validacao.aprovada, enviada, motivo, violacoes: validacao.violacoes });
+  await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: p.texto, aprovada: validacao.aprovada, enviada, motivo, violacoes: validacao.violacoes, promptVersoes: await versoesEmUso(), modelo: MODELO_IA });
   return { enviada, motivo, violacoes: validacao.violacoes, explicacao };
 }

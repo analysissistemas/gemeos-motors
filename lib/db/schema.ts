@@ -641,6 +641,11 @@ export const iaExecucoes = pgTable(
     enviada: boolean().notNull(),
     motivo: text(), // null = enviada | sem_permissao | validador | falha_envio
     violacoes: jsonb().$type<{ regra: string; rotulo: string; detalhe: string }[]>(),
+    promptVersoes: jsonb().$type<Record<string, number | null>>(), // setor -> versão publicada (null = texto padrão)
+    modelo: text(),
+    tokensEntrada: integer(),
+    tokensSaida: integer(),
+    custoUsd: numeric({ precision: 10, scale: 6, mode: "number" }),
     criadoEm: criadoEm(),
   },
   (t) => [index("ia_execucoes_criado_idx").on(t.criadoEm), index("ia_execucoes_conversa_idx").on(t.conversaId)],

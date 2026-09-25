@@ -25,6 +25,7 @@ export const REGRAS: Record<string, string> = {
   desconto: "Promessa de desconto ou aprovação",
   bastidor: "Termo interno do sistema",
   interno: "Dado interno ou sensível",
+  dados_pessoais: "Dado pessoal (e-mail, telefone, CPF ou CNPJ)",
   finge_humano: "Diz que é pessoa ou nega ser assistente virtual",
   vazamento_prompt: "Repete trecho das instruções internas",
 };
@@ -47,6 +48,10 @@ const RX = {
   bastidor: palavra("prompt|instru[cç][õo]es do sistema|system message|ferramentas?|banco de dados|api|json|crm|funil|est[aá]gio|qualificad[oa]|webhook"),
   interno: new RegExp(
     String.raw`${I}(?:custo|margem|lucro|comiss[aã]o)${F}|(?<![\p{N}])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\p{N}])|${I}sk-[A-Za-z0-9_-]{10,}|${I}EAA[A-Za-z0-9]{20,}|${I}gm_[0-9a-f]{20,}`,
+    "iu",
+  ),
+  dados_pessoais: new RegExp(
+    String.raw`[\w.+-]+@[\w-]+\.[\w.-]+|(?<![\p{N}])\d{11}(?![\p{N}])|(?<![\p{N}])\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}(?![\p{N}])|(?<![\p{N}])\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}(?![\p{N}])`,
     "iu",
   ),
   finge_humano: palavra("sou (?:uma )?(?:pessoa|humano|humana|atendente humano)|n[aã]o sou (?:um |uma )?(?:rob[ôo]|ia|bot|assistente virtual)"),
