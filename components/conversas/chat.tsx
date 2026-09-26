@@ -4,8 +4,9 @@ import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleA
 import { toast } from "sonner";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
-import { formatarTelefone, hora, iniciais } from "@/lib/formato";
+import { formatarTelefone, hora } from "@/lib/formato";
 import { cn } from "@/lib/cn";
+import { Avatar } from "@/components/ui/avatar";
 import { Botao } from "@/components/ui/botao";
 import { AudioMensagem } from "./audio-mensagem";
 import { Compositor, type EnvioChat, type Resposta } from "./compositor";
@@ -110,7 +111,7 @@ export function Chat({
           <ArrowLeft className="size-5" />
         </button>
         <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-trilho" onClick={aoInfo}>
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-vidro-forte text-[14px] font-semibold ring-1 ring-linha">{iniciais(nome)}</span>
+          <Avatar nome={nome} foto={contexto.cliente?.fotoUrl} className="shrink-0" />
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-semibold">{nome}</span>
             <span className="flex items-center gap-2 truncate text-[12px] text-ink-3">
