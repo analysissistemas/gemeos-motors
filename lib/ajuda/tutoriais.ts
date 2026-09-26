@@ -148,6 +148,30 @@ export const TUTORIAIS: Tutorial[] = [
     regras: ["Ligue só no horário de atendimento: das 8h às 18h, de segunda a sábado. Pedido feito fora do horário aparece marcado."],
   },
   {
+    slug: "test-drives",
+    titulo: "Test drive: agendar e registrar como foi",
+    area: "Atendimento e vendas",
+    permissao: "testdrives.ver",
+    tela: "/sistema/test-drives",
+    resumo: "Marcar o test drive pela conversa, confirmar, remarcar e registrar o resultado.",
+    passos: [
+      { texto: "Na conversa com o cliente, na coluna da direita, toque em \"Agendar test drive\". O veículo do negócio já vem escolhido; confira a data, a hora e escreva alguma observação se quiser.", imagem: img("test-drives", 1), legenda: "Janela Agendar test drive" },
+      { texto: "Deixe marcado \"Enviar confirmação no WhatsApp\" para o cliente receber o dia, a hora e o endereço da loja. A mensagem aparece embaixo antes de enviar." },
+      { texto: "Cliente de balcão ou por telefone: abra \"Test drives\" no menu e toque em \"Novo test drive\". Busque o cliente ou escreva só o nome e o telefone." },
+      { texto: "Em \"Test drives\" fica a agenda por dia. Use \"Hoje\", \"Próximos 7 dias\" ou \"Todos\". Quando o cliente confirmar, toque em \"Confirmar\".", imagem: img("test-drives", 2), legenda: "Agenda de test drives" },
+      { texto: "Depois do horário, toque em \"Realizado\" e conte como foi, ou em \"Não compareceu\" e anote o que aconteceu. Mudou o dia? \"Remarcar\". Não vai mais acontecer? \"Cancelar\"." },
+    ],
+    regras: [
+      "O test drive é sempre na loja de Goiana: Rodovia Margem da PE-75, nº 1418.",
+      "Cada test drive ocupa o veículo por 45 minutos. O sistema não deixa marcar o mesmo veículo em horários que se cruzam.",
+      "\"Realizado\" e \"Não compareceu\" pedem uma anotação: é ela que ajuda a fechar a venda depois.",
+    ],
+    errosComuns: [
+      { problema: "Aparece \"já tem test drive marcado\" ao agendar.", solucao: "Aquele veículo já está reservado nesse horário. Escolha outro horário (45 minutos depois do outro) ou outro veículo." },
+      { problema: "Test drive aparece em \"Aguardando resultado\".", solucao: "O horário já passou e ninguém registrou como foi. Toque em \"Realizado\" ou \"Não compareceu\"." },
+    ],
+  },
+  {
     slug: "vendas",
     titulo: "Vendas: do cliente até a finalização",
     area: "Atendimento e vendas",

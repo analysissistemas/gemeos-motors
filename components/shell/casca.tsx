@@ -28,6 +28,7 @@ import {
   Camera,
   Tag,
   BookOpen,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { pode, PAPEIS, type Papel } from "@/lib/dominio";
@@ -53,6 +54,7 @@ const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   config: Settings,
   ia: Sparkles,
   ajuda: BookOpen,
+  testdrives: KeyRound,
 };
 
 function ativo(pathname: string, href: string) {

@@ -363,7 +363,7 @@ test("conversas: cliente conhecido, resposta, nota interna e follow-up", async (
   await page.getByRole("button", { name: "Voltar para mensagem" }).click();
 
   await page.getByRole("button", { name: "Amanhã 10h" }).click();
-  await page.getByRole("button", { name: "Agendar" }).click();
+  await page.getByRole("button", { name: "Agendar", exact: true }).click();
   await expect(aviso(page, /agendad/i)).toBeVisible();
   await page.getByRole("button", { name: "Concluir follow-up" }).click();
   await expect(aviso(page, /conclu/i)).toBeVisible();
