@@ -52,11 +52,11 @@ roda só no VPS da Hostinger, com o EasyPanel.
 | | |
 |---|---|
 | Teste | **https://teste.gemeosmotors.com.br** (loja em `/`, equipe em `/login`) |
-| Domínio principal | gemeosmotors.com.br — em manutenção até o dono liberar |
+| Domínio principal | **gemeosmotors.com.br** e **www** — no VPS desde 26/09/2026, em manutenção (`MODO_MANUTENCAO=1`, só `teste` liberado) até o dono liberar |
 | VPS | `srv2001302.hstgr.cloud`, IP `2.25.240.204`; EasyPanel em `http://2.25.240.204:3000` |
 | Projeto no EasyPanel | `gemeos-motors`: serviço **sistema** (este código) e serviço **banco** (PostgreSQL 18, base `gemeos`, endereço interno `gemeos-motors_banco:5432`, sem SSL) |
 | Mídia do chat | volume montado em **`/data`** no serviço sistema (`MIDIA_DIR=/data/midia`) |
-| DNS | na Hostinger (`dns-parking.com`); registro A `teste` → `2.25.240.204` |
+| DNS | na Hostinger (`dns-parking.com`): A `@` e A `teste` → `2.25.240.204`; CNAME `www` → `gemeosmotors.com.br` |
 | Como publicar | enviar para o GitHub e clicar em **Implantar** no serviço sistema (o EasyPanel puxa a branch `vitrine-html` e compila pelo `Dockerfile`) |
 
 O container, ao subir (`scripts/iniciar.mjs`): confere se `/data/midia` aceita
@@ -68,12 +68,31 @@ servidor.
 interno do serviço banco), `SESSION_SECRET` (32+ caracteres; assina o cookie de
 sessão e cifra as credenciais do WhatsApp salvas no banco — trocar obriga a
 digitar de novo as credenciais em Configurações), `SITE_URL`
-(`teste.gemeosmotors.com.br`; é o endereço do callback do WhatsApp),
+(`gemeosmotors.com.br`; é o endereço do callback do WhatsApp),
 `MIDIA_DIR` (já vem `/data/midia` na imagem). Opcionais: `OPENAI_API_KEY`,
 `IA_MODELO`, `MODO_MANUTENCAO=1` + `MANUTENCAO_LIBERADOS`, e as `WHATSAPP_*`
 de reserva. Localmente: `.env.local` na pasta (nunca no Git).
 
-**Saída da Vercel — cópia única dos dados** (rodar no console do serviço
+### Credenciais do WhatsApp — para NUNCA precisar digitar de novo
+
+Token permanente e App Secret da Meta são salvos em Configurações → API
+Oficial, cifrados no banco com a chave que sai do `SESSION_SECRET`. Ficam
+guardados para sempre (o banco está em volume do EasyPanel), desde que:
+
+1. **O `SESSION_SECRET` do EasyPanel nunca mude.** Mudou, as credenciais salvas
+   deixam de abrir, o sistema cai para o modo simulado sem avisar o cliente, e
+   é preciso digitar tudo de novo. Foi o que aconteceu em 26/09/2026 na saída
+   da Vercel.
+2. **O token seja de Usuário do sistema (System User) da Meta**, que não vence.
+   Token temporário do painel de desenvolvedor vence em 24 h.
+3. **Ninguém rode de novo `copiar-banco.mjs` com `FORCAR=1`**: ele esvazia o
+   banco do VPS antes de copiar.
+
+Callback cadastrado na Meta: `https://gemeosmotors.com.br/api/webhooks/whatsapp`
+(o webhook passa pela manutenção).
+
+**Saída da Vercel — cópia única dos dados (JÁ FEITA em 26/09/2026: 32 tabelas
+conferidas e 10 arquivos do chat; não repetir)** (rodar no console do serviço
 sistema do EasyPanel, com o serviço já no ar e ANTES de a equipe usar):
 
 ```
