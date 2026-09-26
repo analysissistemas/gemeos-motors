@@ -119,3 +119,13 @@ export async function listarVeiculosVendaveis() {
     .where(or(eq(v.status, "disponivel"), eq(v.status, "reservado")))
     .orderBy(asc(v.modelo));
 }
+
+/** Cores cadastradas em cada modelo (inclusive as escondidas da vitrine), na ordem de exibição. */
+export async function listarCoresModelos() {
+  const c = schema.modeloCores;
+  return db
+    .select({ id: c.id, modeloId: c.modeloId, nome: c.nome, hex: c.hex, fotoUrl: c.fotoUrl, ordem: c.ordem, ativo: c.ativo })
+    .from(c)
+    .orderBy(asc(c.modeloId), asc(c.ordem), asc(c.id));
+}
+export type CorModelo = Awaited<ReturnType<typeof listarCoresModelos>>[number];

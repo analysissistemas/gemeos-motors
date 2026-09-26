@@ -10,22 +10,36 @@ import { Dialogo } from "./dialogo";
 
 type Resposta = { ok: true; mensagem?: string } | { ok: false; erro: string };
 
-const TIPOS = ["image/jpeg", "image/png", "image/webp"];
-const LIMITE = 2 * 1024 * 1024;
+export const TIPOS_FOTO = ["image/jpeg", "image/png", "image/webp"];
+const TIPOS = TIPOS_FOTO;
+export const LIMITE_FOTO = 2 * 1024 * 1024;
+const LIMITE = LIMITE_FOTO;
 const LADO = 256;
 
-/** Corta no meio em quadrado e reduz para 256 px em webp (uns 15–30 KB). Se o
- *  navegador não souber, manda o arquivo original — o servidor confere de novo. */
-async function reduzir(arquivo: File): Promise<File> {
+/** Reduz a foto no navegador e converte para webp antes de enviar.
+ *  - `quadrado`: corta no meio em quadrado desse lado (avatar: 256 px, uns 15–30 KB).
+ *  - `ladoMaior`: mantém a proporção e limita o lado maior (catálogo: 1200 px).
+ *  Nunca amplia. Se o navegador não souber, manda o arquivo original — o
+ *  servidor confere de novo (tipo pelos bytes e 2 MB). */
+export async function reduzirFoto(arquivo: File, opcoes: { quadrado: number } | { ladoMaior: number }): Promise<File> {
   try {
     const img = await createImageBitmap(arquivo);
-    const lado = Math.min(img.width, img.height);
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = Math.min(LADO, lado);
+    let origem: [number, number, number, number];
+    if ("quadrado" in opcoes) {
+      const lado = Math.min(img.width, img.height);
+      canvas.width = canvas.height = Math.min(opcoes.quadrado, lado);
+      origem = [(img.width - lado) / 2, (img.height - lado) / 2, lado, lado];
+    } else {
+      const escala = Math.min(1, opcoes.ladoMaior / Math.max(img.width, img.height));
+      canvas.width = Math.max(1, Math.round(img.width * escala));
+      canvas.height = Math.max(1, Math.round(img.height * escala));
+      origem = [0, 0, img.width, img.height];
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return arquivo;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, ...origem, 0, 0, canvas.width, canvas.height);
     img.close();
     const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/webp", 0.85));
     if (!blob || !TIPOS.includes(blob.type)) return arquivo;
@@ -68,7 +82,7 @@ export function EditorFoto({
     if (!arquivo) return;
     if (!TIPOS.includes(arquivo.type)) return void toast.error("Use uma foto JPG, PNG ou WebP.");
     iniciar(async () => {
-      const pronto = await reduzir(arquivo);
+      const pronto = await reduzirFoto(arquivo, { quadrado: LADO });
       if (pronto.size > LIMITE) return void toast.error("A foto passa de 2 MB. Escolha uma menor.");
       const dados = new FormData();
       dados.set("foto", pronto);
