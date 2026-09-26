@@ -43,6 +43,8 @@ COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/drizzle ./drizzle
 COPY --from=build --chown=app:app /app/scripts ./scripts
+# a compactação da mídia antiga (scripts/compactar-midia.mjs) usa o mesmo módulo do sistema
+COPY --from=build --chown=app:app /app/lib/mensageria/compactar.ts ./scripts/lib/compactar.mts
 COPY --from=ferramentas --chown=app:app /f/node_modules ./scripts/node_modules
 USER app
 EXPOSE 3000

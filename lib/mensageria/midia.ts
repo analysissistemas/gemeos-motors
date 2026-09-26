@@ -1,9 +1,12 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createReadStream, mkdirSync, accessSync, constants } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { eq } from "drizzle-orm";
+import { db, schema } from "@/lib/db";
+import { compactacaoLigada, compactarFoto, compactarVideoArquivo, GANHO_MINIMO } from "./compactar";
 import type { Midia } from "./tipos";
 
 /* Mídia do chat (fotos, PDFs, áudios) fica em disco no VPS, numa pasta que
@@ -70,9 +73,35 @@ export async function guardarMidia(bytes: Buffer | Uint8Array, nome: string, mim
   if (!alvo) throw new Error("Nome de arquivo inválido.");
   await mkdir(/* turbopackIgnore: true */ path.dirname(alvo), { recursive: true });
   const tipo = mime.split(";")[0].trim() || mime || "application/octet-stream";
-  await writeFile(/* turbopackIgnore: true */ alvo, Buffer.from(bytes), { flag: "wx" });
+  /* foto: compacta na hora (é rápido); vídeo: grava o original e compacta depois, em segundo plano */
+  const dados = (tipo === "image/jpeg" && (await compactarFoto(bytes))) || Buffer.from(bytes);
+  await writeFile(/* turbopackIgnore: true */ alvo, dados, { flag: "wx" });
   await writeFile(/* turbopackIgnore: true */ alvo + SUFIXO_META, JSON.stringify({ mime: tipo }));
-  return { url: PREFIXO + pathname, nome, mime, tamanho: bytes.byteLength };
+  const url = PREFIXO + pathname;
+  if (tipo.startsWith("video/")) agendarVideo(alvo, url);
+  return { url, nome, mime, tamanho: dados.byteLength };
+}
+
+/* Um vídeo por vez: compactar pesa na CPU do VPS e não pode atrasar o atendimento. */
+let filaVideo: Promise<void> = Promise.resolve();
+function agendarVideo(alvo: string, url: string) {
+  if (!compactacaoLigada()) return;
+  filaVideo = filaVideo.then(() => compactarVideoGuardado(alvo, url)).catch(() => {});
+}
+
+async function compactarVideoGuardado(alvo: string, url: string) {
+  const tmp = alvo + ".compactando.mp4";
+  try {
+    await compactarVideoArquivo(alvo, tmp);
+    const [antes, depois] = await Promise.all([stat(alvo), stat(tmp)]);
+    if (depois.size === 0 || depois.size > antes.size * GANHO_MINIMO) return;
+    /* troca atômica: quem estiver assistindo continua no arquivo antigo até terminar */
+    await rename(tmp, alvo);
+    await writeFile(/* turbopackIgnore: true */ alvo + SUFIXO_META, JSON.stringify({ mime: "video/mp4" }));
+    await db.update(schema.mensagens).set({ midiaTamanho: depois.size, midiaMime: "video/mp4" }).where(eq(schema.mensagens.midiaUrl, url));
+  } finally {
+    await rm(tmp, { force: true });
+  }
 }
 
 /** Tipo e tamanho do arquivo guardado, ou null se não existir. */
