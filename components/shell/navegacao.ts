@@ -17,6 +17,7 @@ export const SECOES_MENU: { titulo: string; itens: ItemMenu[] }[] = [
       { href: "/sistema/funil", rotulo: "Funil de vendas", icone: "funil", permissao: "funil.ver" },
       { href: "/sistema/ligacoes", rotulo: "Ligações", icone: "ligacoes", permissao: "conversas.ver", contador: "ligacoes" },
       { href: "/sistema/follow-ups", rotulo: "Follow-ups", icone: "followups", permissao: "conversas.ver", contador: "followups" },
+      { href: "/sistema/test-drives", rotulo: "Test drives", icone: "testdrives", permissao: "testdrives.ver" },
     ],
   },
   {

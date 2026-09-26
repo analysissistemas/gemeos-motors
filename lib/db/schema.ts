@@ -783,3 +783,40 @@ export const promocoes = pgTable(
   },
   (t) => [index("promocoes_modelo_idx").on(t.modeloId, t.fimEm)],
 );
+
+/* ---------- test drives (agenda da loja) ----------
+   Sempre na loja física de Goiana (a única). O veículo pode ser um modelo do
+   catálogo (elétrica zero km, a unidade de demonstração da loja), um veículo
+   do estoque (usado, carro) ou só texto. `veiculoDescricao` guarda o nome
+   como estava no agendamento. */
+export const testDrives = pgTable(
+  "test_drives",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    clienteId: integer().references(() => clientes.id, { onDelete: "set null" }),
+    nomeContato: text(),
+    telefone: text(), // só dígitos, com DDI
+    conversaId: integer().references(() => conversas.id, { onDelete: "set null" }),
+    negocioId: integer().references(() => negocios.id, { onDelete: "set null" }),
+    modeloId: integer().references(() => modelos.id, { onDelete: "set null" }),
+    veiculoId: integer().references(() => veiculos.id, { onDelete: "set null" }),
+    veiculoDescricao: text(),
+    agendadoPara: quando().notNull(),
+    responsavelId: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    status: text().notNull().default("agendado"), // agendado | confirmado | realizado | nao_compareceu | cancelado
+    observacoes: text(),
+    resultado: text(), // o que aconteceu (obrigatório em realizado e não compareceu)
+    encerradoEm: quando(),
+    encerradoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    criadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [
+    index("test_drives_agenda_idx").on(t.status, t.agendadoPara),
+    index("test_drives_veiculo_idx").on(t.veiculoId, t.agendadoPara),
+    index("test_drives_modelo_idx").on(t.modeloId, t.agendadoPara),
+    index("test_drives_conversa_idx").on(t.conversaId),
+    index("test_drives_cliente_idx").on(t.clienteId),
+  ],
+);

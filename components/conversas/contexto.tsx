@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Bot, CalendarClock, CalendarPlus, ExternalLink, Link2, Pencil, Receipt, Repeat, Sparkles, UserPlus } from "lucide-react";
+import { Bot, CalendarClock, CalendarPlus, ExternalLink, KeyRound, Link2, Pencil, Receipt, Repeat, Sparkles, UserPlus } from "lucide-react";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
 import { ETAPAS, ORIGENS, STATUS_CONVERSA, STATUS_VENDA, type Etapa } from "@/lib/dominio";
 import { brl, data, dataHora, formatarCpf, formatarTelefone, relativo } from "@/lib/formato";
@@ -19,6 +19,10 @@ import {
   acaoTriagem,
   acaoVincularCliente,
 } from "@/app/sistema/conversas/acoes";
+import { acaoTestDrivesDaConversa } from "@/app/sistema/test-drives/acoes";
+import { AcoesTestDrive, AgendarTestDrive } from "@/components/test-drives/formularios";
+import type { ItemTestDrive } from "@/lib/servicos/test-drive";
+import { STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
 
 export type AlvoEtapa = { id: number; cliente: string; responsavelId: number | null; veiculoId: number | null; valorAnunciado: number | null; valorProposta: number | null };
 
@@ -310,6 +314,8 @@ export function ContextoCliente({
         )}
       </Bloco>
 
+      <TestDrivesDaConversa key={c.id} ctx={ctx} aoAtualizar={aoAtualizar} />
+
       {/* histórico */}
       {ctx.cliente && ctx.historico && (
         <Bloco
@@ -398,6 +404,76 @@ function NovoNegocio({ conversaId, triagem, aoCriar }: { conversaId: number; tri
         Criar negócio
       </Botao>
     </div>
+  );
+}
+
+/* Test drive: busca a própria lista (o contexto da conversa não traz) e
+   avisa o painel depois de mudar, para o chat mostrar a anotação. */
+function TestDrivesDaConversa({ ctx, aoAtualizar }: { ctx: ContextoConversa; aoAtualizar: () => void }) {
+  const c = ctx.conversa;
+  const [lista, setLista] = useState<ItemTestDrive[] | null>(null);
+  const [semAcesso, setSemAcesso] = useState(false);
+  const [agendando, setAgendando] = useState(false);
+  const carregar = useCallback(
+    () =>
+      acaoTestDrivesDaConversa(c.id).then((r) => {
+        if (r.ok) setLista(r.dados);
+        else setSemAcesso(true);
+      }),
+    [c.id],
+  );
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+  const depois = () => {
+    carregar();
+    aoAtualizar();
+  };
+  if (semAcesso) return null;
+  const t = c.triagemIa;
+  return (
+    <Bloco
+      titulo="Test drive"
+      acao={
+        lista &&
+        lista.length > 0 && (
+          <Botao tamanho="sm" variante="fantasma" onClick={() => setAgendando(true)}>
+            <CalendarPlus className="size-4" /> Agendar outro
+          </Botao>
+        )
+      }
+    >
+      {lista && lista.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {lista.map((td) => (
+            <li key={td.id} className="rounded-2xl border border-linha p-3">
+              <p className="flex flex-wrap items-center gap-2 text-[14px] font-semibold">
+                <KeyRound className="size-4" /> {dataHora(td.agendadoPara)}
+                <Selo tom={td.status === "confirmado" ? "bom" : "neutro"}>{STATUS_TEST_DRIVE[td.status as StatusTestDrive] ?? td.status}</Selo>
+              </p>
+              <p className="mt-1 text-[13px] text-ink-2">{td.veiculo ?? "—"}</p>
+              {td.observacoes && <p className="mt-0.5 text-[12px] text-ink-3">{td.observacoes}</p>}
+              <div className="mt-2">
+                <AcoesTestDrive id={td.id} status={td.status} agendadoPara={td.agendadoPara} conversaId={td.conversaId} compacto aoMudar={depois} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Botao tamanho="sm" onClick={() => setAgendando(true)} disabled={!lista}>
+          <KeyRound className="size-4" /> Agendar test drive
+        </Botao>
+      )}
+      <AgendarTestDrive
+        aberto={agendando}
+        aoMudar={setAgendando}
+        conversaId={c.id}
+        clienteId={ctx.cliente?.id ?? null}
+        negocioId={ctx.negocio?.id ?? null}
+        inicial={{ veiculoId: ctx.negocio?.veiculoId ?? null, veiculoTexto: ctx.negocio?.veiculo ?? ctx.negocio?.veiculoInteresse ?? t?.veiculo ?? t?.interesse ?? null }}
+        aoAgendar={depois}
+      />
+    </Bloco>
   );
 }
 
