@@ -18,9 +18,9 @@ import {
 import { Bot, Clock, Plus, Repeat, Search, Sparkles } from "lucide-react";
 import type { CardNegocio, DetalheNegocio } from "@/lib/consultas/funil";
 import { ETAPAS, ORIGENS, STATUS_VENDA, type Etapa } from "@/lib/dominio";
-import { brl, diasDesde, iniciais, relativo, tempoDesde } from "@/lib/formato";
+import { brl, diasDesde, relativo, tempoDesde } from "@/lib/formato";
 import { cn } from "@/lib/cn";
-import { CabecalhoPagina, Selo } from "@/components/ui/basicos";
+import { Avatar, CabecalhoPagina, Selo } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { DialogoPerda } from "@/components/negocios/dialogo-perda";
 import { DialogoFecharVenda } from "@/components/negocios/dialogo-fechar-venda";
@@ -381,9 +381,15 @@ function Cartao({ c, aoAbrir, flutuando }: { c: CardNegocio; aoAbrir?: () => voi
       </div>
 
       <div className="mt-2.5 flex items-center gap-2 border-t border-linha pt-2 text-[11.5px] text-ink-3">
-        <span className={cn("size-5 place-items-center rounded-full bg-trilho text-[9.5px] font-semibold text-ink-2", c.responsavel ? "grid" : "hidden md:grid")} title={c.responsavel ?? "Sem responsável"}>
-          {c.responsavel ? iniciais(c.responsavel) : "?"}
-        </span>
+        {c.responsavel ? (
+          <span title={c.responsavel}>
+            <Avatar nome={c.responsavel} foto={c.responsavelFoto} tamanho="xs" />
+          </span>
+        ) : (
+          <span className="hidden size-5 place-items-center rounded-full bg-trilho text-[9.5px] font-semibold text-ink-2 md:grid" title="Sem responsável">
+            ?
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate">{c.responsavel ?? "Sem responsável"}</span>
         <span className={cn("flex items-center gap-1", atrasado && "font-semibold text-serio")} title={c.ultimaInteracaoEm ? `Última interação ${relativo(c.ultimaInteracaoEm)}` : "Sem interação registrada"}>
           <Clock className="size-3" /> {tempoDesde(c.etapaDesde)}

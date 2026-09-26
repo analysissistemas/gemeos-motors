@@ -105,7 +105,7 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
                     <tr key={c.id} className="border-b border-linha last:border-0 hover:bg-trilho">
                       <td className="px-4 py-3">
                         <Link href={`/sistema/clientes/${c.id}`} className="flex items-center gap-3 font-semibold hover:underline">
-                          <Avatar nome={c.nome} tamanho="sm" />
+                          <Avatar nome={c.nome} foto={c.fotoUrl} tamanho="sm" />
                           <span className="truncate">{c.nome}</span>
                           {c.demo && <Selo tom="atencao">Simulado</Selo>}
                         </Link>
@@ -115,7 +115,16 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
                         {c.cidade && <span className="block text-[12px] text-ink-3">{[c.cidade, c.estado].filter(Boolean).join(" · ")}</span>}
                       </td>
                       <td className="px-4 py-3 text-ink-2">{c.origem ? ORIGENS[c.origem as keyof typeof ORIGENS] : "—"}</td>
-                      <td className="px-4 py-3 text-ink-2">{c.responsavel ?? "—"}</td>
+                      <td className="px-4 py-3 text-ink-2">
+                        {c.responsavel ? (
+                          <span className="flex items-center gap-2">
+                            <Avatar nome={c.responsavel} foto={c.responsavelFoto} tamanho="xs" />
+                            <span className="truncate">{c.responsavel}</span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="flex flex-wrap gap-1">
                           {c.negociosAbertos > 0 && <Selo tom="atencao">{c.negociosAbertos} em aberto</Selo>}
@@ -134,7 +143,7 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
               {lista.linhas.map((c) => (
                 <li key={c.id} className="border-b border-linha last:border-0">
                   <Link href={`/sistema/clientes/${c.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-trilho">
-                    <Avatar nome={c.nome} />
+                    <Avatar nome={c.nome} foto={c.fotoUrl} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="truncate font-semibold">{c.nome}</span>

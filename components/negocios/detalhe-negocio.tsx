@@ -7,7 +7,7 @@ import type { DetalheNegocio } from "@/lib/consultas/funil";
 import { CANAIS_INTERACAO, ETAPAS, MOTIVOS_PERDA, ORIGENS, STATUS_VENDA, rotuloEtapa, type Etapa } from "@/lib/dominio";
 import { brl, data, dataHora, formatarTelefone, km, relativo, tempoDesde } from "@/lib/formato";
 import { LinhaDoTempo } from "@/components/ui/abas";
-import { EstadoVazio, ItemInfo, PontoEtapa, Selo, TituloSecao } from "@/components/ui/basicos";
+import { Avatar, EstadoVazio, ItemInfo, PontoEtapa, Selo, TituloSecao } from "@/components/ui/basicos";
 import { Botao, classesBotao } from "@/components/ui/botao";
 import { Dialogo } from "@/components/ui/dialogo";
 import { acaoDetalheNegocio, acaoGerarDiagnostico } from "@/app/sistema/funil/acoes";
@@ -92,7 +92,14 @@ export function DetalheNegocioGaveta({
             </ItemInfo>
             <ItemInfo rotulo="Valor anunciado">{n.valorAnunciado != null ? brl(n.valorAnunciado) : null}</ItemInfo>
             <ItemInfo rotulo="Valor da proposta">{n.valorProposta != null ? brl(n.valorProposta) : null}</ItemInfo>
-            <ItemInfo rotulo="Responsável">{d.responsavel}</ItemInfo>
+            <ItemInfo rotulo="Responsável">
+              {d.responsavel && (
+                <span className="flex items-center gap-1.5">
+                  <Avatar nome={d.responsavel} foto={d.responsavelFoto} tamanho="xs" />
+                  <span className="truncate">{d.responsavel}</span>
+                </span>
+              )}
+            </ItemInfo>
             <ItemInfo rotulo="Origem">{n.origem ? ORIGENS[n.origem as keyof typeof ORIGENS] : null}</ItemInfo>
             <ItemInfo rotulo="Troca" className="col-span-2">
               {n.temTroca ? `${n.trocaDescricao ?? "Sim"}${n.trocaValor ? ` · avaliada em ${brl(n.trocaValor)}` : ""}` : "Não"}

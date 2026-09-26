@@ -38,6 +38,8 @@ export const usuarios = pgTable("usuarios", {
   ativo: boolean().notNull().default(true),
   /* sobe quando a senha muda ou o acesso é desativado: derruba sessões antigas */
   sessaoVersao: integer().notNull().default(1),
+  /* foto de perfil (/api/fotos/...), para reconhecer quem é quem na tela */
+  fotoUrl: text(),
   ultimoAcessoEm: quando(),
   criadoEm: criadoEm(),
   atualizadoEm: criadoEm(),
@@ -95,6 +97,8 @@ export const clientes = pgTable(
     origem: text(), // whatsapp | instagram | indicacao | loja | site | outro
     responsavelId: integer().references(() => usuarios.id, { onDelete: "set null" }),
     observacoes: text(),
+    /* foto enviada pela equipe (a API oficial do WhatsApp não entrega a foto do perfil) */
+    fotoUrl: text(),
     /* criado pelo WhatsApp simulado: some das métricas e sai no "limpar demonstração" */
     demo: boolean().notNull().default(false),
     criadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),

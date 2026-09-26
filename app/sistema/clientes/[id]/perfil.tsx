@@ -21,8 +21,9 @@ import { Avatar, EstadoVazio, ItemInfo, Painel, PontoEtapa, Selo, TituloSecao } 
 import { Botao, classesBotao } from "@/components/ui/botao";
 import { AreaTexto, Campo, Selecao } from "@/components/ui/campos";
 import { Dialogo } from "@/components/ui/dialogo";
+import { EditorFoto } from "@/components/ui/editor-foto";
 import { FormularioCliente } from "@/components/clientes/formulario-cliente";
-import { registrarInteracao } from "../acoes";
+import { acaoFotoCliente, acaoRemoverFotoCliente, registrarInteracao } from "../acoes";
 
 type AbaId = "resumo" | "negocios" | "vendas" | "atendimento" | "assistencia" | "historico";
 
@@ -35,7 +36,7 @@ export function PerfilClienteTela({
   equipe: { id: number; nome: string }[];
   permissoes: { editar: boolean; funil: boolean; vendas: boolean; os: boolean; conversas: boolean };
 }) {
-  const { cliente: c, responsavel } = perfil;
+  const { cliente: c, responsavel, responsavelFoto } = perfil;
   const [aba, setAba] = useState<AbaId>("resumo");
   const [editando, setEditando] = useState(false);
   const [interacao, setInteracao] = useState(false);
@@ -53,15 +54,32 @@ export function PerfilClienteTela({
     <>
       {/* cabeçalho */}
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Avatar nome={c.nome} tamanho="lg" />
+        {permissoes.editar ? (
+          <EditorFoto
+            nome={c.nome}
+            foto={c.fotoUrl}
+            titulo="Foto do cliente"
+            aoEnviar={(dados) => acaoFotoCliente(c.id, dados)}
+            aoRemover={() => acaoRemoverFotoCliente(c.id)}
+            aoMudar={() => router.refresh()}
+          />
+        ) : (
+          <Avatar nome={c.nome} foto={c.fotoUrl} tamanho="lg" />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[24px] font-bold leading-tight tracking-tight">{c.nome}</h1>
             {c.demo && <Selo tom="atencao">Dados simulados</Selo>}
           </div>
-          <p className="mt-1 text-[13px] text-ink-2">
-            Cliente nº {c.id} · desde {data(c.criadoEm)}
-            {responsavel ? ` · responsável: ${responsavel}` : ""}
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-2">
+            <span>
+              Cliente nº {c.id} · desde {data(c.criadoEm)}
+            </span>
+            {responsavel && (
+              <span className="inline-flex items-center gap-1.5">
+                · responsável: <Avatar nome={responsavel} foto={responsavelFoto} tamanho="xs" /> {responsavel}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

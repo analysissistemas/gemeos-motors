@@ -4,9 +4,9 @@ import type { ItemConversa } from "@/lib/consultas/conversas";
 import type { FiltroConversa } from "@/lib/consultas/conversas.tipos";
 import { FILTROS_CONVERSA } from "@/lib/consultas/conversas.tipos";
 import { STATUS_CONVERSA } from "@/lib/dominio";
-import { formatarTelefone, iniciais } from "@/lib/formato";
+import { formatarTelefone } from "@/lib/formato";
 import { cn } from "@/lib/cn";
-import { EstadoVazio } from "@/components/ui/basicos";
+import { Avatar, EstadoVazio } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { ETIQUETA_ETAPA, horaLista } from "./util";
 
@@ -100,8 +100,8 @@ export function ListaConversas({
                   aria-current={on ? "true" : undefined}
                   className={cn("flex w-full items-start gap-3 border-b border-linha px-4 py-3 text-left transition", on ? "bg-vidro-forte" : "hover:bg-trilho active:bg-trilho")}
                 >
-                  <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-vidro-forte text-[15px] font-semibold ring-1 ring-linha">
-                    {iniciais(nome)}
+                  <span className="relative shrink-0">
+                    <Avatar nome={nome} foto={c.clienteFoto} tamanho="xl" />
                     {c.etapa && <span className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-elevado" style={{ background: `var(--etapa-${c.etapa})` }} aria-hidden />}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -132,7 +132,10 @@ export function ListaConversas({
                       ) : (
                         <span>{STATUS_CONVERSA[c.status as keyof typeof STATUS_CONVERSA]}</span>
                       )}
-                      <span className="truncate">{c.responsavelId ? (c.responsavelId === usuarioId ? "Você" : c.responsavelNome) : "Sem responsável"}</span>
+                      <span className="flex min-w-0 items-center gap-1">
+                        {c.responsavelFoto && <Avatar nome={c.responsavelNome} foto={c.responsavelFoto} tamanho="xs" />}
+                        <span className="truncate">{c.responsavelId ? (c.responsavelId === usuarioId ? "Você" : c.responsavelNome) : "Sem responsável"}</span>
+                      </span>
                       {c.proximoFollowUp && (
                         <span className="flex items-center gap-1" title="Follow-up agendado">
                           <CalendarClock className="size-3" /> {horaLista(c.proximoFollowUp)}

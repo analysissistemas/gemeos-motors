@@ -7,7 +7,7 @@ import type { ContextoConversa } from "@/lib/consultas/conversas";
 import { ETAPAS, ORIGENS, STATUS_CONVERSA, STATUS_VENDA, type Etapa } from "@/lib/dominio";
 import { brl, data, dataHora, formatarCpf, formatarTelefone, relativo } from "@/lib/formato";
 import { cn } from "@/lib/cn";
-import { ItemInfo, Selo } from "@/components/ui/basicos";
+import { Avatar, ItemInfo, Selo } from "@/components/ui/basicos";
 import { Botao, classesBotao } from "@/components/ui/botao";
 import { Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { FormularioCliente } from "@/components/clientes/formulario-cliente";
@@ -85,13 +85,19 @@ export function ContextoCliente({
       <Bloco titulo="Cliente">
         {ctx.cliente ? (
           <>
+            <div className="mb-3 flex items-center gap-3">
+              <Avatar nome={ctx.cliente.nome} foto={ctx.cliente.fotoUrl} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11.5px] text-ink-3">Nome</p>
+                <p className="mt-0.5 truncate text-[13.5px]">
+                  <Link href={`/sistema/clientes/${ctx.cliente.id}`} className="font-semibold hover:underline">
+                    {ctx.cliente.nome}
+                  </Link>
+                  {ctx.cliente.demo && <Selo tom="atencao" className="ml-2">Simulado</Selo>}
+                </p>
+              </div>
+            </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <ItemInfo rotulo="Nome" className="col-span-2">
-                <Link href={`/sistema/clientes/${ctx.cliente.id}`} className="font-semibold hover:underline">
-                  {ctx.cliente.nome}
-                </Link>
-                {ctx.cliente.demo && <Selo tom="atencao" className="ml-2">Simulado</Selo>}
-              </ItemInfo>
               <ItemInfo rotulo="Telefone">{formatarTelefone(ctx.cliente.whatsapp ?? ctx.cliente.telefone)}</ItemInfo>
               <ItemInfo rotulo="CPF">{ctx.cliente.cpf ? formatarCpf(ctx.cliente.cpf) : null}</ItemInfo>
               <ItemInfo rotulo="Aniversário">{ctx.cliente.nascimento ? data(ctx.cliente.nascimento) : null}</ItemInfo>
@@ -225,7 +231,14 @@ export function ContextoCliente({
               <ItemInfo rotulo="Troca" className="col-span-2">
                 {ctx.negocio.temTroca ? `${ctx.negocio.trocaDescricao ?? "Sim"}${ctx.negocio.trocaValor ? ` · ${brl(ctx.negocio.trocaValor)}` : ""}` : "Não"}
               </ItemInfo>
-              <ItemInfo rotulo="Responsável">{ctx.negocio.responsavel}</ItemInfo>
+              <ItemInfo rotulo="Responsável">
+                {ctx.negocio.responsavel && (
+                  <span className="flex items-center gap-1.5">
+                    <Avatar nome={ctx.negocio.responsavel} foto={ctx.negocio.responsavelFoto} tamanho="xs" />
+                    <span className="truncate">{ctx.negocio.responsavel}</span>
+                  </span>
+                )}
+              </ItemInfo>
               <ItemInfo rotulo="Entrada">{data(ctx.negocio.criadoEm)}</ItemInfo>
               <ItemInfo rotulo="Origem">{ctx.negocio.origem ? ORIGENS[ctx.negocio.origem as keyof typeof ORIGENS] : null}</ItemInfo>
             </dl>
