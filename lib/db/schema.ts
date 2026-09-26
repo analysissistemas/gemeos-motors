@@ -129,6 +129,27 @@ export const modelos = pgTable(
   (t) => [uniqueIndex("modelos_nome_unico").on(t.nome)],
 );
 
+/* ---------- cores de cada modelo do catálogo (com a foto da moto naquela cor) ----------
+   A vitrine lê daqui (/api/vitrine/cores): o cliente toca na bolinha e vê a moto
+   naquela cor. `hex` é o tom da bolinha; `fotoUrl` é /api/vitrine/foto/... (pública). */
+export const modeloCores = pgTable(
+  "modelo_cores",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    modeloId: integer().notNull().references(() => modelos.id, { onDelete: "cascade" }),
+    nome: text().notNull(),
+    hex: text().notNull(), // "#6d1f33"
+    fotoUrl: text(),
+    ordem: integer().notNull().default(0),
+    ativo: boolean().notNull().default(true),
+    criadoEm: criadoEm(),
+  },
+  (t) => [
+    uniqueIndex("modelo_cores_nome_uq").on(t.modeloId, sql`lower(${t.nome})`),
+    index("modelo_cores_modelo_idx").on(t.modeloId, t.ordem),
+  ],
+);
+
 /* ---------- veículos: cada um é peça única ---------- */
 export const veiculos = pgTable(
   "veiculos",

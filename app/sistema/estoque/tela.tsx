@@ -3,7 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Bike, Pencil, Plus, Search } from "lucide-react";
-import type { VeiculoLinha } from "@/lib/consultas/estoque";
+import type { CorModelo, VeiculoLinha } from "@/lib/consultas/estoque";
 import { CONDICOES, ORIGENS_ENTRADA, STATUS_VEICULO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
 import { brl, data, formatarPlaca, km } from "@/lib/formato";
 import { Abas } from "@/components/ui/abas";
@@ -12,6 +12,7 @@ import { Botao } from "@/components/ui/botao";
 import { AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { mudarStatusVeiculo, salvarVeiculo } from "./acoes";
+import { BolinhaCor, CatalogoCores } from "./cores";
 
 type Modelo = { id: number; nome: string; tipo: string; marca: string | null; precoTabela: number | null; ficha: Record<string, string> | null };
 type Mov = {
@@ -27,6 +28,7 @@ export function TelaEstoque({
   modelos,
   unidades,
   movimentacoes,
+  cores,
   filtros,
   permissoes,
 }: {
@@ -35,10 +37,11 @@ export function TelaEstoque({
   modelos: Modelo[];
   unidades: { id: number; nome: string }[];
   movimentacoes: Mov;
+  cores: CorModelo[];
   filtros: { q?: string; status?: string; tipo?: string };
   permissoes: { editar: boolean; custo: boolean };
 }) {
-  const [aba, setAba] = useState<"veiculos" | "mov">("veiculos");
+  const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov">("veiculos");
   const [editando, setEditando] = useState<Partial<VeiculoLinha> | null>(null);
   const router = useRouter();
   const params = useSearchParams();
@@ -83,6 +86,7 @@ export function TelaEstoque({
         aoMudar={setAba}
         abas={[
           { id: "veiculos", rotulo: "Veículos", contador: veiculos.length },
+          { id: "catalogo", rotulo: "Catálogo e cores", contador: modelos.length },
           { id: "mov", rotulo: "Entradas e saídas" },
         ]}
       />
@@ -232,6 +236,8 @@ export function TelaEstoque({
         </>
       )}
 
+      {aba === "catalogo" && <CatalogoCores modelos={modelos} cores={cores} editar={permissoes.editar} />}
+
       {aba === "mov" && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Painel className="overflow-hidden">
@@ -282,7 +288,7 @@ export function TelaEstoque({
         </div>
       )}
 
-      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} unidades={unidades} custo={permissoes.custo} />
+      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} />
     </>
   );
 }
@@ -302,6 +308,7 @@ function FormularioVeiculo({
   aoMudar,
   inicial,
   modelos,
+  cores,
   unidades,
   custo,
 }: {
@@ -309,6 +316,7 @@ function FormularioVeiculo({
   aoMudar: (v: boolean) => void;
   inicial: Partial<VeiculoLinha>;
   modelos: Modelo[];
+  cores: CorModelo[];
   unidades: { id: number; nome: string }[];
   custo: boolean;
 }) {
@@ -320,7 +328,7 @@ function FormularioVeiculo({
       titulo={inicial.id ? "Editar veículo" : "Dar entrada em veículo"}
       descricao="Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
     >
-      {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} unidades={unidades} custo={custo} aoFechar={() => aoMudar(false)} />}
+      {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} aoFechar={() => aoMudar(false)} />}
     </Dialogo>
   );
 }
@@ -328,12 +336,14 @@ function FormularioVeiculo({
 function CorpoVeiculo({
   inicial,
   modelos,
+  cores,
   unidades,
   custo,
   aoFechar,
 }: {
   inicial: Partial<VeiculoLinha>;
   modelos: Modelo[];
+  cores: CorModelo[];
   unidades: { id: number; nome: string }[];
   custo: boolean;
   aoFechar: () => void;
@@ -346,6 +356,8 @@ function CorpoVeiculo({
   const router = useRouter();
 
   const eletrico = ehEletrico(f.tipo ?? "moto_eletrica");
+  /* cores cadastradas no modelo escolhido: viram atalho, mas o campo continua livre */
+  const coresDoModelo = f.modeloId ? cores.filter((c) => c.modeloId === f.modeloId) : [];
   const set = <K extends keyof VeiculoLinha>(k: K, v: VeiculoLinha[K] | null | undefined) => setF((x) => ({ ...x, [k]: v }));
 
   function escolherModelo(id: string) {
@@ -393,8 +405,24 @@ function CorpoVeiculo({
         <Campo rotulo="Versão" className="sm:col-span-2">
           <Entrada value={f.versao ?? ""} onChange={(e) => set("versao", e.target.value)} />
         </Campo>
-        <Campo rotulo="Cor" className="sm:col-span-2">
-          <Entrada value={f.cor ?? ""} onChange={(e) => set("cor", e.target.value)} />
+        <Campo rotulo="Cor" htmlFor="veiculo-cor" className="sm:col-span-2" dica={coresDoModelo.length ? "Toque numa cor do modelo ou digite outra." : undefined}>
+          <Entrada id="veiculo-cor" value={f.cor ?? ""} onChange={(e) => set("cor", e.target.value)} />
+          {coresDoModelo.length > 0 && (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Cores do modelo">
+            {coresDoModelo.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => set("cor", c.nome)}
+                aria-pressed={(f.cor ?? "").toLowerCase() === c.nome.toLowerCase()}
+                className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-[12.5px] ${(f.cor ?? "").toLowerCase() === c.nome.toLowerCase() ? "border-ink bg-trilho" : "border-linha hover:border-linha-forte"}`}
+              >
+                <BolinhaCor hex={c.hex} tamanho="sm" />
+                {c.nome}
+              </button>
+            ))}
+          </div>
+          )}
         </Campo>
         <Campo rotulo="Condição" obrigatorio className="sm:col-span-2">
           <Selecao value={f.condicao ?? ""} onChange={(e) => set("condicao", e.target.value)}>

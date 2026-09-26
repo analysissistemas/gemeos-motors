@@ -41,6 +41,7 @@ export async function executar<T>(fn: () => Promise<T>, mensagem?: string): Prom
     const pg = erroPostgres(e);
     if (pg?.code === "23505") {
       const alvo = `${pg.constraint ?? ""} ${pg.detail ?? ""}`;
+      if (alvo.includes("modelo_cores")) return { ok: false, erro: "Este modelo já tem uma cor com esse nome.", campos: { nome: "Já cadastrada" } };
       if (alvo.includes("cpf")) return { ok: false, erro: "Já existe um cliente com este CPF.", campos: { cpf: "CPF já cadastrado" } };
       if (alvo.includes("chassi")) return { ok: false, erro: "Já existe um veículo com este chassi.", campos: { chassi: "Chassi já cadastrado" } };
       if (alvo.includes("placa")) return { ok: false, erro: "Já existe um veículo com esta placa.", campos: { placa: "Placa já cadastrada" } };
