@@ -16,13 +16,16 @@ import { FormularioNegocio, type NegocioForm } from "@/components/negocios/formu
 import { acaoDetalheNegocio, acaoMoverNegocio } from "@/app/sistema/funil/acoes";
 import {
   acaoAbrirConversa,
+  acaoApagarParaMim,
   acaoAssumir,
   acaoAtribuir,
   acaoContexto,
+  acaoConversaComNumero,
   acaoEnviarMensagem,
   acaoListarConversas,
   acaoMensagensAntigas,
   acaoNota,
+  acaoReagir,
   acaoStatusConversa,
 } from "@/app/sistema/conversas/acoes";
 import { Chat } from "./chat";
@@ -66,6 +69,7 @@ export function CentralConversas({
   const [info, setInfo] = useState(false);
   /* painel do cliente ao lado do chat (telas largas): começa recolhido, pedido do dono */
   const [painelAberto, setPainelAberto] = useState(false);
+  const [respondendo, setRespondendo] = useState<MensagemChat | null>(null);
   const [simulador, setSimulador] = useState(false);
   const [perda, setPerda] = useState<AlvoEtapa | null>(null);
   const [fechar, setFechar] = useState<AlvoEtapa | null>(null);
@@ -104,6 +108,7 @@ export function CentralConversas({
       if (abertaRef.current === id && dadosRef.current) return;
       setAberta(id);
       setDados(null);
+      setRespondendo(null);
       window.history.pushState({ conversa: id }, "", `/sistema/conversas?c=${id}`);
       carregarConversa(id);
     },
@@ -187,7 +192,7 @@ export function CentralConversas({
     try {
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return;
-      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; status: { id: number; status: string; metadados: MensagemChat["metadados"] }[]; notas: NotaChat[] | null };
+      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; alteradas: MensagemChat[]; status: { id: number; status: string; metadados: MensagemChat["metadados"] }[]; notas: NotaChat[] | null };
       desde.current = j.agora;
 
       if (j.conversas.length) {
@@ -221,8 +226,12 @@ export function CentralConversas({
           const existentes = new Set(atual.mensagens.map((m) => m.id));
           /* o status traz os metadados junto: o motivo de "Não enviada" chega pelo webhook depois do envio */
           const statusPor = new Map(j.status.map((s) => [s.id, s]));
+          /* reação, apagada e afins: a mensagem inteira vem de novo e substitui a da tela */
+          const alteradaPor = new Map(j.alteradas.map((m) => [m.id, m]));
           const mensagens = [
             ...atual.mensagens.map((m) => {
+              const nova = alteradaPor.get(m.id);
+              if (nova) return nova;
               const s = statusPor.get(m.id);
               return s && s.status !== m.status ? { ...m, status: s.status, metadados: s.metadados } : m;
             }),
@@ -253,11 +262,12 @@ export function CentralConversas({
   }, [sincronizar]);
 
   /* o áudio vai por rota própria (arquivo de verdade, não texto codificado) */
-  async function enviarAudio(id: number, blob: Blob, mime: string, duracao: number): Promise<{ ok: true; dados: { id: number } } | { ok: false; erro: string }> {
+  async function enviarAudio(id: number, blob: Blob, mime: string, duracao: number, respostaA: number | null): Promise<{ ok: true; dados: { id: number } } | { ok: false; erro: string }> {
     try {
       const f = new FormData();
       f.append("audio", new File([blob], "audio", { type: mime }));
       f.append("duracao", String(duracao));
+      if (respostaA) f.append("respostaA", String(respostaA));
       const res = await fetch(`/api/conversas/${id}/audio`, { method: "POST", body: f });
       const j = (await res.json().catch(() => null)) as { ok?: boolean; id?: number; erro?: string } | null;
       if (!res.ok || !j?.ok || !j.id) return { ok: false, erro: j?.erro ?? "Não foi possível enviar o áudio." };
@@ -280,6 +290,9 @@ export function CentralConversas({
       setDados((d) => (d ? { ...d, notas: [...d.notas, { id: r.dados.id, conteudo: e.conteudo, criadoEm: new Date(), usuarioNome: usuario.nome }] } : d));
       return true;
     }
+    /* resposta a uma mensagem (só as que já existem no banco) */
+    const citada = respondendo && respondendo.id > 0 ? respondendo : null;
+    setRespondendo(null);
     const temp: MensagemChat = {
       id: -Date.now(),
       direcao: "outgoing",
@@ -292,15 +305,16 @@ export function CentralConversas({
       midiaMime: "midia" in e ? e.midia.mime : e.tipo === "audio" ? e.mime : null,
       midiaTamanho: "midia" in e ? e.midia.tamanho : null,
       status: "pending",
-      respostaA: null,
+      respostaA: citada?.id ?? null,
+      citada: citada ? { direcao: citada.direcao, autor: citada.autor, tipo: citada.tipo, conteudo: citada.conteudo, apagada: false } : null,
       metadados: e.tipo === "audio" ? { duracao: e.duracao } : null,
       criadoEm: new Date(),
     };
     setDados((d) => (d ? { ...d, mensagens: [...d.mensagens, temp] } : d));
     const r =
       e.tipo === "audio"
-        ? await enviarAudio(id, e.blob, e.mime, e.duracao)
-        : await acaoEnviarMensagem(id, { tipo: e.tipo, conteudo: e.conteudo, midia: "midia" in e ? e.midia : null });
+        ? await enviarAudio(id, e.blob, e.mime, e.duracao, citada?.id ?? null)
+        : await acaoEnviarMensagem(id, { tipo: e.tipo, conteudo: e.conteudo, midia: "midia" in e ? e.midia : null, respostaA: citada?.id ?? null });
     if (!r.ok) {
       setDados((d) => (d ? { ...d, mensagens: d.mensagens.filter((m) => m.id !== temp.id) } : d));
       toast.error(r.erro);
@@ -310,6 +324,34 @@ export function CentralConversas({
     setItens((xs) => ordenar(xs.map((x) => (x.id === id ? { ...x, ultimaMensagemEm: new Date(), ultimaMensagemTexto: e.tipo === "texto" ? e.conteudo : e.tipo === "audio" ? "Áudio" : e.tipo === "imagem" ? "Foto" : "Documento", ultimaMensagemDirecao: "outgoing", naoLidas: 0 } : x))));
     sincronizar();
     return true;
+  }
+
+  /* ações sobre uma mensagem: reagir, apagar para mim, conversar com um contato compartilhado */
+  async function reagir(m: MensagemChat, emoji: string) {
+    const antes = m.metadados;
+    const reacoes = { ...((m.metadados as { reacoes?: Record<string, string> } | null)?.reacoes ?? {}) };
+    if (emoji) reacoes.equipe = emoji;
+    else delete reacoes.equipe;
+    setDados((d) => (d ? { ...d, mensagens: d.mensagens.map((x) => (x.id === m.id ? { ...x, metadados: { ...(x.metadados ?? {}), reacoes } } : x)) } : d));
+    const r = await acaoReagir(m.id, emoji);
+    if (!r.ok) {
+      setDados((d) => (d ? { ...d, mensagens: d.mensagens.map((x) => (x.id === m.id ? { ...x, metadados: antes } : x)) } : d));
+      toast.error(r.erro);
+    }
+  }
+
+  async function apagarParaMim(m: MensagemChat) {
+    const r = await acaoApagarParaMim(m.id);
+    if (!r.ok) return void toast.error(r.erro);
+    setDados((d) => (d ? { ...d, mensagens: d.mensagens.map((x) => (x.id === m.id ? { ...x, metadados: { ...(x.metadados ?? {}), apagada: { por: usuario.nome, em: new Date().toISOString() } } } : x)) } : d));
+    if (respondendo?.id === m.id) setRespondendo(null);
+  }
+
+  async function conversarCom(telefone: string, nome: string | null) {
+    const r = await acaoConversaComNumero(telefone, nome);
+    if (!r.ok) return void toast.error(r.erro);
+    abrir(r.dados);
+    sincronizar();
   }
 
   async function executarAcao(p: Promise<{ ok: boolean; erro?: string; mensagem?: string }>) {
@@ -428,6 +470,11 @@ export function CentralConversas({
               }
             }}
             aoEnviar={enviar}
+            respondendo={respondendo}
+            aoResponder={setRespondendo}
+            aoReagir={reagir}
+            aoApagar={apagarParaMim}
+            aoConversarCom={conversarCom}
             aoAssumir={() => executarAcao(acaoAssumir(aberta))}
           />
         ) : aberta ? (

@@ -202,7 +202,9 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
   const midia = await persistirMidia(e.midia);
   let respostaExterno: string | null = null;
   if (e.respostaA) {
-    const [orig] = await db.select({ externoId: schema.mensagens.externoId }).from(schema.mensagens).where(eq(schema.mensagens.id, e.respostaA)).limit(1);
+    /* só vale citar mensagem da mesma conversa */
+    const [orig] = await db.select({ externoId: schema.mensagens.externoId }).from(schema.mensagens).where(and(eq(schema.mensagens.id, e.respostaA), eq(schema.mensagens.conversaId, conversaId))).limit(1);
+    if (!orig) e = { ...e, respostaA: null };
     respostaExterno = orig?.externoId ?? null;
   }
   const env = await prov.enviar({ telefone: c.contatoTelefone, tipo: e.tipo, conteudo: texto, midia, respostaAExternoId: respostaExterno });
@@ -481,6 +483,30 @@ export async function criarNegocioDaConversa(u: Quem, conversaId: number, dados:
 }
 
 /** Conversa com um cliente já cadastrado (botão "Conversa" na ficha). */
+/** Contato que o cliente compartilhou no chat: abre (ou acha) a conversa com esse número.
+ *  Se o número já é de um cliente cadastrado, a conversa já nasce ligada a ele. */
+export async function abrirConversaComNumero(u: Quem, tel: string, nome: string | null) {
+  const telefone = normalizarTelefone(tel);
+  if (telefone.length < 12 || telefone.length > 13) throw new ErroRegra("Número inválido.");
+  const [existente] = await db
+    .select({ id: schema.conversas.id })
+    .from(schema.conversas)
+    .where(and(eq(schema.conversas.canal, "whatsapp"), sql`${schema.conversas.contatoTelefone} in (${sql.join(variantesTelefone(telefone).map((v) => sql`${v}`), sql`, `)})`))
+    .limit(1);
+  if (existente) return existente.id;
+  return db.transaction(async (tx) => {
+    const cliente = await acharClientePorTelefone(tx, telefone);
+    const negocioId = cliente ? await negocioAbertoDoCliente(tx, cliente.id) : null;
+    const [c] = await tx
+      .insert(schema.conversas)
+      .values({ canal: "whatsapp", provedor: (await obterProvedor()).id, contatoTelefone: telefone, contatoNome: cliente?.nome ?? nome, clienteId: cliente?.id ?? null, negocioId, responsavelId: u.id, modo: "humano", status: "em_atendimento", atendimentoHumanoPor: u.id, atendimentoHumanoEm: new Date() })
+      .returning({ id: schema.conversas.id });
+    await mensagemSistema(tx, c.id, `Conversa iniciada pela loja a partir de um contato compartilhado (por ${u.nome}). Se o contato nunca escreveu para a loja, a Meta só libera a primeira mensagem com um modelo aprovado.`);
+    await registrarLog(u, { acao: "conversa.criada", entidade: "conversa", entidadeId: c.id, descricao: `Iniciou conversa com ${cliente?.nome ?? nome ?? formatarTelefone(telefone)} (contato compartilhado)` }, tx);
+    return c.id;
+  });
+}
+
 export async function abrirConversaDoCliente(u: Quem, clienteId: number) {
   const [cli] = await db.select().from(schema.clientes).where(eq(schema.clientes.id, clienteId)).limit(1);
   if (!cli) throw new ErroRegra("Cliente não encontrado.");

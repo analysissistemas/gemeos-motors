@@ -45,9 +45,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const midia = armazenamentoDisponivel()
       ? await guardarMidia(bytes, nome, base)
       : { url: `data:${base};base64,${Buffer.from(bytes).toString("base64")}`, nome, mime: base, tamanho: bytes.byteLength };
+    const respostaA = Number(form.get("respostaA")) || null;
     const id = await enviarMensagem(u, conversaId, {
       tipo: "audio",
       midia,
+      respostaA: respostaA && Number.isInteger(respostaA) && respostaA > 0 ? respostaA : null,
       metadados: { duracao: dec.duracao, duracaoOrigem: dec.origem, ...(dec.divergencia != null && dec.divergencia > 1 ? { divergenciaNavegador: dec.divergencia } : {}) },
     });
     revalidatePath("/sistema/conversas");

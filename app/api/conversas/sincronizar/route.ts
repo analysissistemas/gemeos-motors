@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
   const agora = new Date();
 
   await simularAndamento(conversaId ?? undefined);
-  const [conversas, mensagens, status, notas] = await Promise.all([
+  const [conversas, mensagens, alteradas, status, notas] = await Promise.all([
     conversasAlteradas(new Date(desde.getTime() - 1500)),
     conversaId ? mensagensDaConversa(conversaId, { depoisDeId: ultimaMsg }) : Promise.resolve([]),
+    /* reação, apagada, resposta: a mensagem já está na tela e mudou */
+    conversaId ? mensagensDaConversa(conversaId, { alteradasDesde: new Date(desde.getTime() - 1500) }) : Promise.resolve([]),
     conversaId ? statusRecentes(conversaId) : Promise.resolve([]),
     conversaId && p.get("notas") ? notasDaConversa(conversaId) : Promise.resolve(null),
   ]);
   if (conversaId && mensagens.some((m) => m.direcao === "incoming")) await marcarLida(conversaId);
-  return NextResponse.json({ agora: agora.toISOString(), conversas, mensagens, status, notas }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ agora: agora.toISOString(), conversas, mensagens, alteradas, status, notas }, { headers: { "Cache-Control": "no-store" } });
 }

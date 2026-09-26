@@ -15,7 +15,23 @@ export type EnvioChat =
 
 const LIMITE_ARQUIVO = 2 * 1024 * 1024;
 
-export function Compositor({ respostas, desabilitado, aoEnviar }: { respostas: Resposta[]; simulado?: boolean; desabilitado?: boolean; aoEnviar: (e: EnvioChat) => Promise<boolean> }) {
+/** Mensagem que está sendo respondida: aparece acima da caixa de texto. */
+export type Citacao = { quem: string; texto: string };
+
+export function Compositor({
+  respostas,
+  desabilitado,
+  aoEnviar,
+  respondendo,
+  aoCancelarResposta,
+}: {
+  respostas: Resposta[];
+  simulado?: boolean;
+  desabilitado?: boolean;
+  aoEnviar: (e: EnvioChat) => Promise<boolean>;
+  respondendo?: Citacao | null;
+  aoCancelarResposta?: () => void;
+}) {
   const [texto, setTexto] = useState("");
   const [nota, setNota] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -24,6 +40,11 @@ export function Compositor({ respostas, desabilitado, aoEnviar }: { respostas: R
   const [enviando, setEnviando] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const arquivo = useRef<HTMLInputElement>(null);
+
+  /* escolheu "Responder": o cursor já vai para a caixa */
+  useEffect(() => {
+    if (respondendo) area.current?.focus();
+  }, [respondendo]);
 
   /* altura automática até ~6 linhas */
   useEffect(() => {
@@ -125,6 +146,17 @@ export function Compositor({ respostas, desabilitado, aoEnviar }: { respostas: R
         </div>
       )}
 
+      {respondendo && !nota && (
+        <div className="mb-2 flex items-center gap-2 rounded-2xl border border-linha bg-elevado py-1.5 pl-3 pr-1.5">
+          <span className="min-w-0 flex-1 border-l-2 border-marca pl-2">
+            <span className="block text-[11.5px] font-semibold text-marca">Respondendo a {respondendo.quem}</span>
+            <span className="block truncate text-[12.5px] text-ink-2">{respondendo.texto}</span>
+          </span>
+          <button className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-trilho" onClick={aoCancelarResposta} aria-label="Cancelar resposta">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
       {nota && (
         <p className="mb-1.5 flex items-center gap-1.5 px-2 text-[12px] font-medium">
           <StickyNote className="size-3.5 text-marca" /> Nota interna — só a equipe vê, o cliente não recebe.
@@ -197,6 +229,7 @@ export function Compositor({ respostas, desabilitado, aoEnviar }: { respostas: R
                 if (e.key === "Escape") {
                   setRapidas(false);
                   setEmoji(false);
+                  if (respondendo) aoCancelarResposta?.();
                 }
               }}
               placeholder={nota ? "Escreva a nota interna…" : "Mensagem"}

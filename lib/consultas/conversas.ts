@@ -101,9 +101,11 @@ export async function conversasAlteradas(desde: Date) {
     .limit(100);
 }
 
-export async function mensagensDaConversa(conversaId: number, f: { antesDeId?: number; depoisDeId?: number; limite?: number }) {
+export async function mensagensDaConversa(conversaId: number, f: { antesDeId?: number; depoisDeId?: number; alteradasDesde?: Date; limite?: number }) {
   const m = schema.mensagens;
   const u = schema.usuarios;
+  /* a mensagem respondida vem junto, para a bolha mostrar a citação */
+  const citada = alias(schema.mensagens, "citada");
   const limite = f.limite ?? 40;
   const selecionar = () => db
     .select({
@@ -119,11 +121,16 @@ export async function mensagensDaConversa(conversaId: number, f: { antesDeId?: n
       midiaTamanho: m.midiaTamanho,
       status: m.status,
       respostaA: m.respostaA,
+      citada: sql<{ direcao: string; autor: string; tipo: string; conteudo: string | null; apagada: boolean } | null>`case when ${citada.id} is null then null else json_build_object('direcao', ${citada.direcao}, 'autor', ${citada.autor}, 'tipo', ${citada.tipo}, 'conteudo', left(${citada.conteudo}, 200), 'apagada', ${citada.metadados} ? 'apagada') end`,
       metadados: m.metadados,
       criadoEm: m.criadoEm,
     })
     .from(m)
-    .leftJoin(u, eq(u.id, m.usuarioId));
+    .leftJoin(u, eq(u.id, m.usuarioId))
+    .leftJoin(citada, eq(citada.id, m.respostaA));
+  if (f.alteradasDesde) {
+    return selecionar().where(and(eq(m.conversaId, conversaId), gt(m.alteradaEm, f.alteradasDesde))).orderBy(asc(m.id)).limit(200);
+  }
   if (f.depoisDeId != null) {
     return selecionar().where(and(eq(m.conversaId, conversaId), gt(m.id, f.depoisDeId))).orderBy(asc(m.id)).limit(200);
   }

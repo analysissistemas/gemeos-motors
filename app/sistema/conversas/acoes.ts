@@ -8,8 +8,10 @@ import { executar, ErroRegra } from "@/lib/acao";
 import { STATUS_CONVERSA, type StatusConversa } from "@/lib/dominio";
 import { contextoDaConversa, listarConversas, mensagensDaConversa, notasDaConversa, temMaisAntigas, type FiltroConversa } from "@/lib/consultas/conversas";
 import {
+  abrirConversaComNumero,
   abrirConversaDoCliente,
   adicionarNota,
+  apagarMensagemParaMim,
   agendarFollowUp,
   assumirConversa,
   atribuirConversa,
@@ -19,6 +21,7 @@ import {
   executarTriagem,
   marcarLida,
   mudarStatusConversa,
+  reagirMensagem,
   receberMensagem,
   triagemAutomaticaLigada,
   vincularCliente,
@@ -91,6 +94,32 @@ export async function acaoEnviarMensagem(conversaId: number, dados: unknown) {
       respostaA: d.respostaA ?? null,
     });
     return { id };
+  });
+}
+
+export async function acaoReagir(mensagemId: number, emoji: string) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    const e = z.string().max(16).parse(emoji);
+    await reagirMensagem(u, z.number().int().positive().parse(mensagemId), e);
+    return null;
+  });
+}
+
+export async function acaoApagarParaMim(mensagemId: number) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    await apagarMensagemParaMim(u, z.number().int().positive().parse(mensagemId));
+    return null;
+  }, "Mensagem apagada do chat da equipe");
+}
+
+export async function acaoConversaComNumero(telefone: string, nome: string | null) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    const t = z.string().trim().min(8).max(20).parse(telefone);
+    const n = z.string().trim().max(120).nullable().parse(nome || null);
+    return abrirConversaComNumero(u, t, n);
   });
 }
 
