@@ -153,6 +153,7 @@ precisa mudar junto. Carro e moto a combustão existem **só aqui**.
 | `lib/pdf/` | Documento de venda e de OS |
 | `lib/logs.ts` | Histórico: toda ação importante grava quem, o quê e quando |
 | `tests/e2e/` | Testes de ponta a ponta (Playwright no Chrome) |
+| `app/sistema/ajuda` + `lib/ajuda/` | Tutoriais (menu Ajuda → Tutoriais), por perfil. Tutorial novo = acrescentar em `lib/ajuda/tutoriais.ts`; imagem em `public/tutoriais/<slug>-<nn>.webp` (sem a imagem, a figura some) |
 
 **Perfis:** `admin` (tudo, inclusive custo, lucro, financeiro, histórico,
 usuários e configurações), `vendedor` (atendimento, funil, clientes, vendas,

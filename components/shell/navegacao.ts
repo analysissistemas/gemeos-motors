@@ -45,4 +45,8 @@ export const SECOES_MENU: { titulo: string; itens: ItemMenu[] }[] = [
       { href: "/sistema/configuracoes", rotulo: "Configurações", icone: "config", permissao: "config.gerenciar" },
     ],
   },
+  {
+    titulo: "Ajuda",
+    itens: [{ href: "/sistema/ajuda", rotulo: "Tutoriais", icone: "ajuda", permissao: "ajuda.ver" }],
+  },
 ];
