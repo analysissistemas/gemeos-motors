@@ -89,8 +89,8 @@ export function detectarPedidoLigacao(texto: string): PedidoLigacao | null {
 export type JanelaDia = { de: number; ate: number } | null; // hora inteira, [de, ate)
 export type HorarioAdministrativo = Record<0 | 1 | 2 | 3 | 4 | 5 | 6, JanelaDia>;
 
-/** PROVISÓRIO: o horário real da loja precisa ser confirmado pelo dono e salvo em Configurações. */
-export const HORARIO_ADMIN_PADRAO: HorarioAdministrativo = { 0: null, 1: { de: 8, ate: 18 }, 2: { de: 8, ate: 18 }, 3: { de: 8, ate: 18 }, 4: { de: 8, ate: 18 }, 5: { de: 8, ate: 18 }, 6: { de: 8, ate: 13 } };
+/** Horário informado pelo dono: 8h às 18h, segunda a sábado (domingo fechado). */
+export const HORARIO_ADMIN_PADRAO: HorarioAdministrativo = { 0: null, 1: { de: 8, ate: 18 }, 2: { de: 8, ate: 18 }, 3: { de: 8, ate: 18 }, 4: { de: 8, ate: 18 }, 5: { de: 8, ate: 18 }, 6: { de: 8, ate: 18 } };
 
 export function dentroDoHorario(agora: Date, h: HorarioAdministrativo = HORARIO_ADMIN_PADRAO): boolean {
   const l = local(agora);
