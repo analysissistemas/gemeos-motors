@@ -362,6 +362,8 @@ test("conversas: cliente conhecido, resposta, nota interna e follow-up", async (
   await expect(page.getByText(`Cliente prefere contato à tarde (${MARCA}).`).last()).toBeVisible();
   await page.getByRole("button", { name: "Voltar para mensagem" }).click();
 
+  /* o painel do cliente começa recolhido (pedido do dono): abre no ⓘ */
+  await page.getByRole("button", { name: "Mostrar dados do cliente e negócio" }).click();
   await page.getByRole("button", { name: "Amanhã 10h" }).click();
   await page.getByRole("button", { name: "Agendar", exact: true }).click();
   await expect(aviso(page, /agendad/i)).toBeVisible();
@@ -371,7 +373,8 @@ test("conversas: cliente conhecido, resposta, nota interna e follow-up", async (
   await page.getByLabel("Responsável", { exact: true }).first().selectOption({ label: estado.vendedor.nome });
   /* a troca de responsável fica escrita na própria conversa */
   await expect(page.getByText(new RegExp(`transferido para ${estado.vendedor.nome}|atribuída a ${estado.vendedor.nome}`)).last()).toBeVisible();
-  await page.getByLabel("Status da conversa").selectOption("aguardando_cliente");
+  /* status e responsável ficam só no painel lateral */
+  await page.getByLabel("Status", { exact: true }).first().selectOption("aguardando_cliente");
   await expect(page.getByText(/Status: Aguardando cliente \(por /).last()).toBeVisible();
 
   /* contato novo: cadastra da conversa, cria negócio e muda a etapa sem sair do chat */
@@ -415,7 +418,7 @@ test("vendedor não acessa área administrativa nem vê custo", async ({ browser
   const { ctx, p } = await contextoLogado(browser, estado.vendedor.usuario, estado.vendedor.senha);
   for (const rota of ["/sistema/usuarios", "/sistema/logs", "/sistema/configuracoes", "/sistema/financeiro"]) {
     await p.goto(rota);
-    await expect(p.getByRole("heading", { name: "Seu perfil não tem acesso a esta área" }), rota).toBeVisible();
+    await expect(p.getByRole("heading", { name: "Você não tem acesso a esta área" }), rota).toBeVisible();
   }
   await p.goto("/sistema/estoque");
   await expect(p.getByRole("heading", { name: "Estoque" })).toBeVisible();
@@ -432,7 +435,7 @@ test("técnico cai na assistência e não abre vendas nem documentos de venda", 
   await expect(p).toHaveURL(/\/sistema\/assistencia/);
   for (const rota of ["/sistema/vendas", "/sistema/funil", "/sistema/usuarios"]) {
     await p.goto(rota);
-    await expect(p.getByRole("heading", { name: "Seu perfil não tem acesso a esta área" }), rota).toBeVisible();
+    await expect(p.getByRole("heading", { name: "Você não tem acesso a esta área" }), rota).toBeVisible();
   }
   const pdf = await p.request.get(`/api/documentos/venda/${estado.vendaId}`);
   expect(pdf.status()).toBe(403);
