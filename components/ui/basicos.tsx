@@ -1,5 +1,4 @@
 import { cn } from "@/lib/cn";
-import { iniciais } from "@/lib/formato";
 
 type Tom = "neutro" | "bom" | "atencao" | "serio" | "critico" | "marca" | "info";
 const tons: Record<Tom, string> = {
@@ -97,14 +96,8 @@ export function Esqueleto({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-lg bg-trilho", className)} aria-hidden />;
 }
 
-export function Avatar({ nome, className, tamanho = "md" }: { nome?: string | null; className?: string; tamanho?: "sm" | "md" | "lg" }) {
-  const t = { sm: "size-7 text-[11px]", md: "size-10 text-[13px]", lg: "size-14 text-[18px]" }[tamanho];
-  return (
-    <span className={cn("grid shrink-0 place-items-center rounded-full bg-vidro-forte font-semibold text-ink ring-1 ring-linha", t, className)} aria-hidden>
-      {iniciais(nome)}
-    </span>
-  );
-}
+/* com foto, o Avatar precisa do navegador (volta às iniciais se a imagem falhar) */
+export { Avatar } from "./avatar";
 
 export function ItemInfo({ rotulo, children, className }: { rotulo: string; children: React.ReactNode; className?: string }) {
   return (

@@ -23,11 +23,13 @@ function camposLista() {
       contatoTelefone: c.contatoTelefone,
       clienteId: c.clienteId,
       clienteNome: cli.nome,
+      clienteFoto: cli.fotoUrl,
       negocioId: c.negocioId,
       etapa: n.etapa,
       veiculoInteresse: n.veiculoInteresse,
       responsavelId: c.responsavelId,
       responsavelNome: resp.nome,
+      responsavelFoto: resp.fotoUrl,
       status: c.status,
       prioridade: c.prioridade,
       modo: c.modo,
@@ -172,10 +174,12 @@ export type NotaChat = Awaited<ReturnType<typeof notasDaConversa>>[number];
 export async function contextoDaConversa(conversaId: number) {
   const c = schema.conversas;
   const humano = alias(schema.usuarios, "humano");
+  const respConv = alias(schema.usuarios, "resp_conv");
   const [conv] = await db
-    .select({ conversa: c, atendimentoHumano: humano.nome })
+    .select({ conversa: c, atendimentoHumano: humano.nome, responsavel: { nome: respConv.nome, fotoUrl: respConv.fotoUrl } })
     .from(c)
     .leftJoin(humano, eq(humano.id, c.atendimentoHumanoPor))
+    .leftJoin(respConv, eq(respConv.id, c.responsavelId))
     .where(eq(c.id, conversaId))
     .limit(1);
   if (!conv) return null;
@@ -184,7 +188,7 @@ export async function contextoDaConversa(conversaId: number) {
   const [cliente, negocio, followups] = await Promise.all([
     conversa.clienteId
       ? db
-          .select({ id: schema.clientes.id, nome: schema.clientes.nome, cpf: schema.clientes.cpf, whatsapp: schema.clientes.whatsapp, telefone: schema.clientes.telefone, email: schema.clientes.email, nascimento: schema.clientes.nascimento, origem: schema.clientes.origem, cidade: schema.clientes.cidade, criadoEm: schema.clientes.criadoEm, demo: schema.clientes.demo })
+          .select({ id: schema.clientes.id, nome: schema.clientes.nome, cpf: schema.clientes.cpf, whatsapp: schema.clientes.whatsapp, telefone: schema.clientes.telefone, email: schema.clientes.email, nascimento: schema.clientes.nascimento, origem: schema.clientes.origem, cidade: schema.clientes.cidade, criadoEm: schema.clientes.criadoEm, demo: schema.clientes.demo, fotoUrl: schema.clientes.fotoUrl })
           .from(schema.clientes)
           .where(eq(schema.clientes.id, conversa.clienteId))
           .limit(1)
@@ -204,6 +208,7 @@ export async function contextoDaConversa(conversaId: number) {
             trocaValor: schema.negocios.trocaValor,
             responsavelId: schema.negocios.responsavelId,
             responsavel: resp.nome,
+            responsavelFoto: resp.fotoUrl,
             origem: schema.negocios.origem,
             criadoEm: schema.negocios.criadoEm,
             etapaDesde: schema.negocios.etapaDesde,
@@ -236,6 +241,7 @@ export async function contextoDaConversa(conversaId: number) {
         })
         .from(sql`(select 1) as um`)
     : [null];
-  return { conversa, atendimentoHumano: conv.atendimentoHumano, cliente: cli, negocio: negocio[0] ?? null, followups, historico: historico[0] };
+  /* responsavel: quem atende a conversa (nome e foto), para o cabeçalho do chat */
+  return { conversa, atendimentoHumano: conv.atendimentoHumano, responsavel: conv.responsavel?.nome ? conv.responsavel : null, cliente: cli, negocio: negocio[0] ?? null, followups, historico: historico[0] };
 }
 export type ContextoConversa = NonNullable<Awaited<ReturnType<typeof contextoDaConversa>>>;

@@ -21,6 +21,7 @@ export async function listarNegociosFunil(f: { responsavelId?: number; q?: strin
       veiculoInteresse: n.veiculoInteresse,
       responsavelId: n.responsavelId,
       responsavel: u.nome,
+      responsavelFoto: u.fotoUrl,
       valorAnunciado: n.valorAnunciado,
       valorProposta: n.valorProposta,
       origem: n.origem,
@@ -67,6 +68,7 @@ export async function obterNegocio(id: number) {
       negocio: n,
       cliente: { id: schema.clientes.id, nome: schema.clientes.nome, whatsapp: schema.clientes.whatsapp, telefone: schema.clientes.telefone, email: schema.clientes.email },
       responsavel: resp.nome,
+      responsavelFoto: resp.fotoUrl,
       atendimentoHumano: humano.nome,
       veiculo: schema.veiculos,
     })

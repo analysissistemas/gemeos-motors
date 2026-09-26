@@ -5,13 +5,14 @@ import { toast } from "sonner";
 import { KeyRound, Pencil, UserPlus } from "lucide-react";
 import { PAPEIS, PERMISSOES, type Papel } from "@/lib/dominio";
 import { relativo } from "@/lib/formato";
-import { Avatar, CabecalhoPagina, Painel, Selo } from "@/components/ui/basicos";
+import { CabecalhoPagina, Painel, Selo } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { Campo, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo } from "@/components/ui/dialogo";
-import { acaoAlternarAtivo, acaoCriarUsuario, acaoEditarUsuario, acaoRedefinirSenha } from "./acoes";
+import { EditorFoto } from "@/components/ui/editor-foto";
+import { acaoAlternarAtivo, acaoCriarUsuario, acaoEditarUsuario, acaoFotoUsuario, acaoRedefinirSenha, acaoRemoverFotoUsuario } from "./acoes";
 
-type U = { id: number; nome: string; usuario: string; email: string | null; papel: string; ativo: boolean; ultimoAcessoEm: Date | null; criadoEm: Date };
+type U = { id: number; nome: string; usuario: string; email: string | null; papel: string; ativo: boolean; fotoUrl: string | null; ultimoAcessoEm: Date | null; criadoEm: Date };
 
 const RESUMO_PAPEL: Record<Papel, string> = {
   admin: "Tudo, inclusive custo, lucro, financeiro, histórico, usuários e configurações.",
@@ -55,7 +56,16 @@ export function TelaUsuarios({ usuarios, eu }: { usuarios: U[]; eu: number }) {
         <ul>
           {usuarios.map((x) => (
             <li key={x.id} className="flex flex-col gap-3 border-b border-linha px-5 py-4 last:border-0 sm:flex-row sm:items-center">
-              <Avatar nome={x.nome} />
+              <EditorFoto
+                nome={x.nome}
+                foto={x.fotoUrl}
+                tamanho="md"
+                className="self-start sm:self-center"
+                titulo={x.id === eu ? "Sua foto" : undefined}
+                aoEnviar={(dados) => acaoFotoUsuario(x.id, dados)}
+                aoRemover={() => acaoRemoverFotoUsuario(x.id)}
+                aoMudar={() => router.refresh()}
+              />
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{x.nome}</span>

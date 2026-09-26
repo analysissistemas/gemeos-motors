@@ -38,7 +38,9 @@ export async function listarClientes(f: { q?: string; origem?: string; responsav
         estado: c.estado,
         origem: c.origem,
         demo: c.demo,
+        fotoUrl: c.fotoUrl,
         responsavel: resp.nome,
+        responsavelFoto: resp.fotoUrl,
         criadoEm: c.criadoEm,
         negociosAbertos: sql<number>`(select count(*)::int from negocios n where n.cliente_id = ${c.id} and n.etapa in (${abertas}))`,
         compras: sql<number>`(select count(*)::int from vendas v where v.cliente_id = ${c.id} and v.status = 'finalizada')`,
@@ -64,7 +66,7 @@ export async function obterPerfilCliente(id: number) {
   const c = schema.clientes;
   const resp = alias(schema.usuarios, "resp");
   const [cliente] = await db
-    .select({ cliente: c, responsavel: resp.nome })
+    .select({ cliente: c, responsavel: resp.nome, responsavelFoto: resp.fotoUrl })
     .from(c)
     .leftJoin(resp, eq(resp.id, c.responsavelId))
     .where(eq(c.id, id))

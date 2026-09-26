@@ -8,7 +8,7 @@ export default async function LayoutSistema({ children }: { children: React.Reac
   const inicial = await contarPendencias(usuario);
   return (
     <ProvedorContadores inicial={inicial}>
-      <Casca usuario={{ nome: usuario.nome, papel: usuario.papel }}>{children}</Casca>
+      <Casca usuario={{ nome: usuario.nome, papel: usuario.papel, fotoUrl: usuario.fotoUrl }}>{children}</Casca>
     </ProvedorContadores>
   );
 }

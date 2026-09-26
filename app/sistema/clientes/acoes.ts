@@ -5,6 +5,7 @@ import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
 import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
+import { apagarFoto, guardarFoto } from "@/lib/fotos";
 import { esquemaCliente, esquemaInteracao } from "@/lib/validacao";
 import { CANAIS_INTERACAO } from "@/lib/dominio";
 
@@ -135,4 +136,45 @@ export async function buscarClientes(termo: string) {
     )
     .orderBy(schema.clientes.nome)
     .limit(8);
+}
+
+/* ---------- foto do cliente ---------- */
+/* A API oficial do WhatsApp não entrega a foto do perfil do cliente: quem
+   atende pode tirar/receber uma foto e colocar aqui para reconhecer a pessoa. */
+
+async function trocarFotoCliente(id: number, fotoUrl: string | null) {
+  const u = await autorizar("clientes.editar");
+  const [alvo] = await db.select({ nome: schema.clientes.nome, fotoUrl: schema.clientes.fotoUrl }).from(schema.clientes).where(eq(schema.clientes.id, id)).limit(1);
+  if (!alvo) {
+    await apagarFoto(fotoUrl);
+    throw new ErroRegra("Cliente não encontrado.");
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(schema.clientes).set({ fotoUrl, atualizadoEm: new Date() }).where(eq(schema.clientes.id, id));
+    await registrarLog(
+      u,
+      {
+        acao: fotoUrl ? "cliente.foto_alterada" : "cliente.foto_removida",
+        entidade: "cliente",
+        entidadeId: id,
+        descricao: `${fotoUrl ? (alvo.fotoUrl ? "Trocou" : "Colocou") : "Removeu"} a foto do cliente ${alvo.nome}`,
+      },
+      tx,
+    );
+  });
+  await apagarFoto(alvo.fotoUrl);
+  revalidatePath(`/sistema/clientes/${id}`);
+  revalidatePath("/sistema/clientes");
+  return { fotoUrl };
+}
+
+export async function acaoFotoCliente(id: number, dados: FormData) {
+  return executar(async () => {
+    await autorizar("clientes.editar");
+    return trocarFotoCliente(id, await guardarFoto(dados.get("foto"), { tipo: "cliente", id }));
+  }, "Foto do cliente atualizada");
+}
+
+export async function acaoRemoverFotoCliente(id: number) {
+  return executar(() => trocarFotoCliente(id, null), "Foto do cliente removida");
 }

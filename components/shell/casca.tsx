@@ -19,7 +19,6 @@ import {
   SquareKanban,
   Sun,
   UserCog,
-  UserRound,
   Users,
   Wallet,
   Wrench,
@@ -30,6 +29,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Avatar } from "@/components/ui/avatar";
 import { pode, PAPEIS, type Papel } from "@/lib/dominio";
 import { sair } from "@/app/login/acoes";
 import { SECOES_MENU, type ItemMenu } from "./navegacao";
@@ -59,7 +59,7 @@ function ativo(pathname: string, href: string) {
   return href === "/sistema" ? pathname === "/sistema" : pathname === href || pathname.startsWith(href + "/");
 }
 
-export function Casca({ usuario, children }: { usuario: { nome: string; papel: Papel }; children: React.ReactNode }) {
+export function Casca({ usuario, children }: { usuario: { nome: string; papel: Papel; fotoUrl?: string | null }; children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
   const contadores = useContadores();
@@ -180,13 +180,11 @@ export function Casca({ usuario, children }: { usuario: { nome: string; papel: P
   );
 }
 
-function RodapeUsuario({ usuario }: { usuario: { nome: string; papel: Papel } }) {
+function RodapeUsuario({ usuario }: { usuario: { nome: string; papel: Papel; fotoUrl?: string | null } }) {
   return (
     <div className="border-t border-linha p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <Link href="/sistema/conta" className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-trilho">
-        <span className="grid size-9 place-items-center rounded-full bg-vidro-forte ring-1 ring-linha">
-          <UserRound className="size-4 text-ink-2" />
-        </span>
+        <Avatar nome={usuario.nome} foto={usuario.fotoUrl} className="size-9 text-[12px]" tamanho="sm" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{usuario.nome}</span>
           <span className="block truncate text-[11.5px] text-ink-3">{PAPEIS[usuario.papel]}</span>

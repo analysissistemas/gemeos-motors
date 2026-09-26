@@ -17,6 +17,7 @@ export default async function PaginaUsuarios() {
       email: schema.usuarios.email,
       papel: schema.usuarios.papel,
       ativo: schema.usuarios.ativo,
+      fotoUrl: schema.usuarios.fotoUrl,
       ultimoAcessoEm: schema.usuarios.ultimoAcessoEm,
       criadoEm: schema.usuarios.criadoEm,
     })
