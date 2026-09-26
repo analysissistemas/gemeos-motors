@@ -4,22 +4,19 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Check, Eye, EyeOff, ImageOff, ImageUp, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { CorModelo } from "@/lib/consultas/estoque";
-import { TIPOS_VEICULO } from "@/lib/dominio";
 import { PALETA_CORES, corClara, normalizarHex } from "@/lib/cores";
-import { brl } from "@/lib/formato";
 import { cn } from "@/lib/cn";
-import { EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
+import { EstadoVazio, Selo } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { Campo, Entrada } from "@/components/ui/campos";
-import { Dialogo } from "@/components/ui/dialogo";
 import { LIMITE_FOTO, TIPOS_FOTO, reduzirFoto } from "@/components/ui/editor-foto";
 import { adicionarCor, alternarCor, editarCor, enviarFotoCor, moverCor, removerCor, removerFotoCor } from "./acoes-cores";
 
-type ModeloCatalogo = { id: number; nome: string; tipo: string; precoTabela: number | null };
+type ModeloCatalogo = { id: number; nome: string };
 type Resposta = { ok: true; mensagem?: string } | { ok: false; erro: string; campos?: Record<string, string> };
 
 /* A foto do catálogo é a moto inteira: mantém a proporção, lado maior até 1200 px. */
-const LADO_CATALOGO = 1200;
+export const LADO_CATALOGO = 1200;
 
 /** Bolinha com a cor. Cor clara ganha contorno, senão some no fundo branco. */
 export function BolinhaCor({ hex, tamanho = "md", className }: { hex: string; tamanho?: "sm" | "md" | "lg"; className?: string }) {
@@ -32,69 +29,8 @@ export function BolinhaCor({ hex, tamanho = "md", className }: { hex: string; ta
   );
 }
 
-/** Aba "Catálogo" do estoque: os modelos e as cores de cada um. */
-export function CatalogoCores({ modelos, cores, editar }: { modelos: ModeloCatalogo[]; cores: CorModelo[]; editar: boolean }) {
-  const [abertoId, setAbertoId] = useState<number | null>(null);
-  const aberto = modelos.find((m) => m.id === abertoId) ?? null;
-  const coresDe = (id: number) => cores.filter((c) => c.modeloId === id);
-
-  return (
-    <>
-      <p className="mb-3 text-[13px] text-ink-2">
-        As cores de cada modelo aparecem na vitrine: o cliente toca na bolinha e vê a moto naquela cor. A primeira cor da lista é a que abre no card.
-      </p>
-      <Painel className="overflow-hidden">
-        {modelos.length === 0 ? (
-          <EstadoVazio icone={<Palette />} titulo="Nenhum modelo no catálogo" />
-        ) : (
-          <ul>
-            {modelos.map((m) => {
-              const lista = coresDe(m.id);
-              return (
-                <li key={m.id} className="flex flex-wrap items-center gap-3 border-b border-linha px-4 py-3 last:border-0" data-modelo={m.nome}>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{m.nome}</p>
-                    <p className="text-[12px] text-ink-3">
-                      {TIPOS_VEICULO[m.tipo as keyof typeof TIPOS_VEICULO] ?? m.tipo}
-                      {m.precoTabela ? ` · ${brl(m.precoTabela)}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {lista.length === 0 ? (
-                      <span className="text-[12.5px] text-ink-3">Sem cor cadastrada</span>
-                    ) : (
-                      lista.map((c) => (
-                        <span key={c.id} title={`${c.nome}${c.ativo ? "" : " (escondida)"}${c.fotoUrl ? "" : " — sem foto"}`} className={cn("flex items-center gap-1 rounded-full border border-linha py-0.5 pl-0.5 pr-2 text-[12px]", !c.ativo && "opacity-50")}>
-                          <BolinhaCor hex={c.hex} tamanho="sm" />
-                          {c.nome}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                  <Botao tamanho="sm" variante={editar ? "secundario" : "fantasma"} onClick={() => setAbertoId(m.id)}>
-                    <Palette className="size-4" /> {editar ? "Cores" : "Ver cores"}
-                  </Botao>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Painel>
-
-      <Dialogo
-        aberto={!!aberto}
-        aoMudar={(v) => !v && setAbertoId(null)}
-        largura="lg"
-        titulo={aberto ? `Cores do ${aberto.nome}` : "Cores"}
-        descricao="Cada cor com a foto da moto naquela cor. JPG, PNG ou WebP até 2 MB; a foto é reduzida antes de enviar."
-      >
-        {aberto && <CoresDoModelo key={aberto.id} modelo={aberto} cores={coresDe(aberto.id)} editar={editar} />}
-      </Dialogo>
-    </>
-  );
-}
-
-function CoresDoModelo({ modelo, cores, editar }: { modelo: ModeloCatalogo; cores: CorModelo[]; editar: boolean }) {
+/** Cores de um modelo, com a foto da moto em cada cor (janela "Cores" da aba Catálogo). */
+export function CoresDoModelo({ modelo, cores, editar }: { modelo: ModeloCatalogo; cores: CorModelo[]; editar: boolean }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
 

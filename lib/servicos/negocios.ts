@@ -29,7 +29,7 @@ async function nomeNegocio(tx: Tx | typeof db, id: number) {
   return x?.cliente ?? `nº ${id}`;
 }
 
-export async function criarNegocio(u: Quem | null, entrada: unknown, extra?: { demo?: boolean; triagemIa?: string | null }, txExterna?: Tx) {
+export async function criarNegocio(u: Quem | null, entrada: unknown, extra?: { demo?: boolean; triagemIa?: string | null; evento?: string }, txExterna?: Tx) {
   const d = esquemaNegocio.parse(entrada);
   const executar = async (tx: Tx) => {
     const [cli] = await tx.select({ nome: schema.clientes.nome, origem: schema.clientes.origem }).from(schema.clientes).where(eq(schema.clientes.id, d.clienteId)).limit(1);
@@ -51,7 +51,7 @@ export async function criarNegocio(u: Quem | null, entrada: unknown, extra?: { d
         triagemIa: extra?.triagemIa ?? null,
       })
       .returning({ id: schema.negocios.id });
-    await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "criado", descricao: u ? "Negócio criado em \"Chegou no WhatsApp\"" : "Negócio criado pela triagem da IA", usuarioId: u?.id ?? null });
+    await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "criado", descricao: extra?.evento ?? (u ? "Negócio criado em \"Chegou no WhatsApp\"" : "Negócio criado pela triagem da IA"), usuarioId: u?.id ?? null });
     if (d.valorProposta)
       await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "proposta", descricao: `Proposta registrada: ${brl(d.valorProposta)}`, usuarioId: u?.id ?? null });
     await registrarLog(u, { acao: "negocio.criado", entidade: "negocio", entidadeId: novo.id, descricao: `Criou o negócio "${cli.nome}"` }, tx);
