@@ -1,7 +1,7 @@
 # Gêmeos Motors — loja e sistema da equipe
 
-Sistema da **Gêmeos Motors** (Goiana e Carpina, Pernambuco): venda de **motos
-e triciclos elétricos**, **compra, venda e repasse de moto a combustão e de
+Sistema da **Gêmeos Motors** (Goiana, Pernambuco, com entrega em toda a região): venda de **motos
+elétricas**, **compra, venda e repasse de moto a combustão e de
 carro**, acessórios e assistência técnica própria.
 
 **No ar (teste):** https://teste.gemeosmotors.com.br — abre a loja; a equipe

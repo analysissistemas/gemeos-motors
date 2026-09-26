@@ -318,7 +318,7 @@ function FormularioVeiculo({
       aoMudar={aoMudar}
       largura="lg"
       titulo={inicial.id ? "Editar veículo" : "Dar entrada em veículo"}
-      descricao="Moto e triciclo elétricos não têm placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
+      descricao="Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
     >
       {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} unidades={unidades} custo={custo} aoFechar={() => aoMudar(false)} />}
     </Dialogo>

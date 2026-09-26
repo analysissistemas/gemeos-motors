@@ -45,7 +45,7 @@ export const usuarios = pgTable("usuarios", {
   atualizadoEm: criadoEm(),
 });
 
-/* ---------- lojas (Goiana, Carpina) ---------- */
+/* ---------- loja (só Goiana; a unidade Carpina saiu em 26/09/2026) ---------- */
 export const unidades = pgTable("unidades", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   nome: text().notNull().unique(),
@@ -117,7 +117,7 @@ export const modelos = pgTable(
   "modelos",
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    tipo: text().notNull(), // moto_eletrica | triciclo_eletrico | moto_combustao | carro
+    tipo: text().notNull(), // moto_eletrica | moto_combustao | carro
     marca: text(),
     nome: text().notNull(),
     precoTabela: dinheiro(),

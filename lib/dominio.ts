@@ -82,11 +82,11 @@ export const ORIGENS = {
 /* ---------- veículos ---------- */
 export const TIPOS_VEICULO = {
   moto_eletrica: "Moto elétrica",
-  triciclo_eletrico: "Triciclo elétrico",
   moto_combustao: "Moto a combustão",
   carro: "Carro",
 } as const;
 export type TipoVeiculo = keyof typeof TIPOS_VEICULO;
+/* "triciclo_eletrico" saiu em 26/09/2026 (virou moto elétrica); segue aceito aqui por segurança */
 export const ehEletrico = (t: string) => t === "moto_eletrica" || t === "triciclo_eletrico";
 
 export const CONDICOES = {

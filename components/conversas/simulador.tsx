@@ -18,7 +18,7 @@ const FRASES = [
   "Quanto fica a TANK AG11 no Pix?",
   "Aceita minha moto na troca?",
   "Precisa de CNH para andar na elétrica?",
-  "Vocês fazem entrega em Carpina?",
+  "Vocês fazem entrega em Itambé?",
   "Quero falar com um atendente, por favor",
 ];
 

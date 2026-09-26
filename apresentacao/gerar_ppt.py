@@ -174,7 +174,7 @@ texto(s, "Da vitrine que o cliente vê ao controle que só a equipe enxerga.\n"
       tam=14, cor=CINZA, alinha=PP_ALIGN.CENTER, espacamento=1.4)
 sel = caixa(s, Inches(4.75), Inches(5.50), Inches(3.8), Inches(0.42),
             preenche=PRETO, borda=RGBColor(0x3A, 0x3A, 0x42))
-texto(s, "CARPINA · GOIANA — PERNAMBUCO", Inches(4.75), Inches(5.60), Inches(3.8), Inches(0.3),
+texto(s, "GOIANA — PERNAMBUCO", Inches(4.75), Inches(5.60), Inches(3.8), Inches(0.3),
       tam=9.5, cor=CINZA, alinha=PP_ALIGN.CENTER, espaco=1.4)
 texto(s, "Apresentação · 15 de agosto de 2026", Inches(0.9), Inches(6.60), Inches(11.5),
       Inches(0.3), tam=10, cor=FRACO, alinha=PP_ALIGN.CENTER)

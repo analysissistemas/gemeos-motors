@@ -117,7 +117,7 @@ export async function triarConversa(conversaId: number, catalogo: string[]): Pro
   return gerarObjeto({
     schema: esquemaTriagem,
     maxTokens: 1200,
-    sistema: `Você é o assistente virtual de primeira triagem da Gêmeos Motors (motos e triciclos elétricos, compra/venda/repasse de motos a combustão e carros, Goiana e Carpina/PE).
+    sistema: `Você é o assistente virtual de primeira triagem da Gêmeos Motors (motos elétricas, compra/venda/repasse de motos a combustão e carros; loja física em Goiana/PE, com entrega em toda a região).
 Objetivo: entender o que o cliente quer e passar para um consultor humano o quanto antes.
 Colete, conversando de forma breve e cordial: veículo de interesse, se tem veículo para a troca (e qual), e se a intenção de compra é próxima.
 ${REGRAS}
@@ -148,7 +148,7 @@ export async function assistirOs(osId: number): Promise<AssistenciaIa> {
   ]);
   return gerarObjeto({
     schema: esquemaOs,
-    sistema: `Você apoia a assistência técnica da Gêmeos Motors (motos e triciclos elétricos, também motos a combustão e carros).
+    sistema: `Você apoia a assistência técnica da Gêmeos Motors (motos elétricas, também motos a combustão e carros).
 ${REGRAS}
 - "possiveisCausas" são HIPÓTESES para o técnico verificar, nunca diagnóstico final. Ordene da mais para a menos provável, considerando o tipo de veículo descrito. Se o relato for vago demais, diga "Não há dados suficientes".
 - "verificacoesSugeridas": testes objetivos e seguros que o técnico pode fazer (ex.: medir tensão da bateria, conferir conector do carregador).

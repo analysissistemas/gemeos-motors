@@ -121,7 +121,7 @@ s.addShape(pres.ShapeType.roundRect, {
   x: 4.75, y: 5.45, w: 3.8, h: 0.42, rectRadius: 0.21,
   fill: { color: PRETO }, line: { color: "3A3A42", width: 1 }
 });
-s.addText("CARPINA · GOIANA — PERNAMBUCO", {
+s.addText("GOIANA — PERNAMBUCO", {
   x: 4.75, y: 5.45, w: 3.8, h: 0.42, fontSize: 9.5, align: "center", valign: "middle",
   margin: 0, charSpacing: 1.6, color: CINZA, fontFace: "Calibri"
 });

@@ -50,6 +50,27 @@
       "when": 1790451379424,
       "tag": "0006_military_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790452847941,
+      "tag": "0007_clumsy_morph",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790452867612,
+      "tag": "0008_so_goiana",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790452930117,
+      "tag": "0009_so_moto_eletrica",
+      "breakpoints": true
     }
   ]
 }

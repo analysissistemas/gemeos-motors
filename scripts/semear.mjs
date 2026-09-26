@@ -6,7 +6,7 @@
    nem estoque: isso é a loja que cadastra. O que entra aqui é só o que
    o sistema precisa para funcionar e que já é fato:
      - o usuário administrador (senha gerada e mostrada UMA vez)
-     - as duas lojas (Goiana e Carpina)
+     - a loja de Goiana (a única física)
      - os dados da empresa que aparecem nos documentos
      - o catálogo das 8 elétricas, com ficha e preço do site oficial
      - respostas rápidas padrão do atendimento
@@ -39,11 +39,9 @@ if (!temAdmin) {
   console.log("admin já existe — senha mantida");
 }
 
-/* ---------- lojas ---------- */
-for (const nome of ["Goiana", "Carpina"]) {
-  await sql`insert into unidades (nome, cidade, estado) values (${nome}, ${nome}, 'PE')
-            on conflict (nome) do nothing`;
-}
+/* ---------- loja (a física é só em Goiana; entregamos na região toda) ---------- */
+await sql`insert into unidades (nome, cidade, estado, endereco) values ('Goiana', 'Goiana', 'PE', 'Rodovia Margem da PE-75, nº 1418')
+          on conflict (nome) do nothing`;
 
 /* ---------- empresa ---------- */
 await sql`insert into empresa (id, nome_fantasia, whatsapp, instagram, estado, condicoes_venda, condicoes_os)
@@ -61,7 +59,7 @@ const catalogo = [
   ["moto_eletrica", "AG08", 8990, { motor: "1000W", autonomia: "40 a 45 km", velocidade: "32 km/h", bateria: "Lítio 60V 24Ah", peso: "200 kg", recarga: "4h a 8h" }],
   ["moto_eletrica", "DF17", 7190, { motor: "1000W", autonomia: "40 a 50 km", velocidade: "32 km/h", bateria: "Lítio 48V 20Ah", pneu: "2.75-10", peso: "150 kg", recarga: "4h a 6h" }],
   ["moto_eletrica", "TCN BASKET", 5200, { motor: "500W", autonomia: "Até 40 km", bateria: "Chumbo-ácido selada 48V 12Ah", peso: "150 kg" }],
-  ["triciclo_eletrico", "MM3", 10500, { motor: "1000W", autonomia: "45 a 55 km", velocidade: "32 km/h", bateria: "Lítio 60V 24Ah", pneu: "300/10", peso: "180 kg", recarga: "6h a 8h" }],
+  ["moto_eletrica", "MM3", 10500, { motor: "1000W", autonomia: "45 a 55 km", velocidade: "32 km/h", bateria: "Lítio 60V 24Ah", pneu: "300/10", peso: "180 kg", recarga: "6h a 8h" }],
 ];
 for (const [tipo, nome, preco, ficha] of catalogo) {
   await sql`insert into modelos (tipo, nome, preco_tabela, eletrico, ficha)

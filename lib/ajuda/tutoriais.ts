@@ -251,7 +251,7 @@ export const TUTORIAIS: Tutorial[] = [
     ],
     regras: [
       "Cada veículo é uma peça única: duas motos iguais são dois cadastros, cada uma com o seu chassi.",
-      "Moto e triciclo elétricos não têm placa, Renavam nem ano-modelo.",
+      "Moto elétrica não tem placa, Renavam nem ano-modelo.",
       "O custo só o administrador vê.",
       "Quando um modelo volta a ficar disponível, o sistema cria follow-ups para quem estava esperando por ele.",
     ],

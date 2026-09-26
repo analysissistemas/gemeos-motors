@@ -82,7 +82,7 @@ const CENAS: Cena[] = [
   {
     contato: "João Pedro",
     telefone: "5581983330003",
-    cliente: { nome: "João Pedro Alves", cidade: "Carpina" },
+    cliente: { nome: "João Pedro Alves", cidade: "Goiana" },
     negocio: { etapa: "proposta", veiculoInteresse: "T1 branca", valorAnunciado: 12000, valorProposta: 11500 },
     status: "aguardando_cliente",
     modo: "humano",
