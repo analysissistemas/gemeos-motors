@@ -255,6 +255,43 @@ a{color:inherit;text-decoration:none}
   border:1px solid #f0e2a8;border-radius:9px;padding:8px 10px}
 .reserva svg{flex:none;margin-top:1px}
 
+/* disponibilidade escolhida pela equipe no sistema e o selo de lançamento */
+.selo-disp{position:absolute;top:12px;right:12px;z-index:2;font-size:10.5px;font-weight:700;
+  letter-spacing:.04em;padding:5px 11px;border-radius:980px;background:#fff;color:var(--tinta);
+  border:1px solid var(--linha)}
+.selo-disp.pronta{background:#e6f8ee;border-color:#bfe9d0;color:#0f6b3a}
+.selo.lanc{background:var(--tinta);color:var(--marca)}
+.lanc-txt{font-size:12px;font-weight:600;color:#6b5200;margin-top:6px}
+.lanc-reservas{font-size:11.5px;color:var(--tinta-2);margin-top:8px}
+.btn-consultar.btn-reservar{background:var(--marca);color:var(--tinta)}
+.btn-consultar.btn-reservar:hover{background:var(--tinta);color:var(--marca)}
+.prod [data-reservar]{cursor:pointer}
+
+/* ---------- LANÇAMENTOS (só aparece se a equipe marcar algum no sistema) ---------- */
+.lancamentos{background:var(--tinta);color:#fff}
+.lancamentos .secao-cab h2{color:#fff}
+.lancamentos .secao-cab p{color:#c9cbc2}
+.lancamentos .etiqueta{background:var(--marca);border-color:var(--marca);color:var(--tinta)}
+.grade-lanc{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px;margin-top:30px;color:var(--tinta)}
+
+/* ---------- JANELA DE RESERVA ---------- */
+.dlg-reserva{margin:auto;border:none;border-radius:22px;padding:0;width:min(440px,calc(100vw - 32px));
+  box-shadow:0 30px 80px rgba(0,0,0,.35);color:var(--tinta)}
+.dlg-reserva::backdrop{background:rgba(10,10,8,.55)}
+.dlg-corpo{padding:26px 24px 24px;position:relative}
+.dlg-corpo h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
+.dlg-sub{font-size:13.5px;color:var(--tinta-2);line-height:1.55;margin:8px 0 16px}
+.dlg-corpo label{display:block;font-size:12.5px;font-weight:600;color:var(--tinta-2);margin-top:12px}
+.dlg-corpo input,.dlg-corpo select{display:block;width:100%;margin-top:6px;padding:12px 14px;border-radius:12px;
+  border:1px solid var(--linha);font:inherit;font-size:15px;color:var(--tinta);background:#fff}
+.dlg-corpo input:focus,.dlg-corpo select:focus{outline:2px solid var(--tinta);outline-offset:1px}
+.dlg-fechar{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:none;
+  background:var(--papel);font-size:20px;line-height:1;cursor:pointer;color:var(--tinta)}
+.dlg-erro{color:#b42318;font-size:13px;margin-top:12px;min-height:1em}
+.dlg-ok{font-size:15px;line-height:1.55;margin:10px 0 4px}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.dlg-corpo [hidden]{display:none}
+
 /* bolinhas de cor — a cor real de cada acabamento */
 .cores{display:flex;gap:7px;margin-top:13px;flex-wrap:wrap}
 .cor{width:19px;height:19px;border-radius:50%;cursor:pointer;border:1px solid transparent;
@@ -519,6 +556,41 @@ a{color:inherit;text-decoration:none}
   </div>
 </header>
 
+<!-- ================= LANÇAMENTOS (preenchida pelo sistema; escondida sem lançamento) ================= -->
+<div class="lancamentos" id="lancamentos" hidden>
+<section class="secao">
+  <div class="secao-cab rev">
+    <span class="etiqueta">Lançamento</span>
+    <h2>Chegando na Gêmeos Motors</h2>
+    <p>Garanta a sua antes de todo mundo: reserve agora, sem compromisso e sem pagar nada.
+       A equipe confirma com você pelo WhatsApp.</p>
+  </div>
+  <div class="grade-lanc" id="gradeLanc"></div>
+</section>
+</div>
+
+<dialog class="dlg-reserva" id="dlgReserva" aria-labelledby="resTitulo">
+  <div class="dlg-corpo">
+    <button type="button" class="dlg-fechar" data-fechar-reserva aria-label="Fechar">×</button>
+    <form id="formReserva" novalidate>
+      <span class="etiqueta">Reserva de lançamento</span>
+      <h3 id="resTitulo">Reservar a <span id="resModelo"></span></h3>
+      <p class="dlg-sub">Sem compromisso e sem pagar nada agora. A equipe confirma com você pelo WhatsApp.</p>
+      <label>Seu nome<input name="nome" autocomplete="name" required maxlength="80"></label>
+      <label>WhatsApp com DDD<input name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" required maxlength="20" placeholder="(81) 99999-9999"></label>
+      <label id="resCorCampo">Cor preferida<select name="cor"></select></label>
+      <input name="site" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <p class="dlg-erro" id="resErro" role="alert"></p>
+      <button class="btn-consultar btn-reservar" type="submit" id="resEnviar">Confirmar reserva</button>
+    </form>
+    <div id="resOk" hidden>
+      <span class="etiqueta">Reserva feita</span>
+      <p class="dlg-ok" id="resOkTxt"></p>
+      <button class="btn-consultar" type="button" id="resZap">Continuar no WhatsApp</button>
+    </div>
+  </div>
+</dialog>
+
 <div class="faixa"><div class="faixa-int" id="faixa"></div></div>
 
 <!-- ================= CATÁLOGO ================= -->
@@ -716,12 +788,13 @@ a{color:inherit;text-decoration:none}
 <!-- O ?v= força o navegador a buscar a versão nova em vez de usar a guardada.
      Suba o número sempre que mexer nestes arquivos, senão você (e o cliente)
      continuam vendo a versão antiga sem entender por quê. -->
-<script src="cores-motos.js?v=18"></script>
-<script src="fotos-disponiveis.js?v=18"></script>
+<script src="cores-motos.js?v=19"></script>
+<script src="fotos-disponiveis.js?v=19"></script>
 <!-- antes do estoque.js: é daqui que sai fotoDoProduto -->
-<script src="foto-produto.js?v=18"></script>
-<script src="estoque.js?v=18"></script>
-<script src="cores-sistema.js?v=18"></script>
+<script src="foto-produto.js?v=19"></script>
+<script src="estoque.js?v=19"></script>
+<script src="cores-sistema.js?v=19"></script>
+<script src="catalogo-sistema.js?v=19"></script>
 <script>
 /* ============================================================
    Número que recebe as mensagens do site.
@@ -908,22 +981,27 @@ function card(a){
   /* Foto, nome e ficha fazem o mesmo que o botão verde (data-consultar): muito
      cliente toca direto na foto. O nome é um link de verdade, para quem navega
      pelo teclado; foto e ficha repetem esse link e por isso não entram no Tab. */
+  /* lançamento: foto, nome e ficha abrem a reserva, igual ao botão */
+  const acao = a.lancamento ? "data-reservar" : "data-consultar";
+  const disp = typeof rotuloDisponibilidade === "function" ? rotuloDisponibilidade(a) : null;
   return `<article class="prod" data-id="${a.id}">
-    <div class="prod-foto" data-consultar="${a.id}">
-      <span class="selo ${zero?"lac":"semi"}">${
-        a.porQuantidade ? "Novo" : condRotulo(e.cond, a.genero)}</span>
+    <div class="prod-foto" ${acao}="${a.id}">
+      <span class="selo ${a.lancamento ? "lanc" : zero?"lac":"semi"}">${
+        a.lancamento ? "Lançamento" : a.porQuantidade ? "Novo" : condRotulo(e.cond, a.genero)}</span>
+      ${disp && !a.lancamento ? `<span class="selo-disp ${a.disponibilidade==="pronta_entrega"?"pronta":""}">${disp}</span>` : ""}
       ${fotoDupla(a)}
     </div>
     <div class="prod-corpo">
-      <h3 class="prod-nome"><a href="#" data-consultar="${a.id}">${a.modelo}</a></h3>
-      ${a.descricao ? `<div class="prod-spec" data-consultar="${a.id}">${a.descricao}</div>` : ""}
+      <h3 class="prod-nome"><a href="#" ${acao}="${a.id}">${a.modelo}</a></h3>
+      ${a.lancamento && a.lancamentoTexto ? `<div class="lanc-txt">${a.lancamentoTexto}</div>` : ""}
+      ${a.descricao ? `<div class="prod-spec" ${acao}="${a.id}">${a.descricao}</div>` : ""}
       <div class="prod-spec">${[
         a.ano ? `Ano ${a.ano}` : "",
         e.cor,
         temKm && !zero ? `${a.km.toLocaleString("pt-BR")} km rodados` : ""
       ].filter(Boolean).join(" • ")}</div>
 
-      ${pedacos.length ? `<div class="ficha" data-consultar="${a.id}">
+      ${pedacos.length ? `<div class="ficha" ${acao}="${a.id}">
         ${pedacos.map(f=>`<span class="ficha-i">${f.antes ? f.antes + " " : ""}${
           f.destaque ? `<b>${f.valor}</b>` : f.valor}${f.depois ? " " + f.depois : ""}</span>`).join("")}
       </div>` : ""}
@@ -948,12 +1026,13 @@ function card(a){
         <div class="preco">${promo ? brl(promo.preco) : p == null ? "Consultar preço" : brl(p)}</div>
         ${promo ? `<div class="promo-timer" data-promo>Oferta termina em
           <span class="promo-resta">${fmtResta(promo.resta)}</span></div>` : ""}
-        <button class="btn-consultar" data-consultar="${a.id}">
+        ${a.lancamento && a.reservas >= 3 ? `<div class="lanc-reservas">${a.reservas} pessoas já reservaram</div>` : ""}
+        ${a.lancamento ? `<button class="btn-consultar btn-reservar" data-reservar="${a.id}">Quero reservar</button>` : `<button class="btn-consultar" data-consultar="${a.id}">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Z"/></svg>
           ${a.reserva ? "Reservar agora"
             : a.porQuantidade ? "Consultar disponibilidade"
             : a.tipo === "Carro" ? "Quero esse carro" : "Quero essa moto"}
-        </button>
+        </button>`}
       </div>
     </div>
   </article>`;
@@ -962,12 +1041,15 @@ function card(a){
 const idSecao = n => "cat-" + semAcento(n);
 
 /* atalhos do topo — a grade "qual produto você procura" da referência */
-$("#atalhos").innerHTML = CATEGORIAS.map(c=>{
-  const n = paraVitrine(c.nome).length;
-  return `<a class="atalho" href="#${idSecao(c.nome)}">
-    <span class="atalho-n">${c.titulo}</span>
-    <span class="atalho-q">${n} ${n===1?"item":"itens"}</span></a>`;
-}).join("");
+function pintaAtalhos(){
+  $("#atalhos").innerHTML = CATEGORIAS.map(c=>{
+    const n = paraVitrine(c.nome).length;
+    return `<a class="atalho" href="#${idSecao(c.nome)}">
+      <span class="atalho-n">${c.titulo}</span>
+      <span class="atalho-q">${n} ${n===1?"item":"itens"}</span></a>`;
+  }).join("");
+}
+pintaAtalhos();
 
 /* ---------- BUSCA ----------
    Compara sem acento e sem maiúscula, então "titanio" acha "Titânio" e
@@ -1040,9 +1122,77 @@ fetch("/api/promocoes", {cache:"no-store"})
   })
   .catch(()=>{});
 
-/* cores e foto de cada cor cadastradas no sistema da equipe: a página já abriu com o
-   estoque.js e redesenha quando elas chegam; se o sistema não responder, fica como está */
-carregarCoresDoSistema().then(m => { if(m && aplicarCoresDoSistema(PRODUTOS, escolha)) pinta(); });
+/* lançamentos: a faixa escura logo depois do topo; sem lançamento, some */
+function pintaLancamentos(){
+  const l = typeof lancamentosDoSite === "function" ? lancamentosDoSite() : [];
+  $("#lancamentos").hidden = !l.length;
+  $("#gradeLanc").innerHTML = l.map(card).join("");
+}
+
+/* catálogo, cores e fotos cadastrados no sistema da equipe: a página já abriu com o
+   estoque.js e redesenha quando eles chegam; se o sistema não responder, fica como está */
+/* se algum desses arquivos não carregar, o site segue como está: nada aqui pode travar a página */
+const semSistema = () => Promise.resolve(null);
+Promise.all([
+  (typeof carregarCatalogoDoSistema === "function" ? carregarCatalogoDoSistema : semSistema)(),
+  (typeof carregarCoresDoSistema === "function" ? carregarCoresDoSistema : semSistema)()
+]).then(([cat, cores]) => {
+  let mudou = false;
+  if(cat && typeof aplicarCatalogoDoSistema === "function") mudou = aplicarCatalogoDoSistema(cat) || mudou;
+  if(cores && typeof aplicarCoresDoSistema === "function") mudou = aplicarCoresDoSistema(PRODUTOS, escolha) || mudou;
+  if(!mudou) return;
+  pintaAtalhos(); pinta(); pintaLancamentos();
+});
+
+/* ---------- RESERVA DE LANÇAMENTO ----------
+   O formulário grava a reserva no sistema (a equipe vê em Reservas e o funil ganha o
+   negócio). Depois, o botão abre o WhatsApp com a mensagem pronta — num toque do
+   cliente, porque celular bloqueia janela aberta sozinha depois de esperar a rede. */
+const dlgRes = $("#dlgReserva"), formRes = $("#formReserva");
+let reservando = null, zapReserva = "";
+function abrirReserva(a){
+  reservando = a;
+  formRes.reset();
+  $("#resModelo").textContent = a.modelo;
+  const cores = opcoesDe(a).cores.filter(Boolean);
+  $("#resCorCampo").hidden = cores.length < 2;
+  formRes.cor.innerHTML = cores.map(c => `<option${c===esc(a).cor?" selected":""}>${c}</option>`).join("");
+  $("#resErro").textContent = "";
+  formRes.hidden = false; $("#resOk").hidden = true;
+  if(typeof dlgRes.showModal === "function") dlgRes.showModal(); else dlgRes.setAttribute("open", "");
+  formRes.nome.focus();
+}
+function fecharReserva(){ if(dlgRes.open) dlgRes.close(); }
+document.addEventListener("click", e=>{
+  if(e.target.closest("[data-fechar-reserva]")){ fecharReserva(); return; }
+  if(e.target === dlgRes) fecharReserva();   // toque fora da janela
+});
+$("#resZap").onclick = () => { abrirZap(zapReserva); fecharReserva(); };
+formRes.addEventListener("input", () => { $("#resErro").textContent = ""; });
+formRes.addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  if(!reservando) return;
+  const nome = formRes.nome.value.trim(), zap = formRes.whatsapp.value.replace(/\D/g, "");
+  const erro = $("#resErro");
+  if(nome.length < 2) { erro.textContent = "Escreva seu nome."; formRes.nome.focus(); return; }
+  if(zap.length < 10 || zap.length > 13) { erro.textContent = "Confira o WhatsApp com DDD."; formRes.whatsapp.focus(); return; }
+  const bt = $("#resEnviar"); bt.disabled = true; bt.textContent = "Enviando…"; erro.textContent = "";
+  try{
+    const r = await fetch("/api/vitrine/reserva", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({modeloId: reservando.modeloId, nome, whatsapp: zap,
+        cor: $("#resCorCampo").hidden ? null : formRes.cor.value, site: formRes.site.value})});
+    const d = await r.json().catch(() => null);
+    if(!r.ok || !d || !d.ok) throw new Error(d && d.erro || "");
+    zapReserva = d.whatsapp;
+    $("#resOkTxt").textContent = d.mensagem;
+    formRes.hidden = true; $("#resOk").hidden = false;
+  }catch(err){
+    /* sem o sistema, a reserva segue pelo WhatsApp do mesmo jeito */
+    erro.textContent = (err && err.message) || "Não deu para registrar agora. Toque de novo, ou chame a gente no WhatsApp.";
+  }finally{
+    bt.disabled = false; bt.textContent = "Confirmar reserva";
+  }
+});
 
 /* busca ao digitar, com uma pausa curta para não redesenhar a cada tecla */
 (function(){
@@ -1079,6 +1229,13 @@ document.addEventListener("click", e=>{
     if(bm) el.arm  = bm.dataset.arm;
     if(bd) el.cond = bd.dataset.cond;
     cartao.outerHTML = card(a);       // redesenha só este card
+    return;
+  }
+
+  if(e.target.closest("[data-reservar]")){
+    e.preventDefault();
+    if(a.modeloId) abrirReserva(a);
+    else abrirZap(`Olá! Quero reservar a *${a.modelo}* do site. Como faço?`);
     return;
   }
 
@@ -1122,7 +1279,7 @@ document.addEventListener("click", e=>{
          bytes e já perdemos emoji por codificação uma vez. Hífen é ASCII puro
          e chega inteiro em qualquer aparelho. */
       (p => p ? `*${brl(p.preco)}* - preço de promoção, válido até ${fmtFim(p.fim)}`
-              : `*${brl(precoEscolhido(a))}*`)(promoDe(a)),
+              : precoEscolhido(a) == null ? "Qual o valor?" : `*${brl(precoEscolhido(a))}*`)(promoDe(a)),
       "",
       a.reserva   ? "Como faço para reservar?"
       : !eletrico ? "Posso ver de perto? A documentação está em dia?"

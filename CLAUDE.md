@@ -200,6 +200,10 @@ por padrão evita esse ciclo.
 >   estamos" com o mapa da loja e botões para Google Maps, Waze e Mapas (iPhone).
 > - 26/09/2026 (cores) — a vitrine carrega do sistema (`/api/vitrine/cores`, via
 >   `public/cores-sistema.js`) as cores e a foto de cada cor de cada modelo; `v=18`.
+> - 26/09/2026 (catálogo) — o catálogo do site vem do sistema (`/api/vitrine/catalogo`,
+>   via `public/catalogo-sistema.js`): modelo sem estoque aparece, selo de
+>   disponibilidade, faixa "Lançamentos" logo depois do topo e janela de reserva
+>   (`/api/vitrine/reserva`); `v=19`. Se o sistema não responder, fica o estoque.js.
 
 ## O dono
 
@@ -358,7 +362,7 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
   processo `node` morreu mesmo.
 - **Cache do navegador na vitrine.** Os scripts são chamados com `?v=N` em
   `public/vitrine.html`. **Suba esse número sempre que mexer em `estoque.js`,
-  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=18`.
+  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=19`.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O
   teste da vitrine confere que não existe `custo:` no arquivo.
 - **Prévia do link no WhatsApp usa endereço completo** nas tags `og:` do
