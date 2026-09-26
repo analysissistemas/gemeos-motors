@@ -1,17 +1,25 @@
 import type { Metadata } from "next";
 import { asc, eq, sql } from "drizzle-orm";
 import { exigirPermissao } from "@/lib/auth/dal";
+import { configLiberada, DESBLOQUEIO_MIN } from "@/lib/auth/desbloqueio";
 import { db, schema } from "@/lib/db";
 import { MODELO_IA } from "@/lib/ia/cliente";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { lerConfigParaTela, urlCallback } from "@/lib/mensageria/whatsapp-config";
 import { Pagina } from "@/components/ui/pagina";
+import { BotaoTrancar, TelaBloqueio } from "./bloqueio";
 import { TelaConfiguracoes } from "./tela";
 
 export const metadata: Metadata = { title: "Configurações" };
 
 export default async function PaginaConfiguracoes() {
-  await exigirPermissao("config.gerenciar");
+  const u = await exigirPermissao("config.gerenciar");
+  if (!(await configLiberada(u)))
+    return (
+      <Pagina estreita>
+        <TelaBloqueio titulo="Configurações" usuario={u.usuario} minutos={DESBLOQUEIO_MIN} />
+      </Pagina>
+    );
   const [empresa, respostas, triagem, demo] = await Promise.all([
     db.select().from(schema.empresa).where(eq(schema.empresa.id, 1)).limit(1),
     db.select().from(schema.respostasRapidas).orderBy(asc(schema.respostasRapidas.atalho)),
@@ -21,6 +29,7 @@ export default async function PaginaConfiguracoes() {
   const [provedor, apiOficial] = await Promise.all([obterProvedor(), lerConfigParaTela()]);
   return (
     <Pagina>
+      <BotaoTrancar />
       <TelaConfiguracoes
         empresa={empresa[0] ?? null}
         respostas={respostas}

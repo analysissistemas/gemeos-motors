@@ -1,16 +1,24 @@
 import type { Metadata } from "next";
 import { asc, desc, eq } from "drizzle-orm";
 import { exigirPermissao } from "@/lib/auth/dal";
+import { configLiberada, DESBLOQUEIO_MIN } from "@/lib/auth/desbloqueio";
 import { db, schema } from "@/lib/db";
 import { carregarPrompts } from "@/lib/ia/prompt";
 import { lerControle } from "@/lib/ia/controle";
 import { Pagina } from "@/components/ui/pagina";
+import { BotaoTrancar, TelaBloqueio } from "../configuracoes/bloqueio";
 import { TelaIa } from "./tela";
 
 export const metadata: Metadata = { title: "Inteligência artificial" };
 
 export default async function PaginaIa() {
-  await exigirPermissao("config.gerenciar");
+  const u = await exigirPermissao("config.gerenciar");
+  if (!(await configLiberada(u)))
+    return (
+      <Pagina estreita>
+        <TelaBloqueio titulo="Configurações da IA" usuario={u.usuario} minutos={DESBLOQUEIO_MIN} />
+      </Pagina>
+    );
   const [prompts, conhecimento, controle, execucoes] = await Promise.all([
     carregarPrompts(),
     db.select().from(schema.iaConhecimento).orderBy(asc(schema.iaConhecimento.categoria), asc(schema.iaConhecimento.titulo)),
@@ -33,6 +41,7 @@ export default async function PaginaIa() {
   ]);
   return (
     <Pagina>
+      <BotaoTrancar />
       <TelaIa prompts={prompts} conhecimento={conhecimento} controle={controle} execucoes={execucoes} />
     </Pagina>
   );

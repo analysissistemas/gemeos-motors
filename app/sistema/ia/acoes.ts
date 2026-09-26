@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
-import { autorizar } from "@/lib/auth/dal";
+import { autorizarConfig } from "@/lib/auth/desbloqueio";
 import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { proximaVersao } from "@/lib/ia/prompt";
@@ -19,7 +19,7 @@ const P = schema.iaPromptVersoes;
 
 export async function acaoSalvarRascunho(secao: string, conteudo: string, nota?: string) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const s = secaoValida.parse(secao);
     const texto = z.string().trim().min(10, "Escreva pelo menos uma frase").max(8000, "Texto longo demais (máximo 8.000 caracteres)").parse(conteudo);
     const anotacao = z.string().trim().max(200).optional().parse(nota) || null;
@@ -36,7 +36,7 @@ export async function acaoSalvarRascunho(secao: string, conteudo: string, nota?:
 
 export async function acaoPublicar(secao: string) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const s = secaoValida.parse(secao);
     const v = await db.transaction(async (tx) => {
       const [rasc] = await tx.select().from(P).where(and(eq(P.secao, s), eq(P.status, "rascunho"))).limit(1);
@@ -53,7 +53,7 @@ export async function acaoPublicar(secao: string) {
 
 export async function acaoDescartarRascunho(secao: string) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const s = secaoValida.parse(secao);
     await db.delete(P).where(and(eq(P.secao, s), eq(P.status, "rascunho")));
     await registrarLog(u, { acao: "ia.prompt_descartado", entidade: "configuracao", descricao: `Descartou o rascunho do setor "${secaoPorChave(s)?.titulo}" da IA` });
@@ -65,7 +65,7 @@ export async function acaoDescartarRascunho(secao: string) {
 /** Copia uma versão antiga (ou o texto padrão) para o rascunho; publicar continua sendo um passo à parte. */
 export async function acaoRestaurarComoRascunho(secao: string, versaoId: number | null) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const s = secaoValida.parse(secao);
     let conteudo: string;
     let nota: string;
@@ -100,7 +100,7 @@ const esquemaConhecimento = z.object({
 
 export async function acaoSalvarConhecimento(id: number | null, dados: Record<string, unknown>) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const d = esquemaConhecimento.parse(dados);
     if (id) {
       const [r] = await db.update(schema.iaConhecimento).set({ ...d, atualizadoEm: new Date(), atualizadoPor: u.id }).where(eq(schema.iaConhecimento.id, id)).returning({ id: schema.iaConhecimento.id });
@@ -116,7 +116,7 @@ export async function acaoSalvarConhecimento(id: number | null, dados: Record<st
 
 export async function acaoExcluirConhecimento(id: number) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const [r] = await db.delete(schema.iaConhecimento).where(eq(schema.iaConhecimento.id, id)).returning({ titulo: schema.iaConhecimento.titulo });
     if (!r) throw new ErroRegra("Item não encontrado.");
     await registrarLog(u, { acao: "ia.conhecimento", entidade: "configuracao", descricao: `Excluiu o item de conhecimento "${r.titulo}"` });
@@ -127,7 +127,7 @@ export async function acaoExcluirConhecimento(id: number) {
 
 export async function acaoAlternarConhecimento(id: number, ativo: boolean) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const [r] = await db.update(schema.iaConhecimento).set({ ativo, atualizadoEm: new Date(), atualizadoPor: u.id }).where(eq(schema.iaConhecimento.id, id)).returning({ titulo: schema.iaConhecimento.titulo });
     if (!r) throw new ErroRegra("Item não encontrado.");
     await registrarLog(u, { acao: "ia.conhecimento", entidade: "configuracao", descricao: `${ativo ? "Ativou" : "Desativou"} o item de conhecimento "${r.titulo}"` });
@@ -145,7 +145,7 @@ const esquemaControle = z.object({
 
 export async function acaoSalvarControle(dados: unknown) {
   return executar(async () => {
-    const u = await autorizar("config.gerenciar");
+    const u = await autorizarConfig();
     const c = esquemaControle.parse(dados);
     await salvarControle(c, u.id);
     const ativas = PERMISSOES_IA.filter((p) => c.permissoes[p.chave]).map((p) => p.rotulo);
@@ -162,7 +162,7 @@ export async function acaoSalvarControle(dados: unknown) {
 /** Testa um texto contra o validador, sem enviar nada. */
 export async function acaoValidarTexto(texto: string) {
   return executar(async () => {
-    await autorizar("config.gerenciar");
+    await autorizarConfig();
     return validarResposta(z.string().max(4000).parse(texto));
   });
 }

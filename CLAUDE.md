@@ -88,6 +88,17 @@ guardados para sempre (o banco está em volume do EasyPanel), desde que:
 3. **Ninguém rode de novo `copiar-banco.mjs` com `FORCAR=1`**: ele esvazia o
    banco do VPS antes de copiar.
 
+**Não use campo `type="password"` para token ou segredo.** O Chrome ignora
+`autoComplete="off"` e põe ali a senha salva do site; o Salvar gravou a senha do
+login no lugar do token da Meta em 26/09/2026 (envio passou a dar "Authentication
+Error"). Os campos da API Oficial são texto mascarado, e token novo só é gravado
+se a Meta aceitar. O token em uso é do usuário do sistema **chatsystem** (empresa
+Milton Neto, app `gemeos-motors-api` 2603611416754210, o que está "ao vivo").
+
+**Configurações e Inteligência artificial pedem a senha de novo** (`lib/auth/desbloqueio.ts`):
+libera por 15 min num cookie assinado preso à sessão, e toda ação dessas telas
+confere no servidor (`autorizarConfig`). 5 senhas erradas em 15 min trancam.
+
 Callback cadastrado na Meta: `https://gemeosmotors.com.br/api/webhooks/whatsapp`
 (o webhook passa pela manutenção).
 
@@ -283,6 +294,8 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
   entregue ao cliente: a mensagem fica com um risquinho só. O arquivo guardado
   no chat continua o original. Teste local: `FFMPEG_BIN=<caminho> node --test
   tests/unit/transcodificar.test.ts`.
+- **Áudio vai como mensagem de voz** (`voice: true`): o cliente vê a foto da loja
+  com microfone. O ícone de play só aparece até 512 KB (32 kbps dá uns 2 minutos).
 - **Falha de entrega vem pelo webhook** (status `failed`): o motivo da Meta
   (`error_data.details`) aparece na mensagem como "Não enviada: …". Sem o
   webhook apontado para o servidor e o App Secret salvo, não chega status
