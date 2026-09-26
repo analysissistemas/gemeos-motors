@@ -12,7 +12,9 @@ const PAGINA_MANUTENCAO = `<!doctype html><html lang="pt-BR"><head><meta charset
 function emManutencao(request: NextRequest) {
   if (process.env.MODO_MANUTENCAO !== "1") return false;
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1") return false;
+  /* sem host = pedido interno do próprio Next (ex.: o otimizador de imagem buscando /fotos/...).
+     Sem isso, a logo do sistema virava a página de manutenção e quebrava. */
+  if (!host || host === "localhost" || host === "127.0.0.1") return false;
   const liberados = (process.env.MANUTENCAO_LIBERADOS ?? "teste.gemeosmotors.com.br").split(",").map((h) => h.trim().toLowerCase());
   return !liberados.includes(host);
 }
