@@ -194,3 +194,12 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* iOS dá zoom ao focar campo com fonte menor que 16px; fora de camada para vencer as utilitárias */
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

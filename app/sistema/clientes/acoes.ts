@@ -39,6 +39,14 @@ export async function salvarCliente(entrada: { id?: number } & Record<string, un
     const u = await autorizar("clientes.editar");
     const dados = esquemaCliente.parse(entrada);
     await conferirTelefoneDuplicado([dados.whatsapp, dados.telefone], entrada.id);
+    if (dados.cpf) {
+      const [dupCpf] = await db
+        .select({ id: schema.clientes.id, nome: schema.clientes.nome })
+        .from(schema.clientes)
+        .where(and(eq(schema.clientes.cpf, dados.cpf), entrada.id ? ne(schema.clientes.id, Number(entrada.id)) : undefined))
+        .limit(1);
+      if (dupCpf) throw new ErroRegra(`Este CPF já está no cadastro de ${dupCpf.nome} (cliente nº ${dupCpf.id}).`);
+    }
 
     if (entrada.id) {
       const id = Number(entrada.id);

@@ -35,6 +35,7 @@ export const PERMISSOES = {
   "logs.ver": ADMIN,
   "usuarios.gerenciar": ADMIN,
   "config.gerenciar": ADMIN,
+  "cameras.ver": ADMIN,
 } as const satisfies Record<string, Papel[]>;
 export type Permissao = keyof typeof PERMISSOES;
 

@@ -133,7 +133,7 @@ precisa mudar junto. Carro e moto a combustão existem **só aqui**.
 | `app/assinar/[token]` | Página pública de assinatura do cliente |
 | `app/api/*` | PDFs, contadores do menu, sincronização do chat, webhook do WhatsApp |
 | `lib/db/schema.ts` + `drizzle/` | Tabelas (22) e migrações |
-| `lib/auth/` | Senha (scrypt), sessão (cookie `gm_sessao`, 12 h, assinado), `exigirPermissao`/`autorizar` |
+| `lib/auth/` | Senha (scrypt), sessão (cookie `gm_sessao`, 2 h sem renovar, assinado), `exigirPermissao`/`autorizar` |
 | `lib/dominio.ts` | Perfis e permissões (`PERMISSOES`), etapas, motivos de perda, status |
 | `lib/servicos/` | Regras de negócio: negócios, vendas, OS |
 | `lib/mensageria/` | Atendimento: provedor simulado, provedor WhatsApp Cloud (preparado), triagem |

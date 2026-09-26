@@ -3,8 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export type Contadores = { conversas: number; followups: number; os: number };
-const vazio: Contadores = { conversas: 0, followups: 0, os: 0 };
+export type Contadores = { conversas: number; followups: number; os: number; ligacoes: number };
+const vazio: Contadores = { conversas: 0, followups: 0, os: 0, ligacoes: 0 };
 
 const Ctx = createContext<{ valores: Contadores; atualizar: () => void }>({ valores: vazio, atualizar: () => {} });
 

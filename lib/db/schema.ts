@@ -545,6 +545,13 @@ export const followUps = pgTable(
     concluidoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
     criadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
     criadoEm: criadoEm(),
+    /* contexto: por que existe este follow-up e de onde veio */
+    tipo: text(), // retorno_cliente | pagamento | consulta_terceiro | estoque | manual
+    motivo: text(),
+    origem: text(), // ia | equipe | estoque
+    modeloId: integer().references(() => modelos.id, { onDelete: "set null" }),
+    contexto: jsonb().$type<Record<string, unknown>>(),
+    exigeAprovacao: boolean().notNull().default(false),
   },
   (t) => [
     index("follow_ups_agenda_idx").on(t.status, t.agendadoPara),
@@ -649,4 +656,108 @@ export const iaExecucoes = pgTable(
     criadoEm: criadoEm(),
   },
   (t) => [index("ia_execucoes_criado_idx").on(t.criadoEm), index("ia_execucoes_conversa_idx").on(t.conversaId)],
+);
+
+/* ---------- interesse do cliente num modelo (para avisar quando voltar ao estoque) ---------- */
+export const interessesModelo = pgTable(
+  "interesses_modelo",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    conversaId: integer().notNull().references(() => conversas.id, { onDelete: "cascade" }),
+    clienteId: integer().references(() => clientes.id, { onDelete: "set null" }),
+    telefone: text().notNull(),
+    modeloId: integer().notNull().references(() => modelos.id, { onDelete: "cascade" }),
+    origem: text().notNull().default("equipe"), // ia | equipe
+    criadoEm: criadoEm(),
+    avisadoEm: quando(),
+    followUpId: integer().references(() => followUps.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    /* um interesse aberto por conversa e modelo */
+    uniqueIndex("interesses_abertos_uq").on(t.conversaId, t.modeloId).where(sql`${t.avisadoEm} is null`),
+    index("interesses_modelo_idx").on(t.modeloId),
+  ],
+);
+
+/* ---------- pedidos de ligação ---------- */
+export const solicitacoesLigacao = pgTable(
+  "solicitacoes_ligacao",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    conversaId: integer().references(() => conversas.id, { onDelete: "set null" }),
+    clienteId: integer().references(() => clientes.id, { onDelete: "set null" }),
+    nomeContato: text(),
+    telefone: text().notNull(),
+    motivo: text(),
+    preferencia: text(), // texto livre: "depois das 14h", "amanhã de manhã"
+    status: text().notNull().default("pendente"), // pendente | em_andamento | concluida | nao_atendida | reagendada
+    responsavelId: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    agendadoPara: quando(),
+    foraDoHorario: boolean().notNull().default(false),
+    origem: text().notNull().default("cliente"),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [index("ligacoes_status_idx").on(t.status, t.criadoEm), index("ligacoes_conversa_idx").on(t.conversaId)],
+);
+
+export const ligacoesHistorico = pgTable(
+  "ligacoes_historico",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    solicitacaoId: integer().notNull().references(() => solicitacoesLigacao.id, { onDelete: "cascade" }),
+    usuarioId: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    resultado: text().notNull(), // atendida | nao_atendida | ocupado | numero_errado | reagendada
+    duracaoSegundos: integer(),
+    notas: text(),
+    proximaAcao: text(),
+    ocorridaEm: criadoEm(),
+  },
+  (t) => [index("ligacoes_hist_sol_idx").on(t.solicitacaoId)],
+);
+
+/* ---------- câmeras (estrutura pronta; nenhuma conectada) ---------- */
+export const cameras = pgTable(
+  "cameras",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    posicao: integer().notNull(),
+    nome: text().notNull(),
+    fonte: text().notNull(), // rtsp | ip_camera | nvr
+    provedor: text().notNull().default("nao_conectado"),
+    endereco: text(), // preenchido no cadastro, nunca inventado
+    canalNvr: integer(),
+    segredoRef: text(), // NOME da variável de ambiente; a senha nunca fica no banco
+    status: text().notNull().default("nao_conectada"),
+    ativo: boolean().notNull().default(true),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [uniqueIndex("cameras_posicao_uq").on(t.posicao)],
+);
+
+export const cameraEventos = pgTable(
+  "camera_eventos",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    cameraId: integer().notNull().references(() => cameras.id, { onDelete: "cascade" }),
+    tipo: text().notNull(),
+    descricao: text(),
+    ocorridoEm: quando().notNull(),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("camera_eventos_cam_data_idx").on(t.cameraId, t.ocorridoEm)],
+);
+
+export const cameraSnapshots = pgTable(
+  "camera_snapshots",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    cameraId: integer().notNull().references(() => cameras.id, { onDelete: "cascade" }),
+    eventoId: integer().references(() => cameraEventos.id, { onDelete: "set null" }),
+    arquivoUrl: text().notNull(), // armazenamento de arquivos, não o banco
+    tipoMime: text().notNull(),
+    capturadoEm: quando().notNull(),
+  },
+  (t) => [index("camera_snapshots_cam_data_idx").on(t.cameraId, t.capturadoEm)],
 );

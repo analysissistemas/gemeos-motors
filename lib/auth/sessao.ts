@@ -4,9 +4,12 @@ import { cookies } from "next/headers";
 
 /* Sessão em cookie assinado (HS256), só no servidor. O cookie guarda o id do
    usuário e a versão da sessão; a cada requisição o DAL confere no banco se o
-   usuário continua ativo e se a versão bate (troca de senha derruba sessões). */
+   usuário continua ativo e se a versão bate (troca de senha derruba sessões).
+   "Lembrar login" = manter esta sessão (nunca a senha). Ela vale no máximo
+   2 horas a partir do login, sem renovar sozinha. */
 export const COOKIE_SESSAO = "gm_sessao";
-const DURACAO_H = 12;
+export const DURACAO_SESSAO_H = 2;
+const DURACAO_H = DURACAO_SESSAO_H;
 
 function chave() {
   const s = process.env.SESSION_SECRET;

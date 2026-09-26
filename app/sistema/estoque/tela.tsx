@@ -43,12 +43,13 @@ export function TelaEstoque({
   const router = useRouter();
   const params = useSearchParams();
   const [busca, setBusca] = useState(filtros.q ?? "");
+  const [filtrando, iniciarFiltro] = useTransition();
 
   const filtrar = (k: string, v?: string) => {
     const p = new URLSearchParams(params.toString());
     if (v) p.set(k, v);
     else p.delete(k);
-    router.push(`/sistema/estoque?${p}`);
+    iniciarFiltro(() => router.push(`/sistema/estoque?${p}`));
   };
 
   return (
@@ -88,7 +89,7 @@ export function TelaEstoque({
 
       {aba === "veiculos" && (
         <>
-          <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className={`mb-4 flex flex-col gap-2 transition-opacity lg:flex-row lg:items-center ${filtrando ? "opacity-60" : ""}`} aria-busy={filtrando}>
             <form
               className="relative flex-1"
               onSubmit={(e) => {
@@ -98,6 +99,8 @@ export function TelaEstoque({
             >
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
               <input
+                type="search"
+                enterKeyHint="search"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Modelo, cor, placa ou chassi"
@@ -106,11 +109,11 @@ export function TelaEstoque({
             </form>
             <div className="rolagem-fina flex gap-1.5 overflow-x-auto">
               {[["", "Em estoque"], ["disponivel", "Disponíveis"], ["reservado", "Reservados"], ["vendido", "Vendidos"], ["inativo", "Fora de venda"]].map(([k, r]) => (
-                <button key={k} onClick={() => filtrar("status", k)} className={`shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] ${(filtros.status ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte"}`}>
+                <button key={k} onClick={() => filtrar("status", k)} className={`min-h-10 shrink-0 rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px] ${(filtros.status ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte"}`}>
                   {r}
                 </button>
               ))}
-              <select value={filtros.tipo ?? ""} onChange={(e) => filtrar("tipo", e.target.value)} className="h-8 shrink-0 rounded-full border border-linha bg-plano/60 px-3 text-[12.5px]">
+              <select value={filtros.tipo ?? ""} onChange={(e) => filtrar("tipo", e.target.value)} className="h-10 shrink-0 rounded-full md:h-8 border border-linha bg-plano/60 px-3 text-[12.5px]">
                 <option value="">Todo tipo</option>
                 {Object.entries(TIPOS_VEICULO).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -130,7 +133,8 @@ export function TelaEstoque({
                 acao={permissoes.editar && !filtros.q && <Botao onClick={() => setEditando({})}>Dar entrada em veículo</Botao>}
               />
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[760px] text-left text-[13.5px]">
                   <thead className="border-b border-linha text-[11.5px] uppercase tracking-wide text-ink-3">
                     <tr>
@@ -188,6 +192,41 @@ export function TelaEstoque({
                   </tbody>
                 </table>
               </div>
+              <ul className="md:hidden">
+                {veiculos.map((v) => {
+                  const margem = v.custo && v.valorAnunciado ? Math.round(((v.valorAnunciado - v.custo) / v.valorAnunciado) * 100) : null;
+                  return (
+                    <li key={v.id} className="flex items-start gap-2 border-b border-linha px-4 py-3 last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold">{[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")}</p>
+                        <p className="truncate text-[12.5px] text-ink-2">
+                          {[CONDICOES[v.condicao as keyof typeof CONDICOES], v.cor, v.anoModelo ? `${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : null, v.km ? km(v.km) : null].filter(Boolean).join(" · ")}
+                        </p>
+                        <p className="num truncate text-[12px] text-ink-3">
+                          {v.placa ? formatarPlaca(v.placa) : "Sem placa"}
+                          {v.unidade ? ` · ${v.unidade}` : ""}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
+                          <span className="num font-semibold">{v.valorAnunciado ? brl(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</span>
+                          {permissoes.custo && v.custo ? (
+                            <span className="num text-[12px] text-ink-3">
+                              custo {brl(v.custo)}
+                              {margem != null ? ` · ${margem}%` : ""}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      {permissoes.editar && v.status !== "vendido" && (
+                        <button type="button" onClick={() => setEditando(v)} aria-label={`Editar ${v.modelo}`} className="grid size-11 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-trilho active:bg-trilho">
+                          <Pencil className="size-4" />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              </>
             )}
           </Painel>
         </>

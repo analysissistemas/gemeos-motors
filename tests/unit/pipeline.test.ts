@@ -286,3 +286,42 @@ test("FALHA NO ENVIO: não conta como enviada", async () => {
   assert.equal(r.acao, "bloqueada");
   assert.equal(r.motivo, "falha_envio");
 });
+
+/* ---- catálogo: modelo que existe sem estoque registra interesse (sem inventar nada) ---- */
+import { decidirCatalogo, type ModeloCatalogo } from "../../lib/ia/catalogo-tipos.ts";
+
+const MODELOS: ModeloCatalogo[] = [{ id: 7, tipo: "moto_eletrica", marca: "Tuk", nome: "T3", eletrico: true, ativo: true }];
+
+async function comCatalogo(termo: string, modelos: ModeloCatalogo[], falhaCatalogo = false) {
+  const enviados: string[] = [];
+  const interesses: number[] = [];
+  const deps: Deps = {
+    controle: LIGADO,
+    promptSistema: PROMPT,
+    nomesDeProdutos: NOMES,
+    fontesAutorizadas: [],
+    gerar: async () => consulta(termo),
+    consultarEstoque: async (q) => decidirEstoque(ESTOQUE, q.termo),
+    consultarCatalogo: async (t) => {
+      if (falhaCatalogo) throw new Error("banco fora do ar");
+      return decidirCatalogo(modelos, ESTOQUE, t);
+    },
+    registrarInteresse: async (r) => void interesses.push(r.modelo?.id ?? -1),
+    enviar: async (t) => (enviados.push(t), { ok: true }),
+  };
+  const r = await processarMensagem(`quero a ${termo}`, deps);
+  return { r, enviados, interesses };
+}
+
+test("catálogo: modelo que existe sem unidade -> texto fixo e interesse registrado", async () => {
+  const { r, enviados, interesses } = await comCatalogo("T3", MODELOS);
+  assert.equal(r.acao, "enviada");
+  assert.match(enviados[0], /não temos unidade disponível/);
+  assert.deepEqual(interesses, [7]);
+});
+
+test("catálogo: falha na consulta -> texto padrão, sem registrar interesse", async () => {
+  const { enviados, interesses } = await comCatalogo("T3", MODELOS, true);
+  assert.equal(enviados[0], TEXTO_INDISPONIVEL);
+  assert.deepEqual(interesses, []);
+});

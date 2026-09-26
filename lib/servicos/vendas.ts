@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
@@ -60,6 +60,7 @@ export async function salvarRascunho(u: Quem, vendaId: number, entrada: unknown)
       await tx.update(schema.veiculos).set({ status: "reservado" }).where(and(eq(schema.veiculos.id, d.veiculoId), eq(schema.veiculos.status, "disponivel")));
     }
 
+    const validos = d.pagamentos.filter((p) => p.valor > 0);
     /* documento já gerado + mudança de dado = documento invalidado */
     const antigos = await tx.select().from(schema.vendaPagamentos).where(eq(schema.vendaPagamentos.vendaId, vendaId));
     const chavePag = (ps: { forma: string; valor: number; entrada: boolean; instituicao?: string | null; observacao?: string | null }[]) =>
@@ -72,7 +73,7 @@ export async function salvarRascunho(u: Quem, vendaId: number, entrada: unknown)
         venda.valorVendido !== d.valorVendido ||
         (venda.condicoes ?? null) !== d.condicoes ||
         (venda.observacoes ?? null) !== d.observacoes ||
-        chavePag(antigos) !== chavePag(d.pagamentos));
+        chavePag(antigos) !== chavePag(validos));
 
     await tx
       .update(schema.vendas)
@@ -89,7 +90,6 @@ export async function salvarRascunho(u: Quem, vendaId: number, entrada: unknown)
       })
       .where(eq(schema.vendas.id, vendaId));
     await tx.delete(schema.vendaPagamentos).where(eq(schema.vendaPagamentos.vendaId, vendaId));
-    const validos = d.pagamentos.filter((p) => p.valor > 0);
     if (validos.length) await tx.insert(schema.vendaPagamentos).values(validos.map((p) => ({ ...p, vendaId })));
 
     if (mudouDocumento) {
@@ -260,7 +260,10 @@ export async function assinarPublico(token: string, entrada: { nome: string; cpf
   if (!entrada.aceite) throw new ErroRegra("Marque que leu e concorda com o documento.");
   if (entrada.nome.trim().length < 5) throw new ErroRegra("Digite seu nome completo.");
   if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(entrada.imagem) || entrada.imagem.length > 400_000) throw new ErroRegra("Faça sua assinatura no quadro.");
-  return db.transaction(async (tx) => {
+  // Limite de CPF errado por link, contado no histórico (sem coluna nova).
+  const [tk] = await db.select({ id: schema.assinaturas.id }).from(schema.assinaturas).where(eq(schema.assinaturas.token, token)).limit(1);
+  if (tk && (await tentativasCpfErrado(tk.id)) >= MAX_TENTATIVAS_CPF) throw new ErroRegra("Muitas tentativas com CPF incorreto. Peça um novo link à loja.");
+  const res = await db.transaction(async (tx) => {
     const [a] = await tx.select().from(schema.assinaturas).where(eq(schema.assinaturas.token, token)).limit(1);
     if (!a || a.status === "cancelado") throw new ErroRegra("Este link não é mais válido. Peça um novo à loja.");
     if (a.status === "assinado") throw new ErroRegra("Este documento já foi assinado.");
@@ -273,7 +276,7 @@ export async function assinarPublico(token: string, entrada: { nome: string; cpf
       .where(eq(schema.vendas.id, a.documentoId))
       .limit(1);
     if (!linha || linha.venda.documentoHash !== a.documentoHash || linha.venda.status !== "aguardando_assinatura") throw new ErroRegra("O documento foi alterado pela loja. Peça o link novo.");
-    if (soDigitos(entrada.cpf) !== soDigitos(linha.cpf)) throw new ErroRegra("O CPF não confere com o cadastro desta venda.");
+    if (soDigitos(entrada.cpf) !== soDigitos(linha.cpf)) return { cpfErrado: a.id, documentoId: a.documentoId };
     await tx
       .update(schema.assinaturas)
       .set({ status: "assinado", assinanteNome: entrada.nome.trim(), assinanteCpf: soDigitos(entrada.cpf), assinaturaImagem: entrada.imagem, ip, userAgent: ua?.slice(0, 300) ?? null, assinadoEm: new Date() })
@@ -281,7 +284,24 @@ export async function assinarPublico(token: string, entrada: { nome: string; cpf
     await tx.update(schema.vendas).set({ status: "assinada", assinaturaModo: "eletronica", atualizadoEm: new Date() }).where(eq(schema.vendas.id, a.documentoId));
     if (linha.venda.negocioId) await tx.insert(schema.negocioEventos).values({ negocioId: linha.venda.negocioId, tipo: "assinatura", descricao: "Cliente assinou o documento pelo link" });
     await registrarLog(null, { acao: "assinatura.eletronica", entidade: "venda", entidadeId: a.documentoId, descricao: `Cliente ${entrada.nome.trim()} assinou pelo link o documento da venda ${numeroDoc("V", a.documentoId)}`, origem: "assinatura_publica" }, tx);
+    return null;
   });
+  if (res?.cpfErrado) {
+    // Fora da transação: a falha precisa ficar gravada para contar.
+    await registrarLog(null, { acao: "assinatura.cpf_errado", entidade: "assinatura", entidadeId: res.cpfErrado, descricao: `CPF incorreto ao assinar a venda ${numeroDoc("V", res.documentoId)}`, origem: "assinatura_publica" });
+    const restam = MAX_TENTATIVAS_CPF - (await tentativasCpfErrado(res.cpfErrado));
+    throw new ErroRegra(restam > 0 ? `O CPF não confere com o cadastro desta venda. Restam ${restam} tentativa(s).` : "Muitas tentativas com CPF incorreto. Peça um novo link à loja.");
+  }
+}
+
+const MAX_TENTATIVAS_CPF = 5;
+const JANELA_CPF_MS = 60 * 60 * 1000;
+async function tentativasCpfErrado(assinaturaId: number) {
+  const [r] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.logs)
+    .where(and(eq(schema.logs.acao, "assinatura.cpf_errado"), eq(schema.logs.entidade, "assinatura"), eq(schema.logs.entidadeId, String(assinaturaId)), gt(schema.logs.criadoEm, new Date(Date.now() - JANELA_CPF_MS))));
+  return r?.n ?? 0;
 }
 
 export async function finalizarVenda(u: Quem, vendaId: number) {

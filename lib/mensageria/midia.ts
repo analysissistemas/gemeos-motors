@@ -18,7 +18,7 @@ function nomeSeguro(nome: string) {
 
 export async function guardarMidia(bytes: Buffer | Uint8Array, nome: string, mime: string): Promise<Midia> {
   if (bytes.byteLength > LIMITE_BYTES) throw new Error("Arquivo maior que 16 MB.");
-  const r = await put(`chat/${nomeSeguro(nome)}`, Buffer.from(bytes), { access: "private", addRandomSuffix: true, contentType: mime });
+  const r = await put(`chat/${nomeSeguro(nome)}`, Buffer.from(bytes), { access: "private", addRandomSuffix: true, contentType: mime.split(";")[0].trim() || mime });
   return { url: PREFIXO + r.pathname, nome, mime, tamanho: bytes.byteLength };
 }
 

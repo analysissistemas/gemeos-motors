@@ -7,6 +7,8 @@ import { listarEquipe } from "@/lib/consultas/equipe";
 import { FORMAS_PAGAMENTO, STATUS_VENDA } from "@/lib/dominio";
 import { brl, data, numeroDoc } from "@/lib/formato";
 import { Pagina } from "@/components/ui/pagina";
+import { pode } from "@/lib/dominio";
+import { Filtros } from "@/components/ui/filtros";
 import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
 import { NovaVenda } from "./nova-venda";
 
@@ -15,7 +17,8 @@ export const metadata: Metadata = { title: "Vendas" };
 const tom = (s: string) => (s === "finalizada" ? "bom" : s === "cancelada" ? "critico" : s === "assinada" ? "info" : "atencao") as "bom" | "critico" | "info" | "atencao";
 
 export default async function PaginaVendas({ searchParams }: { searchParams: Promise<{ status?: string; dias?: string }> }) {
-  await exigirPermissao("vendas.ver");
+  const u = await exigirPermissao("vendas.ver");
+  const podeEditar = pode(u.papel, "vendas.editar");
   const b = await searchParams;
   const dias = [30, 90, 365].includes(Number(b.dias)) ? Number(b.dias) : 90;
   const [vendas, equipe] = await Promise.all([listarVendas({ status: b.status, dias }), listarEquipe()]);
@@ -26,7 +29,7 @@ export default async function PaginaVendas({ searchParams }: { searchParams: Pro
 
   return (
     <Pagina>
-      <CabecalhoPagina titulo="Vendas" subtitulo={`Últimos ${dias} dias`} acoes={<NovaVenda equipe={equipe} />} />
+      <CabecalhoPagina titulo="Vendas" subtitulo={`Últimos ${dias} dias`} acoes={podeEditar && <NovaVenda equipe={equipe} />} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Painel className="p-4">
@@ -48,22 +51,24 @@ export default async function PaginaVendas({ searchParams }: { searchParams: Pro
         </Painel>
       </div>
 
-      <div className="rolagem-fina mb-4 flex gap-1.5 overflow-x-auto">
+      <Filtros className="mb-4">
+      <div className="rolagem-fina flex gap-1.5 overflow-x-auto">
         {[["", "Todas"], ...Object.entries(STATUS_VENDA)].map(([k, r]) => (
-          <Link key={k} href={link(k)} className={`shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] ${(b.status ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte"}`}>
+          <Link key={k} href={link(k)} className={`flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px] ${(b.status ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte"}`}>
             {r}
           </Link>
         ))}
         {[30, 90, 365].map((d) => (
-          <Link key={d} href={`/sistema/vendas?${new URLSearchParams({ ...(b.status && { status: b.status }), dias: String(d) })}`} className={`shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] ${dias === d ? "border-ink-2 text-ink" : "border-linha text-ink-3"}`}>
+          <Link key={d} href={`/sistema/vendas?${new URLSearchParams({ ...(b.status && { status: b.status }), dias: String(d) })}`} className={`flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px] ${dias === d ? "border-ink-2 text-ink" : "border-linha text-ink-3"}`}>
             {d === 365 ? "12 meses" : `${d} dias`}
           </Link>
         ))}
       </div>
+      </Filtros>
 
       <Painel className="overflow-hidden">
         {vendas.length === 0 ? (
-          <EstadoVazio icone={<Receipt />} titulo="Nenhuma venda neste período" texto="Vendas nascem do funil (arrastando para Venda fechada) ou do botão Nova venda." />
+          <EstadoVazio icone={<Receipt />} titulo="Nenhuma venda neste período" texto="Vendas nascem do funil (arrastando para Venda fechada) ou do botão Nova venda." acao={podeEditar && <NovaVenda equipe={equipe} />} />
         ) : (
           <ul>
             {vendas.map((v) => (

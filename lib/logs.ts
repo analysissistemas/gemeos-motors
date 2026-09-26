@@ -1,5 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
+import { ipConfiavel } from "@/lib/ip";
 import { db, schema, type Tx } from "@/lib/db";
 
 export type EntradaLog = {
@@ -14,7 +15,7 @@ export type EntradaLog = {
 async function ipAtual() {
   try {
     const h = await headers();
-    return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? null;
+    return ipConfiavel(h);
   } catch {
     return null;
   }

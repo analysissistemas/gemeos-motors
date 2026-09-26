@@ -1,12 +1,13 @@
 "use client";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, Bot, Check, CheckCheck, CircleAlert, Clock, FileText, Info, Pause, Play, StickyNote, UserCheck } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowLeft, Bot, Check, CheckCheck, CircleAlert, Clock, FileText, Info, StickyNote, UserCheck } from "lucide-react";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
 import { STATUS_CONVERSA } from "@/lib/dominio";
 import { formatarTelefone, hora, iniciais } from "@/lib/formato";
 import { cn } from "@/lib/cn";
 import { Botao } from "@/components/ui/botao";
+import { AudioMensagem } from "./audio-mensagem";
 import { Compositor, type EnvioChat, type Resposta } from "./compositor";
 import { comLinks, ETIQUETA_ETAPA, rotuloDia } from "./util";
 
@@ -268,7 +269,7 @@ function Bolha({ m }: { m: MensagemChat }) {
             </span>
           </a>
         )}
-        {m.tipo === "audio" && <AudioSimulado duracao={meta.duracao ?? 10} />}
+        {m.tipo === "audio" && <AudioMensagem url={m.midiaUrl} duracaoGuardada={typeof meta.duracao === "number" ? meta.duracao : null} />}
         {m.conteudo && (m.tipo === "texto" || m.tipo === "imagem" || m.tipo === "documento") && (
           <p className="whitespace-pre-wrap break-words">
             {comLinks(m.conteudo).map((p, i) =>
@@ -297,37 +298,4 @@ function Tiques({ status }: { status: string }) {
   if (status === "failed") return <CircleAlert className="size-3.5 text-critico" aria-label="Falhou" />;
   if (status === "sent") return <Check className="size-3.5" aria-label="Enviada" />;
   return <CheckCheck className={cn("size-3.5", status === "read" && "text-[#34b7f1]")} aria-label={status === "read" ? "Lida" : "Entregue"} />;
-}
-
-/* áudio de demonstração: tem cara e comportamento de áudio, sem som nenhum */
-function AudioSimulado({ duracao }: { duracao: number }) {
-  const [tocando, setTocando] = useState(false);
-  const [pos, setPos] = useState(0);
-  useEffect(() => {
-    if (!tocando) return;
-    const id = setInterval(() => setPos((p) => p + 1), 1000);
-    const fim = setTimeout(() => {
-      setTocando(false);
-      setPos(0);
-    }, (duracao - pos) * 1000);
-    return () => {
-      clearInterval(id);
-      clearTimeout(fim);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tocando, duracao]);
-  const barras = [4, 9, 6, 12, 7, 14, 10, 5, 11, 8, 13, 6, 9, 4, 10, 7, 12, 5, 8, 6];
-  return (
-    <div className="flex w-56 items-center gap-2 py-1">
-      <button className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-contra-ink" onClick={() => setTocando((t) => !t)} aria-label={tocando ? "Pausar" : "Tocar áudio (simulado)"}>
-        {tocando ? <Pause className="size-4" /> : <Play className="size-4" />}
-      </button>
-      <span className="flex h-8 flex-1 items-center gap-[2px]" aria-hidden>
-        {barras.map((h, i) => (
-          <span key={i} className={cn("w-[3px] rounded-full", i / barras.length < pos / duracao ? "bg-ink" : "bg-ink-3/50")} style={{ height: h * 2 }} />
-        ))}
-      </span>
-      <span className="num text-[11px] text-ink-3">0:{String(tocando ? pos : duracao).padStart(2, "0")}</span>
-    </div>
-  );
 }

@@ -18,12 +18,17 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
   const { todos } = await searchParams;
   const verTodos = todos === "1";
   const resp = alias(schema.usuarios, "resp_f");
-  const base = db
+  /* função: o construtor do Drizzle é mutável; reutilizá-lo faria as duas consultas virarem a última */
+  const base = () =>
+    db
     .select({
       id: schema.followUps.id,
       agendadoPara: schema.followUps.agendadoPara,
       status: schema.followUps.status,
       notas: schema.followUps.notas,
+      tipo: schema.followUps.tipo,
+      origem: schema.followUps.origem,
+      exigeAprovacao: schema.followUps.exigeAprovacao,
       concluidoEm: schema.followUps.concluidoEm,
       conversaId: schema.followUps.conversaId,
       negocioId: schema.followUps.negocioId,
@@ -38,8 +43,8 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
     .leftJoin(resp, eq(resp.id, schema.followUps.usuarioId));
   const meus = verTodos ? undefined : or(eq(schema.followUps.usuarioId, u.id), isNull(schema.followUps.usuarioId));
   const [pendentes, encerrados] = await Promise.all([
-    base.where(and(eq(schema.followUps.status, "pendente"), meus)).orderBy(asc(schema.followUps.agendadoPara)).limit(300),
-    base.where(and(sql`${schema.followUps.status} <> 'pendente'`, meus)).orderBy(desc(schema.followUps.concluidoEm)).limit(20),
+    base().where(and(eq(schema.followUps.status, "pendente"), meus)).orderBy(asc(schema.followUps.agendadoPara)).limit(300),
+    base().where(and(sql`${schema.followUps.status} <> 'pendente'`, meus)).orderBy(desc(schema.followUps.concluidoEm)).limit(20),
   ]);
   const hoje = chaveHoje();
   const grupos = [
@@ -83,7 +88,12 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
                       <li key={f.id} className="flex flex-col gap-2 border-b border-linha px-4 py-3 last:border-0 sm:flex-row sm:items-center sm:gap-4">
                         <span className={cn("num w-28 shrink-0 text-[14px] font-semibold", g.alerta && "text-serio")}>{g.titulo === "Hoje" ? hora(f.agendadoPara) : dataHora(f.agendadoPara)}</span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-semibold">{f.cliente ?? formatarTelefone(f.telefone)}</span>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="truncate font-semibold">{f.cliente ?? formatarTelefone(f.telefone)}</span>
+                            <span className="rounded-full bg-marca px-2 py-0.5 text-[10.5px] font-bold uppercase text-black">Follow-up pendente</span>
+                            {f.tipo === "estoque" && <span className="rounded-full border border-linha px-2 py-0.5 text-[10.5px] text-ink-2">Voltou ao estoque</span>}
+                            {f.exigeAprovacao && <span className="rounded-full border border-linha px-2 py-0.5 text-[10.5px] text-ink-2">Precisa de aprovação</span>}
+                          </span>
                           <span className="block truncate text-[12.5px] text-ink-2">
                             {f.notas ?? "Sem anotação"}
                             {verTodos && f.responsavel ? ` · ${f.responsavel}` : ""}

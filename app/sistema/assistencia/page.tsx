@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { Pagina } from "@/components/ui/pagina";
 import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
 import { classesBotao } from "@/components/ui/botao";
+import { Filtros } from "@/components/ui/filtros";
 
 export const metadata: Metadata = { title: "Assistência técnica" };
 
@@ -45,35 +46,37 @@ export default async function PaginaAssistencia({ searchParams }: { searchParams
         <Indicador rotulo="Previsão vencida" valor={atrasadas.length} alerta={atrasadas.length > 0} />
       </div>
 
-      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+      <Filtros className="mb-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <form className="relative flex-1" action="/sistema/assistencia">
           {b.tipo && <input type="hidden" name="tipo" value={b.tipo} />}
           {b.tec && <input type="hidden" name="tec" value={b.tec} />}
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-          <input name="q" defaultValue={b.q} placeholder="Cliente, veículo, placa ou nº da OS" className="h-10 w-full rounded-full border border-linha bg-plano/60 pl-9 pr-4 text-[14px] outline-none placeholder:text-ink-3 focus:border-ink-2" />
+          <input name="q" type="search" enterKeyHint="search" defaultValue={b.q} placeholder="Cliente, veículo, placa ou nº da OS" className="h-10 w-full rounded-full border border-linha bg-plano/60 pl-9 pr-4 text-[14px] outline-none placeholder:text-ink-3 focus:border-ink-2" />
         </form>
         <div className="rolagem-fina flex gap-1.5 overflow-x-auto">
           {[["", "Todas"], ...Object.entries(TIPOS_OS)].map(([k, r]) => (
-            <Link key={k} href={link({ tipo: k || undefined })} className={cn("shrink-0 rounded-full border px-3 py-1.5 text-[12.5px]", (b.tipo ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
+            <Link key={k} href={link({ tipo: k || undefined })} className={cn("flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px]", (b.tipo ?? "") === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
               {r}
             </Link>
           ))}
-          <Link href={link({ tec: b.tec === String(u.id) ? undefined : String(u.id) })} className={cn("shrink-0 rounded-full border px-3 py-1.5 text-[12.5px]", b.tec === String(u.id) ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
+          <Link href={link({ tec: b.tec === String(u.id) ? undefined : String(u.id) })} className={cn("flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px]", b.tec === String(u.id) ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
             Minhas OS
           </Link>
           {equipe
             .filter((p) => p.id !== u.id && p.papel !== "vendedor")
             .map((p) => (
-              <Link key={p.id} href={link({ tec: b.tec === String(p.id) ? undefined : String(p.id) })} className={cn("shrink-0 rounded-full border px-3 py-1.5 text-[12.5px]", b.tec === String(p.id) ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
+              <Link key={p.id} href={link({ tec: b.tec === String(p.id) ? undefined : String(p.id) })} className={cn("flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-0 md:px-3 md:py-1.5 md:text-[12.5px]", b.tec === String(p.id) ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
                 {p.nome}
               </Link>
             ))}
         </div>
       </div>
+      </Filtros>
 
       {ordens.length === 0 ? (
         <Painel>
-          <EstadoVazio icone={<Wrench />} titulo={b.q || b.tipo || b.tec ? "Nenhuma OS com este filtro" : "Nenhuma ordem de serviço em andamento"} texto="Abra uma OS quando o cliente trouxer o veículo ou pedir atendimento." />
+          <EstadoVazio icone={<Wrench />} titulo={b.q || b.tipo || b.tec ? "Nenhuma OS com este filtro" : "Nenhuma ordem de serviço em andamento"} texto="Abra uma OS quando o cliente trouxer o veículo ou pedir atendimento." acao={pode(u.papel, "os.editar") && <Link href="/sistema/assistencia/nova" className={classesBotao("primario")}><Plus className="size-4" /> Abrir OS</Link>} />
         </Painel>
       ) : (
         <div className="rolagem-fina -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6">

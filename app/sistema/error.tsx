@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { TriangleAlert } from "lucide-react";
-import { Botao } from "@/components/ui/botao";
+import { Botao, BotaoLink } from "@/components/ui/botao";
 
 export default function ErroSistema({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => console.error(error), [error]);
@@ -11,14 +11,16 @@ export default function ErroSistema({ error, reset }: { error: Error & { digest?
         <span className="mb-1 grid size-12 place-items-center rounded-2xl bg-trilho text-serio">
           <TriangleAlert className="size-5" />
         </span>
-        <h1 className="text-[18px] font-semibold">Esta tela não carregou</h1>
-        <p className="text-[13.5px] text-ink-2">
-          Pode ser a conexão com o banco de dados. Seus dados não foram alterados. Tente de novo; se continuar, avise o administrador
-          {error.digest ? ` informando o código ${error.digest}` : ""}.
-        </p>
-        <Botao variante="primario" className="mt-3" onClick={reset}>
-          Tentar de novo
-        </Botao>
+        <h1 className="text-[18px] font-semibold">Não consegui abrir esta tela</h1>
+        <p className="text-[13.5px] text-ink-2">Seus dados estão salvos.</p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <Botao variante="primario" onClick={reset}>
+            Tentar de novo
+          </Botao>
+          <BotaoLink href="/sistema" variante="secundario">
+            Voltar ao início
+          </BotaoLink>
+        </div>
       </div>
     </div>
   );

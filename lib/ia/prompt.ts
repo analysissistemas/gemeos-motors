@@ -1,7 +1,7 @@
 import "server-only";
 import { asc, desc, eq, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { SECOES_PROMPT } from "./secoes";
+import { compilarPrompt, SECOES_PROMPT } from "./secoes";
 
 export type VersaoPrompt = { id: number; versao: number; conteudo: string; status: string; nota: string | null; criadoEm: Date; publicadoEm: Date | null };
 
@@ -51,11 +51,7 @@ export async function montarPromptSistema() {
     .select({ secao: schema.iaPromptVersoes.secao, conteudo: schema.iaPromptVersoes.conteudo })
     .from(schema.iaPromptVersoes)
     .where(eq(schema.iaPromptVersoes.status, "publicada"));
-  const partes = SECOES_PROMPT.map((s) => `# ${s.titulo.toUpperCase()}\n${publicadas.find((p) => p.secao === s.chave)?.conteudo ?? s.padrao}`);
   const conhecimento = await db.select().from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)).orderBy(asc(schema.iaConhecimento.categoria), asc(schema.iaConhecimento.titulo));
-  const base = conhecimento.length
-    ? conhecimento.map((k) => `## ${k.categoria} — ${k.titulo}\n${k.conteudo}`).join("\n\n")
-    : "(base de conhecimento vazia: não afirme nada sobre a loja além do que está nas regras acima)";
-  return `${partes.join("\n\n")}\n\n# BASE DE CONHECIMENTO (única fonte para afirmar dados da loja)\n${base}`;
+  return compilarPrompt(publicadas, conhecimento);
 }
 

@@ -9,6 +9,7 @@ import { formatarTelefone, relativo } from "@/lib/formato";
 import { Pagina } from "@/components/ui/pagina";
 import { Avatar, CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
 import { classesBotao } from "@/components/ui/botao";
+import { Filtros } from "@/components/ui/filtros";
 import { BotaoNovoCliente } from "./novo-cliente";
 
 export const metadata: Metadata = { title: "Clientes" };
@@ -33,18 +34,22 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
         acoes={<BotaoNovoCliente equipe={equipe} />}
       />
 
-      <form className="mb-4 flex flex-col gap-2 sm:flex-row" role="search">
-        <label className="relative flex-1">
+      <Filtros className="mb-4">
+      <form className="flex flex-col gap-2 sm:flex-row" role="search">
+        <label className="relative sm:flex-1">
           <span className="sr-only">Buscar</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input
             name="q"
+            type="search"
+            enterKeyHint="search"
             defaultValue={b.q}
             placeholder="Nome, telefone, CPF, e-mail ou cidade"
             className="h-10 w-full rounded-full border border-linha bg-plano/60 pl-9 pr-4 text-[14px] outline-none placeholder:text-ink-3 focus:border-ink-2"
           />
         </label>
-        <select name="origem" defaultValue={b.origem ?? ""} className="h-10 rounded-full border border-linha bg-plano/60 px-4 text-[13.5px]">
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+        <select name="origem" defaultValue={b.origem ?? ""} className="h-10 min-w-0 rounded-full border border-linha bg-plano/60 px-4 text-[13.5px]">
           <option value="">Toda origem</option>
           {Object.entries(ORIGENS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -52,7 +57,7 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
             </option>
           ))}
         </select>
-        <select name="resp" defaultValue={b.resp ?? ""} className="h-10 rounded-full border border-linha bg-plano/60 px-4 text-[13.5px]">
+        <select name="resp" defaultValue={b.resp ?? ""} className="h-10 min-w-0 rounded-full border border-linha bg-plano/60 px-4 text-[13.5px]">
           <option value="">Todo responsável</option>
           {equipe.map((p) => (
             <option key={p.id} value={p.id}>
@@ -60,13 +65,17 @@ export default async function PaginaClientes({ searchParams }: { searchParams: P
             </option>
           ))}
         </select>
-        <button className={classesBotao("secundario")}>Filtrar</button>
+        </div>
+        <div className="flex gap-2">
+        <button className={classesBotao("secundario") + " flex-1 sm:flex-none"}>Filtrar</button>
         {temFiltro && (
           <Link href="/sistema/clientes" className={classesBotao("fantasma")}>
             Limpar
           </Link>
         )}
+        </div>
       </form>
+      </Filtros>
 
       <Painel className="overflow-hidden">
         {lista.linhas.length === 0 ? (

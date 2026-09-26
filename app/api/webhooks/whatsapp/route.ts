@@ -4,7 +4,9 @@ import { aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigad
 import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
 import { blobDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
-import type { MensagemEntrante, TipoMensagem } from "@/lib/mensageria/tipos";
+import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
+import { medirDuracao } from "@/lib/mensageria/audio-formatos";
+import type { MensagemEntrante, Midia, TipoMensagem } from "@/lib/mensageria/tipos";
 
 /* ============================================================
    WEBHOOK DO WHATSAPP (Cloud API da Meta)
@@ -46,7 +48,12 @@ export async function POST(req: NextRequest) {
   if (assinatura.length !== esperado.length || !timingSafeEqual(Buffer.from(assinatura), Buffer.from(esperado))) {
     return NextResponse.json({ erro: "assinatura inválida" }, { status: 401 });
   }
-  const corpo = JSON.parse(bruto) as { entry?: { changes?: { value?: ValorMeta }[] }[] };
+  let corpo: { entry?: { changes?: { value?: ValorMeta }[] }[] };
+  try {
+    corpo = JSON.parse(bruto);
+  } catch {
+    return NextResponse.json({ erro: "corpo inválido" }, { status: 400 });
+  }
   const recebidas: MensagemEntrante[] = [];
   for (const entrada of corpo.entry ?? []) {
     for (const mudanca of entrada.changes ?? []) {
@@ -55,6 +62,7 @@ export async function POST(req: NextRequest) {
       for (const m of v.messages ?? []) {
         const nome = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? null;
         const tipo: TipoMensagem = m.type === "text" ? "texto" : m.type === "image" ? "imagem" : m.type === "document" ? "documento" : m.type === "audio" ? "audio" : "texto";
+        const baixado = await baixarEGuardar(cfg, m);
         recebidas.push({
           canal: "whatsapp",
           provedor: "whatsapp_cloud",
@@ -63,18 +71,23 @@ export async function POST(req: NextRequest) {
           externoId: m.id,
           tipo,
           conteudo: m.text?.body ?? m.image?.caption ?? m.document?.caption ?? (tipo === "texto" ? `[${m.type}]` : null),
-          midia: await baixarEGuardar(cfg, m),
-          metadados: { mediaId: m.image?.id ?? m.document?.id ?? m.audio?.id, mime: m.image?.mime_type ?? m.document?.mime_type ?? m.audio?.mime_type, arquivo: m.document?.filename },
+          midia: baixado.midia,
+          metadados: { mediaId: m.image?.id ?? m.document?.id ?? m.audio?.id, mime: m.image?.mime_type ?? m.document?.mime_type ?? m.audio?.mime_type, arquivo: m.document?.filename, ...(baixado.duracao ? { duracao: baixado.duracao } : {}) },
         });
       }
     }
   }
   const conversas: number[] = [];
+  const paraAnalisar: { id: number; texto: string }[] = [];
   for (const m of recebidas) {
     const r = await receberMensagem(m);
     if (r.conversaId && r.modo === "ia") conversas.push(r.conversaId);
+    if (r.conversaId && m.tipo === "texto" && m.conteudo) paraAnalisar.push({ id: r.conversaId, texto: m.conteudo });
   }
-  /* responde rápido para a Meta; a triagem roda depois */
+  /* responde rápido para a Meta; a leitura de intenções (ligação, follow-up) e a triagem rodam depois */
+  after(async () => {
+    for (const a of paraAnalisar) await analisarMensagemEntrante(a.id, a.texto);
+  });
   if (conversas.length && (await triagemAutomaticaLigada())) after(async () => {
     for (const id of new Set(conversas)) await executarTriagem(id);
   });
@@ -85,16 +98,18 @@ type MensagemMeta = NonNullable<ValorMeta["messages"]>[number];
 
 /* A Meta manda só o id da mídia: baixamos com o token e guardamos no Blob
    privado. Se falhar, a mensagem entra mesmo assim, sem o arquivo. */
-async function baixarEGuardar(cfg: Awaited<ReturnType<typeof lerConfigWhatsApp>>, m: MensagemMeta) {
+async function baixarEGuardar(cfg: Awaited<ReturnType<typeof lerConfigWhatsApp>>, m: MensagemMeta): Promise<{ midia: Midia | null; duracao: number | null }> {
   const anexo = m.image ?? m.document ?? m.audio;
-  if (!anexo || !blobDisponivel()) return null;
+  if (!anexo || !blobDisponivel()) return { midia: null, duracao: null };
   try {
     const arq = await new ProvedorWhatsAppCloud(cfg).baixarMidia(anexo.id);
-    if (!arq) return null;
+    if (!arq) return { midia: null, duracao: null };
     const ext = arq.mime.split("/")[1]?.split(";")[0] ?? "bin";
     const nome = (m.document && m.document.filename) || `${m.type}-${m.id.slice(-8)}.${ext}`;
-    return await guardarMidia(arq.bytes, nome, arq.mime);
+    /* duração do áudio recebido: lida do arquivo, nunca inventada */
+    const duracao = m.audio ? await medirDuracao(arq.bytes, arq.mime) : null;
+    return { midia: await guardarMidia(arq.bytes, nome, arq.mime), duracao };
   } catch {
-    return null;
+    return { midia: null, duracao: null };
   }
 }

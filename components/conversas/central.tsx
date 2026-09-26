@@ -243,6 +243,21 @@ export function CentralConversas({
     };
   }, [sincronizar]);
 
+  /* o áudio vai por rota própria (arquivo de verdade, não texto codificado) */
+  async function enviarAudio(id: number, blob: Blob, mime: string, duracao: number): Promise<{ ok: true; dados: { id: number } } | { ok: false; erro: string }> {
+    try {
+      const f = new FormData();
+      f.append("audio", new File([blob], "audio", { type: mime }));
+      f.append("duracao", String(duracao));
+      const res = await fetch(`/api/conversas/${id}/audio`, { method: "POST", body: f });
+      const j = (await res.json().catch(() => null)) as { ok?: boolean; id?: number; erro?: string } | null;
+      if (!res.ok || !j?.ok || !j.id) return { ok: false, erro: j?.erro ?? "Não foi possível enviar o áudio." };
+      return { ok: true, dados: { id: j.id } };
+    } catch {
+      return { ok: false, erro: "Sem conexão. O áudio não foi enviado." };
+    }
+  }
+
   /* ---------- ações do chat ---------- */
   async function enviar(e: EnvioChat): Promise<boolean> {
     const id = aberta;
@@ -263,9 +278,9 @@ export function CentralConversas({
       usuarioNome: usuario.nome,
       tipo: e.tipo,
       conteudo: e.tipo === "audio" ? null : e.conteudo || null,
-      midiaUrl: "midia" in e ? e.midia.url : null,
+      midiaUrl: "midia" in e ? e.midia.url : e.tipo === "audio" ? URL.createObjectURL(e.blob) : null,
       midiaNome: "midia" in e ? e.midia.nome : null,
-      midiaMime: "midia" in e ? e.midia.mime : null,
+      midiaMime: "midia" in e ? e.midia.mime : e.tipo === "audio" ? e.mime : null,
       midiaTamanho: "midia" in e ? e.midia.tamanho : null,
       status: "pending",
       respostaA: null,
@@ -273,12 +288,10 @@ export function CentralConversas({
       criadoEm: new Date(),
     };
     setDados((d) => (d ? { ...d, mensagens: [...d.mensagens, temp] } : d));
-    const r = await acaoEnviarMensagem(id, {
-      tipo: e.tipo,
-      conteudo: e.tipo === "audio" ? null : e.conteudo,
-      midia: "midia" in e ? e.midia : null,
-      duracao: e.tipo === "audio" ? e.duracao : undefined,
-    });
+    const r =
+      e.tipo === "audio"
+        ? await enviarAudio(id, e.blob, e.mime, e.duracao)
+        : await acaoEnviarMensagem(id, { tipo: e.tipo, conteudo: e.conteudo, midia: "midia" in e ? e.midia : null });
     if (!r.ok) {
       setDados((d) => (d ? { ...d, mensagens: d.mensagens.filter((m) => m.id !== temp.id) } : d));
       toast.error(r.erro);

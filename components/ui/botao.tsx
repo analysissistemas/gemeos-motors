@@ -15,10 +15,10 @@ const variantes: Record<Variante, string> = {
   marca: "bg-marca text-black hover:opacity-90",
 };
 const tamanhos: Record<Tamanho, string> = {
-  sm: "h-8 px-3 text-[13px]",
-  md: "h-10 px-4 text-[14px]",
+  sm: "h-8 px-3 text-[13px] max-sm:min-h-10",
+  md: "h-10 px-4 text-[14px] max-sm:min-h-11",
   lg: "h-12 px-6 text-[15px]",
-  icone: "h-10 w-10 text-[14px]",
+  icone: "h-10 w-10 text-[14px] max-sm:min-h-11 max-sm:min-w-11",
 };
 
 export function classesBotao(v: Variante = "secundario", t: Tamanho = "md", extra?: string) {

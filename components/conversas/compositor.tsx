@@ -1,26 +1,26 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Mic, Paperclip, Send, Sticker, Square, StickyNote, X, Zap } from "lucide-react";
+import { FileText, Mic, Paperclip, Send, Sticker, StickyNote, X, Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { EMOJIS } from "./util";
+import { useGravador } from "./gravador";
 
 export type Resposta = { id: number; atalho: string; titulo: string; conteudo: string };
 export type EnvioChat =
   | { modo: "mensagem"; tipo: "texto"; conteudo: string }
   | { modo: "mensagem"; tipo: "imagem" | "documento"; conteudo: string; midia: { url: string; nome: string; mime: string; tamanho: number } }
-  | { modo: "mensagem"; tipo: "audio"; duracao: number }
+  | { modo: "mensagem"; tipo: "audio"; blob: Blob; mime: string; duracao: number }
   | { modo: "nota"; conteudo: string };
 
 const LIMITE_ARQUIVO = 2 * 1024 * 1024;
 
-export function Compositor({ respostas, simulado, desabilitado, aoEnviar }: { respostas: Resposta[]; simulado: boolean; desabilitado?: boolean; aoEnviar: (e: EnvioChat) => Promise<boolean> }) {
+export function Compositor({ respostas, desabilitado, aoEnviar }: { respostas: Resposta[]; simulado?: boolean; desabilitado?: boolean; aoEnviar: (e: EnvioChat) => Promise<boolean> }) {
   const [texto, setTexto] = useState("");
   const [nota, setNota] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [rapidas, setRapidas] = useState(false);
   const [anexo, setAnexo] = useState<{ url: string; nome: string; mime: string; tamanho: number } | null>(null);
-  const [gravando, setGravando] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const arquivo = useRef<HTMLInputElement>(null);
@@ -33,11 +33,16 @@ export function Compositor({ respostas, simulado, desabilitado, aoEnviar }: { re
     a.style.height = `${Math.min(a.scrollHeight, 150)}px`;
   }, [texto]);
 
-  useEffect(() => {
-    if (gravando == null) return;
-    const id = setInterval(() => setGravando((s) => (s == null ? s : s + 1)), 1000);
-    return () => clearInterval(id);
-  }, [gravando]);
+  /* ao tocar em enviar a gravação termina e o áudio segue direto para o envio */
+  const gravador = useGravador(
+    (msg) => toast.error(msg),
+    async (g) => {
+      setEnviando(true);
+      await aoEnviar({ modo: "mensagem", tipo: "audio", blob: g.blob, mime: g.mime, duracao: g.duracao });
+      setEnviando(false);
+    },
+  );
+  const gravando = gravador.estado === "gravando";
 
   const filtroRapida = texto.startsWith("/") ? texto.slice(1).toLowerCase() : null;
   const sugestoes = useMemo(
@@ -145,25 +150,17 @@ export function Compositor({ respostas, simulado, desabilitado, aoEnviar }: { re
         </div>
       )}
 
-      {gravando != null ? (
-        <div className="flex items-center gap-3 rounded-full border border-critico/40 bg-critico/10 px-4 py-2">
+      {gravando ? (
+        <div className="flex items-center gap-3 rounded-full border border-critico/40 bg-critico/10 px-4 py-2" role="status" aria-live="polite">
           <span className="size-2.5 animate-pulse rounded-full bg-critico" aria-hidden />
           <span className="num flex-1 text-[14px]">
-            Gravando (simulado) · 0:{String(gravando).padStart(2, "0")}
+            Gravando · {Math.floor(gravador.segundos / 60)}:{String(gravador.segundos % 60).padStart(2, "0")}
           </span>
-          <button className="text-[13px] text-ink-2 hover:text-ink" onClick={() => setGravando(null)}>
+          <button className="text-[13px] text-ink-2 hover:text-ink" onClick={gravador.cancelar}>
             Cancelar
           </button>
-          <button
-            className="grid size-10 place-items-center rounded-full bg-ink text-contra-ink"
-            aria-label="Enviar áudio simulado"
-            onClick={async () => {
-              const duracao = Math.max(1, gravando);
-              setGravando(null);
-              await aoEnviar({ modo: "mensagem", tipo: "audio", duracao });
-            }}
-          >
-            <Square className="size-4" />
+          <button className="grid size-10 place-items-center rounded-full bg-ink text-contra-ink" aria-label="Enviar áudio" onClick={gravador.parar}>
+            <Send className="size-4" />
           </button>
         </div>
       ) : (
@@ -221,7 +218,7 @@ export function Compositor({ respostas, simulado, desabilitado, aoEnviar }: { re
           >
             <StickyNote className="size-5" />
           </button>
-          {podeEnviar || nota || !simulado ? (
+          {podeEnviar || nota ? (
             <button
               onClick={enviar}
               disabled={!podeEnviar || enviando || desabilitado}
@@ -231,7 +228,7 @@ export function Compositor({ respostas, simulado, desabilitado, aoEnviar }: { re
               <Send className="size-5" />
             </button>
           ) : (
-            <button onClick={() => setGravando(0)} aria-label="Gravar áudio (simulado)" title="Áudio simulado" className="mb-0.5 grid size-11 shrink-0 place-items-center rounded-full bg-ink text-contra-ink">
+            <button onClick={gravador.iniciar} disabled={gravador.estado === "pedindo" || enviando || desabilitado} aria-label="Gravar áudio" title="Gravar áudio" className="mb-0.5 grid size-11 shrink-0 place-items-center rounded-full bg-ink text-contra-ink disabled:opacity-40">
               <Mic className="size-5" />
             </button>
           )}

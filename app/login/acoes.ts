@@ -1,6 +1,8 @@
 "use server";
 import { and, eq, gt, sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { ipConfiavel } from "@/lib/ip";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { conferirSenha } from "@/lib/auth/senha";
@@ -16,31 +18,35 @@ const esquema = z.object({
 
 export type EstadoLogin = { erro?: string; nome?: string; destino?: string } | null;
 
-const LIMITE_TENTATIVAS = 5;
+const LIMITE_TENTATIVAS = 5; // por usuário E por IP: quem erra é barrado, quem só digita o nome de outro não
+const LIMITE_GERAL_USUARIO = 30; // contra chute distribuído em vários IPs
 const JANELA_MIN = 15;
+/* hash de mentira: usuário inexistente gasta o mesmo tempo de um existente (não revela quem existe) */
+const HASH_FALSO = "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 export async function entrar(_: EstadoLogin, form: FormData): Promise<EstadoLogin> {
   const p = esquema.safeParse(Object.fromEntries(form));
   if (!p.success) return { erro: p.error.issues[0]?.message };
   const { usuario, senha } = p.data;
 
-  /* trava por usuário: 5 erros em 15 minutos bloqueiam novas tentativas */
-  const [{ falhas }] = await db
-    .select({ falhas: sql<number>`count(*)::int` })
+  /* trava: 5 erros do mesmo IP para o mesmo usuário em 15 minutos, ou 30 erros de qualquer origem.
+     Assim ninguém tranca o admin de fora só digitando o nome dele. */
+  const ip = ipConfiavel(await headers());
+  const janela = gt(schema.logs.criadoEm, sql`now() - make_interval(mins => ${JANELA_MIN})`);
+  const doUsuario = and(eq(schema.logs.acao, "auth.falha"), eq(schema.logs.entidadeId, usuario), janela);
+  const [{ falhasIp, falhasTotal }] = await db
+    .select({
+      falhasIp: sql<number>`count(*) filter (where ${schema.logs.ip} is not distinct from ${ip})::int`,
+      falhasTotal: sql<number>`count(*)::int`,
+    })
     .from(schema.logs)
-    .where(
-      and(
-        eq(schema.logs.acao, "auth.falha"),
-        eq(schema.logs.entidadeId, usuario),
-        gt(schema.logs.criadoEm, sql`now() - make_interval(mins => ${JANELA_MIN})`),
-      ),
-    );
-  if (falhas >= LIMITE_TENTATIVAS) {
+    .where(doUsuario);
+  if (falhasIp >= LIMITE_TENTATIVAS || falhasTotal >= LIMITE_GERAL_USUARIO) {
     return { erro: `Muitas tentativas. Aguarde ${JANELA_MIN} minutos e tente de novo.` };
   }
 
   const [u] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.usuario, usuario)).limit(1);
-  const confere = u ? await conferirSenha(senha, u.senhaHash) : false;
+  const confere = await conferirSenha(senha, u?.senhaHash ?? HASH_FALSO);
   if (!u || !confere || !u.ativo) {
     await registrarLog(null, {
       acao: "auth.falha",

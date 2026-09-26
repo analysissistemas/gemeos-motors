@@ -22,7 +22,8 @@ const nextConfig: NextConfig = {
     const seguranca = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      /* microfone só para o próprio site (gravação de áudio no atendimento) */
+      { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
     ];
     return [
       { source: "/:path*", headers: seguranca },

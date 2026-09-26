@@ -8,6 +8,16 @@ import { registrarLog } from "@/lib/logs";
 import { esquemaVeiculo } from "@/lib/validacao";
 import { ehEletrico, pode, STATUS_VEICULO } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
+import { dispararFollowUpsDeEstoque } from "@/lib/servicos/interesses";
+
+/* modelo voltou ao estoque: avisa a equipe dos interessados. Falha aqui nunca desfaz o cadastro. */
+async function avisarInteressados(modeloId: number | null | undefined) {
+  try {
+    await dispararFollowUpsDeEstoque(modeloId);
+  } catch (e) {
+    console.error("[estoque] follow-up de estoque falhou", e);
+  }
+}
 
 export async function salvarVeiculo(entrada: { id?: number } & Record<string, unknown>) {
   return executar(async () => {
@@ -42,6 +52,7 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
             dados: { campos },
           }, tx);
       });
+      if (d.status === "disponivel") await avisarInteressados(valores.modeloId ?? antes.modeloId);
       revalidatePath("/sistema/estoque");
       return { id };
     }
@@ -54,6 +65,10 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
       await registrarLog(u, { acao: "veiculo.criado", entidade: "veiculo", entidadeId: novo.id, descricao: `Deu entrada no veículo ${nome}${d.valorAnunciado ? ` (${brl(d.valorAnunciado)})` : ""}` }, tx);
       return novo.id;
     });
+    if (d.status === "disponivel") {
+      const [novo] = await db.select({ modeloId: schema.veiculos.modeloId }).from(schema.veiculos).where(eq(schema.veiculos.id, id)).limit(1);
+      await avisarInteressados(novo?.modeloId);
+    }
     revalidatePath("/sistema/estoque");
     return { id };
   }, entrada.id ? "Veículo atualizado" : "Veículo cadastrado no estoque");
@@ -70,6 +85,7 @@ export async function mudarStatusVeiculo(id: number, status: "disponivel" | "res
       await tx.update(schema.veiculos).set({ status, atualizadoEm: new Date() }).where(eq(schema.veiculos.id, id));
       await registrarLog(u, { acao: "veiculo.status", entidade: "veiculo", entidadeId: id, descricao: `Mudou ${v.modelo} de "${STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}" para "${STATUS_VEICULO[status]}"` }, tx);
     });
+    if (status === "disponivel") await avisarInteressados(v.modeloId);
     revalidatePath("/sistema/estoque");
     return null;
   }, "Situação atualizada");

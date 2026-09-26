@@ -23,6 +23,7 @@ import {
   triagemAutomaticaLigada,
   vincularCliente,
 } from "@/lib/mensageria/servico";
+import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import type { TipoMensagem } from "@/lib/mensageria/tipos";
 
@@ -74,7 +75,6 @@ const esquemaEnvio = z.object({
     })
     .nullable()
     .optional(),
-  duracao: z.number().int().min(1).max(600).optional(),
 });
 
 export async function acaoEnviarMensagem(conversaId: number, dados: unknown) {
@@ -83,13 +83,12 @@ export async function acaoEnviarMensagem(conversaId: number, dados: unknown) {
     const d = esquemaEnvio.parse(dados);
     if (d.midia && (!d.midia.mime || !TIPOS_MIDIA.test(d.midia.mime))) throw new ErroRegra("Tipo de arquivo não aceito. Envie imagem, PDF ou documento.");
     if (d.midia && !d.midia.url.startsWith("data:") && !d.midia.url.startsWith("https://")) throw new ErroRegra("Arquivo inválido.");
-    if (d.tipo === "audio" && !(await obterProvedor()).simulado) throw new ErroRegra("Áudio ainda não disponível no WhatsApp real.");
+    if (d.tipo === "audio") throw new ErroRegra("Áudio é enviado pela gravação do chat.");
     const id = await enviarMensagem(u, conversaId, {
       tipo: d.tipo as TipoMensagem,
       conteudo: d.conteudo,
       midia: d.midia ?? null,
       respostaA: d.respostaA ?? null,
-      metadados: d.tipo === "audio" ? { duracao: d.duracao ?? 12, simulado: true } : undefined,
     });
     return { id };
   });
@@ -206,6 +205,7 @@ export async function acaoSimularCliente(dados: unknown) {
     if (!(await obterProvedor()).simulado) throw new ErroRegra("O simulador só funciona no modo de demonstração.");
     const d = esquemaSimulacao.parse(dados);
     const r = await receberMensagem({ canal: "whatsapp", provedor: "mock", telefone: d.telefone, nomeContato: d.nome || null, tipo: "texto", conteudo: d.texto, externoId: `mock-in-${crypto.randomUUID()}`, demo: true });
+    if (r.conversaId) await analisarMensagemEntrante(r.conversaId, d.texto);
     let triagem: string | null = null;
     if (r.conversaId && r.modo === "ia" && (await triagemAutomaticaLigada())) {
       const t = await executarTriagem(r.conversaId);

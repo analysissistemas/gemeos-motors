@@ -20,6 +20,7 @@
    ============================================================ */
 import type { ControleIa } from "./permissoes.ts";
 import { norm, type ConsultaEstoque, type ResultadoEstoque } from "./estoque-tipos.ts";
+import { textoModeloSemEstoque, type ResultadoCatalogo } from "./catalogo-tipos.ts";
 import { validarResposta, type Violacao } from "./validador.ts";
 import { executarFluxo, type Etapa, type PassoDaTrilha } from "./fluxo.ts";
 
@@ -39,6 +40,9 @@ export type Deps = {
   fontesAutorizadas: string[];
   gerar: (p: { mensagemCliente: string; estoque: ResultadoEstoque | null }) => Promise<SaidaModelo>;
   consultarEstoque: (c: ConsultaEstoque) => Promise<ResultadoEstoque>;
+  /** opcional: distingue "existe sem estoque" de "não existe" (catálogo) e registra interesse do cliente */
+  consultarCatalogo?: (termo: string) => Promise<ResultadoCatalogo>;
+  registrarInteresse?: (r: ResultadoCatalogo) => Promise<void>;
   enviar: (texto: string) => Promise<{ ok: boolean; erro?: string }>;
 };
 
@@ -132,6 +136,8 @@ export type Ctx = {
   violacoes: Violacao[];
   chamouModelo: boolean;
   chamouEstoque: boolean;
+  /** texto montado a partir do catálogo confirmado pelo banco (isento da trava de disponibilidade) */
+  textoCatalogo?: string | null;
 };
 export type EtapaDeAtendimento = Etapa<Ctx>;
 
@@ -185,7 +191,22 @@ export const consultaDeEstoque: EtapaDeAtendimento = {
     }
     const base = { estoque, chamouEstoque: chamou };
     if (!estoque.confirmado) return { detalhe: estoque.estado, ctx: { ...base, texto: TEXTO_CONFIRMAR_COM_EQUIPE, humano: true, motivo: "estoque_nao_confirmado" as const } };
-    if (estoque.estado === "CONFIRMADO_INDISPONIVEL") return { detalhe: estoque.estado, ctx: { ...base, texto: TEXTO_INDISPONIVEL } };
+    if (estoque.estado === "CONFIRMADO_INDISPONIVEL") {
+      /* o modelo existe mas não há unidade: registra o interesse e avisa com texto fixo, sem prometer prazo */
+      if (c.deps.consultarCatalogo) {
+        try {
+          const cat = await c.deps.consultarCatalogo(pedido.termo);
+          const texto = textoModeloSemEstoque(cat);
+          if (texto && cat.registrarInteresse) {
+            await c.deps.registrarInteresse?.(cat).catch(() => {});
+            return { detalhe: "EXISTE_INDISPONIVEL", ctx: { ...base, texto, textoCatalogo: texto } };
+          }
+        } catch {
+          /* falha no catálogo: cai no texto padrão abaixo */
+        }
+      }
+      return { detalhe: estoque.estado, ctx: { ...base, texto: TEXTO_INDISPONIVEL } };
+    }
     return { detalhe: estoque.estado, ctx: base };
   },
 };
@@ -209,7 +230,7 @@ export const travaDeFatos: EtapaDeAtendimento = {
   nome: "trava_de_fatos",
   rodar: (c) => {
     const t = c.texto;
-    if (!t || ehTextoFixo(t)) return {};
+    if (!t || ehTextoFixo(t) || t === c.textoCatalogo) return {};
     /* nunca citar produto que o estoque não confirmou nesta execução */
     if (produtosNaoConfirmados(t, c.deps.nomesDeProdutos, c.estoque).length) return bloqueia("produto_sem_confirmacao");
     if (afirmaDisponibilidade(t) && c.estoque?.estado !== "CONFIRMADO_DISPONIVEL") return bloqueia("produto_sem_confirmacao");

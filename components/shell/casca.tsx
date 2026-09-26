@@ -24,6 +24,8 @@ import {
   Wallet,
   Wrench,
   X,
+  PhoneCall,
+  Camera,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { pode, PAPEIS, type Papel } from "@/lib/dominio";
@@ -36,6 +38,8 @@ const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   conversas: MessageSquare,
   funil: SquareKanban,
   followups: CalendarClock,
+  ligacoes: PhoneCall,
+  cameras: Camera,
   clientes: Users,
   estoque: Bike,
   vendas: Receipt,

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 import { lerBytes } from "./midia";
+import { mimeBase, vaiParaWhatsApp } from "./audio-formatos";
 
 /* ============================================================
    PROVEDOR SIMULADO (MOCK)
@@ -72,6 +73,12 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     const corpo: Record<string, unknown> = { messaging_product: "whatsapp", to: pedido.telefone };
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
     if (pedido.tipo === "texto") Object.assign(corpo, { type: "text", text: { body: pedido.conteudo ?? "", preview_url: true } });
+    else if (pedido.tipo === "audio" && pedido.midia) {
+      if (!vaiParaWhatsApp(pedido.midia.mime ?? "")) return { externoId: null, status: "failed", erro: "Este formato de áudio não é aceito pelo WhatsApp." };
+      const up = await this.subirMidia({ ...pedido.midia, mime: mimeBase(pedido.midia.mime ?? "") });
+      if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
+      Object.assign(corpo, { type: "audio", audio: { id: up.id } });
+    }
     else if ((pedido.tipo === "imagem" || pedido.tipo === "documento") && pedido.midia) {
       const up = await this.subirMidia(pedido.midia);
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };

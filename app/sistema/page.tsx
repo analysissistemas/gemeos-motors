@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { Pagina } from "@/components/ui/pagina";
 import { EstadoVazio, Painel, TituloSecao } from "@/components/ui/basicos";
 import { classesBotao } from "@/components/ui/botao";
+import { Filtros } from "@/components/ui/filtros";
 import { BarrasHorizontais } from "@/components/graficos/barras";
 import { ColunasTempo } from "@/components/graficos/colunas";
 
@@ -54,33 +55,26 @@ export default async function Painel_({ searchParams }: { searchParams: Promise<
             {rotulo} · {data(inicio)} a {data(new Date(fim.getTime() - 1))}
           </p>
         </div>
-        <form className="flex flex-wrap items-center gap-1.5" action="/sistema">
-          {PERIODOS.map(([id, r]) => (
-            <Link key={id} href={`/sistema?periodo=${id}`} className={cn("rounded-full border px-3 py-1.5 text-[12.5px]", periodo === id ? "border-ink bg-ink font-semibold text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
-              {r}
-            </Link>
-          ))}
-          <input type="hidden" name="periodo" value="custom" />
-          <input type="date" name="de" defaultValue={b.de} aria-label="De" className="h-8 rounded-full border border-linha bg-plano/60 px-2.5 text-[12.5px]" />
-          <input type="date" name="ate" defaultValue={b.ate} aria-label="Até" className="h-8 rounded-full border border-linha bg-plano/60 px-2.5 text-[12.5px]" />
-          <button className={cn(classesBotao(periodo === "custom" ? "primario" : "secundario", "sm"))}>Aplicar</button>
-        </form>
-      </div>
-
-      {/* números principais */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Numero rotulo="Faturamento" valor={brl(k.faturamento)} detalhe={`${k.vendas} ${k.vendas === 1 ? "venda finalizada" : "vendas finalizadas"}`} destaque />
-        <Numero rotulo="Ticket médio" valor={k.ticketMedio != null ? brl(k.ticketMedio) : "—"} detalhe={`${k.vendas} veículo${k.vendas === 1 ? "" : "s"} vendido${k.vendas === 1 ? "" : "s"}`} />
-        {verLucro ? (
-          <Numero rotulo="Lucro bruto" valor={k.lucro != null ? brl(k.lucro) : "—"} detalhe={k.margem != null ? `Margem de ${pct(k.margem)}` : "Cadastre o custo dos veículos"} />
-        ) : (
-          <Numero rotulo="Veículos disponíveis" valor={String(k.disponiveis)} detalhe="No estoque agora" />
-        )}
-        <Numero rotulo="Em negociação" valor={String(k.emNegociacao)} detalhe={k.valorEmNegociacao ? `${brl(k.valorEmNegociacao)} em aberto` : "Negócios abertos agora"} />
-        <Numero rotulo="Leads recebidos" valor={String(k.leads)} detalhe="Negócios criados no período" />
-        <Numero rotulo="Propostas enviadas" valor={String(k.propostas)} detalhe="Negócios com proposta no período" />
-        <Numero rotulo="Vendas perdidas" valor={String(k.perdidas)} detalhe={k.conversao != null ? `Conversão de ${pct(k.conversao)}` : "Sem encerramentos no período"} />
-        {verLucro ? <Numero rotulo="Veículos disponíveis" valor={String(k.disponiveis)} detalhe="No estoque agora" /> : <Numero rotulo="Conversão" valor={pct(k.conversao)} detalhe="Vendas ÷ (vendas + perdidas)" />}
+        <Filtros className="w-full sm:w-auto">
+          <form className="flex flex-col gap-2 sm:items-end" action="/sistema">
+            <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+              {PERIODOS.map(([id, r]) => (
+                <Link key={id} href={`/sistema?periodo=${id}`} className={cn("flex min-h-10 shrink-0 items-center rounded-full border px-4 text-[13px] md:min-h-8 md:px-3 md:text-[12.5px]", periodo === id ? "border-ink bg-ink font-semibold text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}>
+                  {r}
+                </Link>
+              ))}
+            </div>
+            <details open={periodo === "custom"}>
+              <summary className="flex min-h-10 cursor-pointer list-none items-center text-[12.5px] text-ink-2 underline-offset-2 hover:underline sm:justify-end">Datas personalizadas</summary>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <input type="hidden" name="periodo" value="custom" />
+                <input type="date" name="de" defaultValue={b.de} aria-label="De" className="h-10 rounded-full border border-linha bg-plano/60 px-3 text-[13px] md:h-8" />
+                <input type="date" name="ate" defaultValue={b.ate} aria-label="Até" className="h-10 rounded-full border border-linha bg-plano/60 px-3 text-[13px] md:h-8" />
+                <button className={cn(classesBotao(periodo === "custom" ? "primario" : "secundario", "sm"))}>Aplicar</button>
+              </div>
+            </details>
+          </form>
+        </Filtros>
       </div>
 
       {/* o que pede ação agora */}
@@ -102,6 +96,33 @@ export default async function Painel_({ searchParams }: { searchParams: Promise<
           </ul>
         )}
       </Painel>
+
+      {/* números principais */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Numero rotulo="Faturamento" valor={brl(k.faturamento)} detalhe={`${k.vendas} ${k.vendas === 1 ? "venda finalizada" : "vendas finalizadas"}`} destaque />
+        <Numero rotulo="Ticket médio" valor={k.ticketMedio != null ? brl(k.ticketMedio) : "—"} detalhe={`${k.vendas} veículo${k.vendas === 1 ? "" : "s"} vendido${k.vendas === 1 ? "" : "s"}`} />
+        {verLucro ? (
+          <Numero rotulo="Lucro bruto" valor={k.lucro != null ? brl(k.lucro) : "—"} detalhe={k.margem != null ? `Margem de ${pct(k.margem)}` : "Cadastre o custo dos veículos"} />
+        ) : (
+          <Numero rotulo="Veículos disponíveis" valor={String(k.disponiveis)} detalhe="No estoque agora" />
+        )}
+        <Numero rotulo="Em negociação" valor={String(k.emNegociacao)} detalhe={k.valorEmNegociacao ? `${brl(k.valorEmNegociacao)} em aberto` : "Negócios abertos agora"} />
+        <div className="hidden md:contents">
+        <Numero rotulo="Leads recebidos" valor={String(k.leads)} detalhe="Negócios criados no período" />
+        <Numero rotulo="Propostas enviadas" valor={String(k.propostas)} detalhe="Negócios com proposta no período" />
+        <Numero rotulo="Vendas perdidas" valor={String(k.perdidas)} detalhe={k.conversao != null ? `Conversão de ${pct(k.conversao)}` : "Sem encerramentos no período"} />
+        {verLucro ? <Numero rotulo="Veículos disponíveis" valor={String(k.disponiveis)} detalhe="No estoque agora" /> : <Numero rotulo="Conversão" valor={pct(k.conversao)} detalhe="Vendas ÷ (vendas + perdidas)" />}
+        </div>
+        <details className="col-span-2 md:hidden">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-center rounded-full border border-linha text-[13px] text-ink-2">Ver mais números</summary>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+        <Numero rotulo="Leads recebidos" valor={String(k.leads)} detalhe="Negócios criados no período" />
+        <Numero rotulo="Propostas enviadas" valor={String(k.propostas)} detalhe="Negócios com proposta no período" />
+        <Numero rotulo="Vendas perdidas" valor={String(k.perdidas)} detalhe={k.conversao != null ? `Conversão de ${pct(k.conversao)}` : "Sem encerramentos no período"} />
+        {verLucro ? <Numero rotulo="Veículos disponíveis" valor={String(k.disponiveis)} detalhe="No estoque agora" /> : <Numero rotulo="Conversão" valor={pct(k.conversao)} detalhe="Vendas ÷ (vendas + perdidas)" />}
+          </div>
+        </details>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Painel className="p-5 xl:col-span-2">

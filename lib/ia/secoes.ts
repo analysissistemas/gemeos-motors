@@ -78,3 +78,12 @@ export const CHAVES_SECOES = SECOES_PROMPT.map((s) => s.chave);
 export const secaoPorChave = (c: string) => SECOES_PROMPT.find((s) => s.chave === c);
 
 export const CATEGORIAS_CONHECIMENTO = ["Loja", "Pagamento", "Produtos", "Garantia e assistência", "Documentação", "Perguntas frequentes"] as const;
+
+/** Monta o texto final do prompt a partir dos setores publicados (ou do padrão) e do conhecimento ativo. Pura: sem banco. */
+export function compilarPrompt(publicadas: { secao: string; conteudo: string }[], conhecimento: { categoria: string; titulo: string; conteudo: string }[]) {
+  const partes = SECOES_PROMPT.map((s) => `# ${s.titulo.toUpperCase()}\n${publicadas.find((p) => p.secao === s.chave)?.conteudo ?? s.padrao}`);
+  const base = conhecimento.length
+    ? conhecimento.map((k) => `## ${k.categoria} — ${k.titulo}\n${k.conteudo}`).join("\n\n")
+    : "(base de conhecimento vazia: não afirme nada sobre a loja além do que está nas regras acima)";
+  return `${partes.join("\n\n")}\n\n# BASE DE CONHECIMENTO (única fonte para afirmar dados da loja)\n${base}`;
+}

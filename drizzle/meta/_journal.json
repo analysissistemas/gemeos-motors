@@ -29,6 +29,13 @@
       "when": 1790356245929,
       "tag": "0003_ia_execucoes_metricas",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790396209473,
+      "tag": "0004_sad_strong_guy",
+      "breakpoints": true
     }
   ]
 }
