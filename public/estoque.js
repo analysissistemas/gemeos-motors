@@ -363,9 +363,10 @@ function _gerarVeiculos(catalogo, categoria){
     for(let i=0;i<qtd;i++){
       /* Veículo de repasse não é zero km nem de vitrine: ele chega usado, e a
          quilometragem é bem maior que a de uma elétrica de bairro. */
-      const cond = info.reserva ? "Zero km"
-                 : eletrico     ? _pick(["Zero km","Seminovo","Vitrine"])
-                                : _pick(["Seminovo","Usado"]);
+      /* 26/09/2026: a loja só vende elétrica NOVA (pedido do dono: "não temos
+         motos seminovas"). Toda elétrica sai zero km. */
+      const cond = info.reserva || eletrico ? "Zero km"
+                                            : _pick(["Seminovo","Usado"]);
       const zero = cond==="Zero km";
       const km  = zero      ? 0
                 : !eletrico ? _ent(12000, 95000)
@@ -424,19 +425,17 @@ function _gerarQuantidade(catalogo, categoria){
 
 const MOTOS      = _gerarVeiculos(CATALOGO,       "Motos elétricas");
 const TRICICLOS  = _gerarVeiculos(CAT_TRICICLO,   "Triciclos");
-const MOTOS_COMB = _gerarVeiculos(CAT_MOTO_COMB,  "Motos a combustão");
-const CARROS     = _gerarVeiculos(CAT_CARRO,      "Carros");
+/* 26/09/2026: moto a combustão e carro saíram da vitrine (pedido do dono).
+   Os catálogos CAT_MOTO_COMB e CAT_CARRO ficam acima só para consulta. */
 const ACESSORIOS = _gerarQuantidade(CAT_ACES,     "Acessórios");
 
 /* tudo o que a loja vende, numa lista só */
-const PRODUTOS = [...MOTOS, ...TRICICLOS, ...MOTOS_COMB, ...CARROS, ...ACESSORIOS];
+const PRODUTOS = [...MOTOS, ...TRICICLOS, ...ACESSORIOS];
 
 /* as seções do catálogo, na ordem em que aparecem para o cliente */
 const CATEGORIAS = [
   {nome:"Motos elétricas",   titulo:"Motos elétricas",   sub:"Sem CNH, sem emplacamento e sem IPVA. Você carrega na tomada de casa.", catalogo:CATALOGO,      campoVar:"var"},
   {nome:"Triciclos",         titulo:"Triciclos",         sub:"Três rodas, mais estabilidade e assento para dois.",                    catalogo:CAT_TRICICLO,  campoVar:"var"},
-  {nome:"Motos a combustão", titulo:"Motos a combustão", sub:"Repasse de moto usada, com documentação em dia e procedência conferida.", catalogo:CAT_MOTO_COMB, campoVar:"var"},
-  {nome:"Carros",            titulo:"Carros",            sub:"Compra, venda e repasse. Cada carro com ano, placa e quilometragem no anúncio.", catalogo:CAT_CARRO, campoVar:"var"},
   {nome:"Acessórios",        titulo:"Acessórios",        sub:"Capacetes e baú para o dia a dia. Consulte cor e disponibilidade no WhatsApp.", catalogo:CAT_ACES,      campoVar:"var"}
 ];
 
