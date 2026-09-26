@@ -95,27 +95,18 @@ Error"). Os campos da API Oficial são texto mascarado, e token novo só é grav
 se a Meta aceitar. O token em uso é do usuário do sistema **chatsystem** (empresa
 Milton Neto, app `gemeos-motors-api` 2603611416754210, o que está "ao vivo").
 
-**Configurações e Inteligência artificial pedem a senha de novo** (`lib/auth/desbloqueio.ts`):
-libera por 15 min num cookie assinado preso à sessão, e toda ação dessas telas
-confere no servidor (`autorizarConfig`). 5 senhas erradas em 15 min trancam.
+**Configurações e Inteligência artificial pedem a senha A CADA ENTRADA** (`lib/auth/desbloqueio.ts`,
+pedido do dono por segurança): cada área tem seu cookie assinado (`gm_config`, `gm_ia`);
+sair da tela (menu, Voltar, F5, fechar a aba) tranca por beacon em `/api/config/trancar`
+(ação de servidor disparada no meio da troca de tela volta sem Set-Cookie: não usar), e o
+cookie vence em 15 min mesmo com a tela aberta. Toda ação confere no servidor
+(`autorizarConfig(area)`). 5 senhas erradas em 15 min trancam.
 
 Callback cadastrado na Meta: `https://gemeosmotors.com.br/api/webhooks/whatsapp`
 (o webhook passa pela manutenção).
 
-**Saída da Vercel — cópia única dos dados (JÁ FEITA em 26/09/2026: 32 tabelas
-conferidas e 10 arquivos do chat; não repetir)** (rodar no console do serviço
-sistema do EasyPanel, com o serviço já no ar e ANTES de a equipe usar):
-
-```
-# banco: Neon -> Postgres do EasyPanel (só lê a origem; recusa destino com dado)
-ORIGEM_DATABASE_URL='<endereço da Neon>' DESTINO_DATABASE_URL="$DATABASE_URL" node scripts/copiar-banco.mjs
-# mídia do chat: Vercel Blob -> /data/midia (pode rodar de novo; pula o que já veio)
-BLOB_READ_WRITE_TOKEN='<token do Blob>' node scripts/copiar-midia.mjs
-```
-
-Os dois mostram só contagens. Depois de conferir o sistema no teste, a Vercel
-(projeto `gemeos-motors` da conta `analysissistemas-3246`), a Neon
-(`gemeos-motors-db`) e o Blob (`gemeos-motors-midia`) podem ser desligados.
+**Saída da Vercel — cópia única dos dados: JÁ FEITA em 26/09/2026** (32 tabelas e
+10 arquivos do chat, com `scripts/copiar-banco.mjs` e `scripts/copiar-midia.mjs`). **Não repetir.**
 
 > **Exceção que ainda existe:** a IA (`lib/ia/cliente.ts`) chama o modelo
 > `anthropic/claude-sonnet-5` pelo AI Gateway da Vercel. Ela está desligada; antes
@@ -144,7 +135,9 @@ banco. Regras para qualquer sessão que mexer no sistema:
    apagam sozinhas: `MANTER_BACKUPS=5 node scripts/espaco.mjs` deixa só as 5
    mais novas.
 4. Foto nova (perfil, catálogo) é reduzida no navegador antes de subir; não
-   guardar arquivo original grande no servidor. Mídia do cliente não se apaga
+   guardar arquivo original grande no servidor. A mídia do chat é compactada sozinha
+   (`lib/mensageria/compactar.ts`: foto JPEG até 1600 px, vídeo 720p em segundo plano);
+   a antiga, com `APLICAR=1 node scripts/compactar-midia.mjs` no console. Mídia do cliente não se apaga
    por conta própria: é registro do atendimento.
 5. Nada de arquivo gravado fora de `/data` (some a cada implantação e ainda
    ocupa a camada do container).
@@ -178,32 +171,8 @@ vezes seguidas achando que `vitrine.html` tinha sido alterado, quando o arquivo
 nunca mudou — o `git diff` provou isso repetidas vezes. Tratar como intocável
 por padrão evita esse ciclo.
 
-> Liberações anteriores, todas com autorização expressa do dono; a trava
-> voltou a valer depois de cada uma:
-> - 08/09/2026 — virada de celular para moto.
-> - 13/09/2026 — tirar o botão de condição do card, pular fotos que não
->   existem, prévia do link/ícone, detalhes de card e topo.
-> - 14/09/2026 — acessórios reais do site oficial com foto e "Consultar
->   preço", galeria "Clientes Gêmeos Motors", bloco "Quem somos" com a foto
->   dos gêmeos, e tirar tudo de parcela e carnê.
-> - 26/09/2026 — só elétrica zero km (sem seminova, sem moto a combustão e sem
->   carro nos textos), WhatsApp novo, `v=15`, prévia do link em
->   gemeosmotors.com.br e cronômetro das promoções. Depois, só dado verdadeiro:
->   um card por modelo real, sem aviso de chegada inventado, rodapé sem
->   "exemplo", `v=16`.
-> - 26/09/2026 (de novo) — foto, nome e ficha técnica do card abrem o mesmo
->   WhatsApp do botão "Quero essa moto" (no acessório, o do "Consultar
->   disponibilidade"); a palavra "triciclo" sai dos textos (descrição do site,
->   "Quem somos", rodapé e o link "Triciclos"), só fica "moto elétrica"; `v=17`.
-> - 26/09/2026 (mais uma) — tira toda menção a Carpina (título, prévia do link,
->   selo do topo, "Quem somos", FAQ de entrega, rodapé) e cria a seção "Onde
->   estamos" com o mapa da loja e botões para Google Maps, Waze e Mapas (iPhone).
-> - 26/09/2026 (cores) — a vitrine carrega do sistema (`/api/vitrine/cores`, via
->   `public/cores-sistema.js`) as cores e a foto de cada cor de cada modelo; `v=18`.
-> - 26/09/2026 (catálogo) — o catálogo do site vem do sistema (`/api/vitrine/catalogo`,
->   via `public/catalogo-sistema.js`): modelo sem estoque aparece, selo de
->   disponibilidade, faixa "Lançamentos" logo depois do topo e janela de reserva
->   (`/api/vitrine/reserva`); `v=19`. Se o sistema não responder, fica o estoque.js.
+> Liberações anteriores (todas com autorização expressa do dono; a trava voltou a
+> valer depois de cada uma): ver `docs/vitrine-liberacoes.md`.
 
 ## O dono
 
@@ -364,7 +333,9 @@ testes. Rodados em 26/09/2026: 20/20 em banco descartável. A limpeza dos testes
   processo `node` morreu mesmo.
 - **Cache do navegador na vitrine.** Os scripts são chamados com `?v=N` em
   `public/vitrine.html`. **Suba esse número sempre que mexer em `estoque.js`,
-  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=19`.
+  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=19`. **Desde 26/09/2026 os scripts
+  com `?v=` ficam guardados no navegador por 1 ano (`next.config.ts`): esquecer de subir
+  o `v` = cliente preso na versão velha.** Fotos, vídeo e tutoriais: 1 dia de cache.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O
   teste da vitrine confere que não existe `custo:` no arquivo.
 - **Prévia do link no WhatsApp usa endereço completo** nas tags `og:` do
@@ -403,8 +374,7 @@ python gerar_lista_fotos.py      # atualiza public/fotos-disponiveis.js (obrigat
 
 ## O que falta (em ordem de impacto)
 
-1. **Terminar a saída da Vercel** — rodar as duas cópias (banco e mídia), conferir
-   no teste e desligar Vercel, Neon e Blob.
+1. **Desligar Vercel, Neon e Blob** — as cópias já foram feitas (26/09/2026).
 2. **IA sem Vercel** — trocar o provedor de `lib/ia/cliente.ts` (hoje AI Gateway)
    antes de ligar diagnóstico de perda, triagem e apoio da OS.
 3. **WhatsApp real** — credenciais da Meta em Configurações e o webhook

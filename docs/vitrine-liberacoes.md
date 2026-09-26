@@ -1,0 +1,30 @@
+# Liberações do `public/vitrine.html`
+
+Saiu do CLAUDE.md em 26/09/2026. Cada item teve autorização expressa do dono; a trava voltou a valer depois de cada um.
+
+Liberações anteriores, todas com autorização expressa do dono; a trava
+voltou a valer depois de cada uma:
+- 08/09/2026 — virada de celular para moto.
+- 13/09/2026 — tirar o botão de condição do card, pular fotos que não
+  existem, prévia do link/ícone, detalhes de card e topo.
+- 14/09/2026 — acessórios reais do site oficial com foto e "Consultar
+  preço", galeria "Clientes Gêmeos Motors", bloco "Quem somos" com a foto
+  dos gêmeos, e tirar tudo de parcela e carnê.
+- 26/09/2026 — só elétrica zero km (sem seminova, sem moto a combustão e sem
+  carro nos textos), WhatsApp novo, `v=15`, prévia do link em
+  gemeosmotors.com.br e cronômetro das promoções. Depois, só dado verdadeiro:
+  um card por modelo real, sem aviso de chegada inventado, rodapé sem
+  "exemplo", `v=16`.
+- 26/09/2026 (de novo) — foto, nome e ficha técnica do card abrem o mesmo
+  WhatsApp do botão "Quero essa moto" (no acessório, o do "Consultar
+  disponibilidade"); a palavra "triciclo" sai dos textos (descrição do site,
+  "Quem somos", rodapé e o link "Triciclos"), só fica "moto elétrica"; `v=17`.
+- 26/09/2026 (mais uma) — tira toda menção a Carpina (título, prévia do link,
+  selo do topo, "Quem somos", FAQ de entrega, rodapé) e cria a seção "Onde
+  estamos" com o mapa da loja e botões para Google Maps, Waze e Mapas (iPhone).
+- 26/09/2026 (cores) — a vitrine carrega do sistema (`/api/vitrine/cores`, via
+  `public/cores-sistema.js`) as cores e a foto de cada cor de cada modelo; `v=18`.
+- 26/09/2026 (catálogo) — o catálogo do site vem do sistema (`/api/vitrine/catalogo`,
+  via `public/catalogo-sistema.js`): modelo sem estoque aparece, selo de
+  disponibilidade, faixa "Lançamentos" logo depois do topo e janela de reserva
+  (`/api/vitrine/reserva`); `v=19`. Se o sistema não responder, fica o estoque.js.
