@@ -59,14 +59,12 @@ const CATALOGO = {
   },
   "M6": {
     var:["Única"], cor:["Branca"], base:10990, tipo:"Moto elétrica", video:"iQ2w_krngD4",
-    reserva:true, disponivelEm:"semana de 14 de setembro",
     ficha:{motor:"1000W", autonomia:"Até 70 km", velocidade:"32 km/h",
            bateria:"Lítio 60V 32Ah", pneu:"Dianteiro 90-80-12 / Traseiro 3.0-10",
            peso:"180 kg", recarga:"6h a 8h"}
   },
   "T3 RETRÔ": {
     var:["Única"], cor:["Bege"], base:9990, tipo:"Moto elétrica",
-    reserva:true, disponivelEm:"semana de 14 de setembro",
     ficha:{motor:"1000W", autonomia:"60 a 70 km", velocidade:"32 km/h",
            bateria:"Lítio 64V 30Ah", pneu:"Dianteiro 3.0-10 / Traseiro 3.0-10",
            peso:"180 kg", recarga:"6h a 7h"}
@@ -78,13 +76,11 @@ const CATALOGO = {
   },
   "DF17": {
     var:["Única"], cor:["Branca"], base:7190, tipo:"Moto elétrica",
-    reserva:true, disponivelEm:"semana de 14 de setembro",
     ficha:{motor:"1000W", autonomia:"40 a 50 km", velocidade:"32 km/h",
            bateria:"Lítio 48V 20Ah", pneu:"2.75-10", peso:"150 kg", recarga:"4h a 6h"}
   },
   "TCN BASKET": {
     var:["Única"], cor:["Branca"], base:5200, tipo:"Moto elétrica",
-    reserva:true, disponivelEm:"semana de 14 de setembro",
     ficha:{motor:"500W", autonomia:"Até 40 km", velocidade:"—",
            bateria:"Chumbo-ácido selada 48V 12Ah", pneu:"—", peso:"150 kg", recarga:"—"}
   }
@@ -95,7 +91,6 @@ const CATALOGO = {
 const CAT_TRICICLO = {
   "MM3": {
     var:["Única"], cor:["Vinho"], base:10500, tipo:"Triciclo elétrico",
-    reserva:true, disponivelEm:"semana de 14 de setembro",
     ficha:{motor:"1000W", autonomia:"45 a 55 km", velocidade:"32 km/h",
            bateria:"Lítio 60V 24Ah", pneu:"300/10", peso:"180 kg", recarga:"6h a 8h"}
   }
@@ -359,7 +354,10 @@ function _gerarVeiculos(catalogo, categoria){
        com a data de chegada. Gerar estoque para ele daria a contradição de
        uma moto "seminova, 3.491 km rodados" que ao mesmo tempo "chega na
        semana que vem" — e o cliente percebe. */
-    const qtd = info.reserva ? 1 : _ent(1,3);
+    /* 26/09/2026: só dado verdadeiro (pedido do dono). A quantidade de cada
+       modelo não é conhecida aqui, então a vitrine mostra UM card por modelo
+       real, com preço, cor e ficha da loja; a disponibilidade é no WhatsApp. */
+    const qtd = 1;
     for(let i=0;i<qtd;i++){
       /* Veículo de repasse não é zero km nem de vitrine: ele chega usado, e a
          quilometragem é bem maior que a de uma elétrica de bairro. */
