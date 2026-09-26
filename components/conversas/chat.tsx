@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleAlert, Clock, Copy, FileText, Info, MapPin, MessageCircle, Phone, Reply, StickyNote, Trash2, UserCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
@@ -63,6 +63,38 @@ export function Chat({
   const alturaAntes = useRef<number | null>(null);
   const ultimoId = mensagens[mensagens.length - 1]?.id;
   const qtdAntes = useRef(mensagens.length);
+  /* clique na citação: rola até a mensagem original (carrega as antigas se ela ainda não veio) */
+  const irPara = useRef<{ id: number; tentativas: number } | null>(null);
+  const buscarCitada = useCallback(() => {
+    const alvo = irPara.current;
+    if (!alvo) return;
+    const el = document.getElementById(`msg-${alvo.id}`);
+    if (el) {
+      irPara.current = null;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.querySelector("[data-bolha]")?.animate(
+        [{ boxShadow: "0 0 0 3px var(--marca)" }, { boxShadow: "0 0 0 3px var(--marca)", offset: 0.6 }, { boxShadow: "0 0 0 0 transparent" }],
+        { duration: 1800 },
+      );
+    } else if (temMais && alvo.tentativas < 20) {
+      alvo.tentativas++;
+      alturaAntes.current = rolagem.current?.scrollHeight ?? null;
+      void aoCarregarAntigas();
+    } else {
+      irPara.current = null;
+      toast.info("Não achei a mensagem original: ela pode ter sido apagada.");
+    }
+  }, [temMais, aoCarregarAntigas]);
+  const aoIrPara = useCallback(
+    (id: number) => {
+      irPara.current = { id, tentativas: 0 };
+      buscarCitada();
+    },
+    [buscarCitada],
+  );
+  useEffect(() => {
+    if (irPara.current && !carregando) buscarCitada();
+  }, [mensagens, carregando, buscarCitada]);
 
   const timeline = useMemo<ItemTimeline[]>(() => {
     const itens = [
@@ -189,7 +221,7 @@ export function Chat({
                 </div>
               </li>
             ) : (
-              <Bolha key={i.chave} m={i.m} nomeCliente={nome} acoes={{ aoResponder, aoReagir, aoApagar, aoConversarCom }} />
+              <Bolha key={i.chave} m={i.m} nomeCliente={nome} acoes={{ aoResponder, aoReagir, aoApagar, aoConversarCom, aoIrPara }} />
             ),
           )}
         </ol>
@@ -223,6 +255,7 @@ type AcoesBolha = {
   aoReagir: (m: MensagemChat, emoji: string) => void;
   aoApagar: (m: MensagemChat) => void;
   aoConversarCom: (telefone: string, nome: string | null) => void;
+  aoIrPara: (id: number) => void;
 };
 type Meta = {
   duracao?: number;
@@ -300,19 +333,13 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
   const real = m.id > 0;
 
   return (
-    <li className={cn(lado, reacoes.length > 0 && "mb-3")}>
-      <div
-        ref={caixa}
-        className={cn(
-          "group relative max-w-[85%] rounded-2xl px-3 py-2 text-[14.5px] leading-snug shadow-sm sm:max-w-[70%]",
-          saida ? "rounded-br-md bg-bolha-saida" : "rounded-bl-md bg-bolha-entrada ring-1 ring-linha",
-          meta.figurinha && "bg-transparent shadow-none ring-0",
-        )}
-      >
+    <li id={real ? `msg-${m.id}` : undefined} className={cn(lado, reacoes.length > 0 && "mb-3")}>
+      {/* a setinha do menu fica do lado de fora da bolha (à esquerda na da loja, à direita na do cliente) */}
+      <div ref={caixa} className={cn("group relative flex max-w-[85%] items-start gap-1 sm:max-w-[70%]", !saida && "flex-row-reverse")}>
         {real && (
           <button
             className={cn(
-              "absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full bg-elevado/90 text-ink-2 shadow-sm ring-1 ring-linha transition-opacity hover:text-ink",
+              "mt-1 grid size-6 shrink-0 place-items-center rounded-full bg-elevado/90 text-ink-2 shadow-sm ring-1 ring-linha transition-opacity hover:text-ink",
               menu ? "opacity-100" : "opacity-0 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-70",
             )}
             onClick={() => setMenu((v) => !v)}
@@ -324,154 +351,174 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
         )}
         {menu && (
           <div className={cn("absolute top-8 z-30 w-56 rounded-2xl border border-linha-forte bg-elevado p-1.5 shadow-alta", saida ? "right-0" : "left-0")} role="menu">
-            <div className="mb-1 flex justify-between px-1">
-              {REACOES_RAPIDAS.map((em) => (
-                <button
-                  key={em}
-                  className={cn("grid size-8 place-items-center rounded-full text-[18px] hover:bg-trilho", minhaReacao === em && "bg-trilho ring-1 ring-linha-forte")}
-                  onClick={() => {
-                    setMenu(false);
-                    acoes.aoReagir(m, minhaReacao === em ? "" : em);
-                  }}
-                  aria-label={minhaReacao === em ? `Tirar reação ${em}` : `Reagir com ${em}`}
-                >
-                  {em}
-                </button>
-              ))}
-            </div>
-            <ItemMenu
-              icone={<Reply className="size-4" />}
-              onClick={() => {
-                setMenu(false);
-                acoes.aoResponder(m);
-              }}
-            >
-              Responder
-            </ItemMenu>
-            {m.conteudo && (
-              <ItemMenu
-                icone={<Copy className="size-4" />}
-                onClick={async () => {
+          <div className="mb-1 flex justify-between px-1">
+            {REACOES_RAPIDAS.map((em) => (
+              <button
+                key={em}
+                className={cn("grid size-8 place-items-center rounded-full text-[18px] hover:bg-trilho", minhaReacao === em && "bg-trilho ring-1 ring-linha-forte")}
+                onClick={() => {
                   setMenu(false);
-                  await navigator.clipboard.writeText(m.conteudo ?? "");
-                  toast.success("Texto copiado");
+                  acoes.aoReagir(m, minhaReacao === em ? "" : em);
                 }}
+                aria-label={minhaReacao === em ? `Tirar reação ${em}` : `Reagir com ${em}`}
               >
-                Copiar texto
-              </ItemMenu>
-            )}
+                {em}
+              </button>
+            ))}
+          </div>
+          <ItemMenu
+            icone={<Reply className="size-4" />}
+            onClick={() => {
+              setMenu(false);
+              acoes.aoResponder(m);
+            }}
+          >
+            Responder
+          </ItemMenu>
+          {m.conteudo && (
             <ItemMenu
-              icone={<Trash2 className="size-4" />}
-              perigo
-              onClick={() => {
+              icone={<Copy className="size-4" />}
+              onClick={async () => {
                 setMenu(false);
-                acoes.aoApagar(m);
+                await navigator.clipboard.writeText(m.conteudo ?? "");
+                toast.success("Texto copiado");
               }}
             >
-              Apagar para mim
+              Copiar texto
             </ItemMenu>
-            <p className="px-2.5 pb-1 pt-0.5 text-[11px] leading-snug text-ink-3">
-              {saida ? "A Meta não deixa apagar do celular do cliente: some só do chat da equipe." : "Some só do chat da equipe; fica no histórico do sistema."}
-            </p>
+          )}
+          <ItemMenu
+            icone={<Trash2 className="size-4" />}
+            perigo
+            onClick={() => {
+              setMenu(false);
+              acoes.aoApagar(m);
+            }}
+          >
+            Apagar para mim
+          </ItemMenu>
+          <p className="px-2.5 pb-1 pt-0.5 text-[11px] leading-snug text-ink-3">
+            {saida ? "A Meta não deixa apagar do celular do cliente: some só do chat da equipe." : "Some só do chat da equipe; fica no histórico do sistema."}
+          </p>
           </div>
         )}
-        {saida && (
-          <p className="mb-0.5 flex items-center gap-1 pr-6 text-[11px] font-semibold text-ink-2">
-            {ia ? (
-              <>
-                <Bot className="size-3" /> Assistente virtual
-              </>
-            ) : (
-              m.usuarioNome
-            )}
-          </p>
-        )}
-        {meta.apagadaPeloCliente && (
-          <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-critico">
-            <Ban className="size-3" /> O cliente apagou esta mensagem
-          </p>
-        )}
-        {m.citada && (
-          <div className="-mx-1 mb-1.5 rounded-lg border-l-2 border-marca bg-trilho/70 px-2 py-1 text-[12.5px]">
-            <p className="font-semibold text-marca">{quemEscreveu({ direcao: m.citada.direcao, autor: m.citada.autor }, nomeCliente)}</p>
-            <p className="line-clamp-2 text-ink-2">{m.citada.apagada ? "Mensagem apagada" : resumoCurto(m.citada.tipo, m.citada.conteudo)}</p>
-          </div>
-        )}
-        <div className={cn(meta.apagadaPeloCliente && "opacity-60")}>
-          {m.tipo === "imagem" && m.midiaUrl && (
-            <a href={m.midiaUrl} target="_blank" rel="noreferrer" className={cn("block overflow-hidden rounded-xl", meta.figurinha ? "w-32" : "-mx-1 mb-1")}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.midiaUrl} alt={meta.figurinha ? "Figurinha" : (m.conteudo ?? "Imagem")} className={cn("w-full object-contain", !meta.figurinha && "max-h-72 bg-white")} loading="lazy" />
-            </a>
+        <div
+          data-bolha
+          title={real ? "Dois cliques para responder" : undefined}
+          onDoubleClick={(e) => {
+            if (!real || (e.target as HTMLElement).closest("a,button,audio,video")) return;
+            window.getSelection()?.removeAllRanges();
+            acoes.aoResponder(m);
+          }}
+          className={cn(
+            "relative min-w-0 rounded-2xl px-3 py-2 text-[14.5px] leading-snug shadow-sm",
+            saida ? "rounded-br-md bg-bolha-saida" : "rounded-bl-md bg-bolha-entrada ring-1 ring-linha",
+            meta.figurinha && "bg-transparent shadow-none ring-0",
           )}
-          {m.tipo === "video" &&
-            (m.midiaUrl ? (
-              <video src={m.midiaUrl} controls preload="metadata" className="-mx-1 mb-1 max-h-72 w-full rounded-xl bg-black" />
-            ) : (
-              <p className="text-[13px] italic text-ink-3">Vídeo não disponível. Veja no celular.</p>
-            ))}
-          {m.tipo === "documento" && (
-            <a href={m.midiaUrl ?? "#"} download={m.midiaNome ?? undefined} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-3 rounded-xl bg-trilho px-3 py-2 hover:underline">
-              <FileText className="size-6 shrink-0" />
-              <span className="min-w-0">
-                <span className="block truncate text-[13.5px] font-medium">{m.midiaNome ?? "Documento"}</span>
-                <span className="text-[11.5px] text-ink-3">{m.midiaTamanho ? `${Math.ceil(m.midiaTamanho / 1024)} KB · ` : ""}Abrir</span>
-              </span>
-            </a>
-          )}
-          {m.tipo === "audio" && <AudioMensagem url={m.midiaUrl} duracaoGuardada={typeof meta.duracao === "number" ? meta.duracao : null} />}
-          {m.tipo === "contato" && <CartoesContato contatos={meta.contatos ?? []} aoConversarCom={acoes.aoConversarCom} />}
-          {m.tipo === "localizacao" && (
-            <a
-              href={
-                meta.latitude != null && meta.longitude != null
-                  ? `https://www.google.com/maps/search/?api=1&query=${meta.latitude},${meta.longitude}`
-                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.conteudo ?? "")}`
-              }
-              target="_blank"
-              rel="noreferrer"
-              className="mb-1 flex items-center gap-3 rounded-xl bg-trilho px-3 py-2 hover:underline"
-            >
-              <MapPin className="size-6 shrink-0 text-critico" />
-              <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium">{m.conteudo || "Localização"}</span>
-                <span className="text-[11.5px] text-ink-3">Abrir no mapa</span>
-              </span>
-            </a>
-          )}
-          {m.conteudo && (m.tipo === "texto" || m.tipo === "imagem" || m.tipo === "documento" || m.tipo === "video") && (
-            <p className="whitespace-pre-wrap break-words">
-              {comLinks(m.conteudo).map((p, i) =>
-                p.link ? (
-                  <a key={i} href={p.t} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-                    {p.t}
-                  </a>
-                ) : (
-                  <span key={i}>{p.t}</span>
-                ),
+        >
+          {saida && (
+            <p className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold text-ink-2">
+              {ia ? (
+                <>
+                  <Bot className="size-3" /> Assistente virtual
+                </>
+              ) : (
+                m.usuarioNome
               )}
             </p>
           )}
+          {meta.apagadaPeloCliente && (
+            <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-critico">
+              <Ban className="size-3" /> O cliente apagou esta mensagem
+            </p>
+          )}
+          {m.citada && (
+            <button
+              type="button"
+              className="-mx-1 mb-1.5 block w-[calc(100%+0.5rem)] rounded-lg border-l-2 border-marca bg-trilho/70 px-2 py-1 text-left text-[12.5px] hover:bg-trilho"
+              onClick={() => m.respostaA && acoes.aoIrPara(m.respostaA)}
+              title="Ir para a mensagem respondida"
+            >
+              <p className="font-semibold text-marca">{quemEscreveu({ direcao: m.citada.direcao, autor: m.citada.autor }, nomeCliente)}</p>
+              <p className="line-clamp-2 text-ink-2">{m.citada.apagada ? "Mensagem apagada" : resumoCurto(m.citada.tipo, m.citada.conteudo)}</p>
+            </button>
+          )}
+          <div className={cn(meta.apagadaPeloCliente && "opacity-60")}>
+            {m.tipo === "imagem" && m.midiaUrl && (
+              <a href={m.midiaUrl} target="_blank" rel="noreferrer" className={cn("block overflow-hidden rounded-xl", meta.figurinha ? "w-32" : "-mx-1 mb-1")}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={m.midiaUrl} alt={meta.figurinha ? "Figurinha" : (m.conteudo ?? "Imagem")} className={cn("w-full object-contain", !meta.figurinha && "max-h-72 bg-white")} loading="lazy" />
+              </a>
+            )}
+            {m.tipo === "video" &&
+              (m.midiaUrl ? (
+                <video src={m.midiaUrl} controls preload="metadata" className="-mx-1 mb-1 max-h-72 w-full rounded-xl bg-black" />
+              ) : (
+                <p className="text-[13px] italic text-ink-3">Vídeo não disponível. Veja no celular.</p>
+              ))}
+            {m.tipo === "documento" && (
+              <a href={m.midiaUrl ?? "#"} download={m.midiaNome ?? undefined} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-3 rounded-xl bg-trilho px-3 py-2 hover:underline">
+                <FileText className="size-6 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-[13.5px] font-medium">{m.midiaNome ?? "Documento"}</span>
+                  <span className="text-[11.5px] text-ink-3">{m.midiaTamanho ? `${Math.ceil(m.midiaTamanho / 1024)} KB · ` : ""}Abrir</span>
+                </span>
+              </a>
+            )}
+            {m.tipo === "audio" && <AudioMensagem url={m.midiaUrl} duracaoGuardada={typeof meta.duracao === "number" ? meta.duracao : null} />}
+            {m.tipo === "contato" && <CartoesContato contatos={meta.contatos ?? []} aoConversarCom={acoes.aoConversarCom} />}
+            {m.tipo === "localizacao" && (
+              <a
+                href={
+                  meta.latitude != null && meta.longitude != null
+                    ? `https://www.google.com/maps/search/?api=1&query=${meta.latitude},${meta.longitude}`
+                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.conteudo ?? "")}`
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="mb-1 flex items-center gap-3 rounded-xl bg-trilho px-3 py-2 hover:underline"
+              >
+                <MapPin className="size-6 shrink-0 text-critico" />
+                <span className="min-w-0">
+                  <span className="block text-[13.5px] font-medium">{m.conteudo || "Localização"}</span>
+                  <span className="text-[11.5px] text-ink-3">Abrir no mapa</span>
+                </span>
+              </a>
+            )}
+            {m.conteudo && (m.tipo === "texto" || m.tipo === "imagem" || m.tipo === "documento" || m.tipo === "video") && (
+              <p className="whitespace-pre-wrap break-words">
+                {comLinks(m.conteudo).map((p, i) =>
+                  p.link ? (
+                    <a key={i} href={p.t} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                      {p.t}
+                    </a>
+                  ) : (
+                    <span key={i}>{p.t}</span>
+                  ),
+                )}
+              </p>
+            )}
+          </div>
+          <p className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px] text-ink-3">
+            {hora(m.criadoEm)}
+            {saida && <Tiques status={m.status} />}
+          </p>
+          {m.status === "failed" && <p className="mt-1 text-[11.5px] text-critico">Não enviada{meta.erro ? `: ${meta.erro}` : ""}</p>}
+          {reacoes.length > 0 && (
+            <button
+              className={cn("absolute -bottom-3.5 flex items-center gap-0.5 rounded-full border border-linha bg-elevado px-1.5 py-0.5 text-[13px] shadow-sm", saida ? "right-2" : "left-2")}
+              onClick={() => {
+                if (minhaReacao) acoes.aoReagir(m, "");
+              }}
+              title={[meta.reacoes?.cliente && `${nomeCliente}: ${meta.reacoes.cliente}`, meta.reacoes?.equipe && `Loja: ${meta.reacoes.equipe} (toque para tirar)`].filter(Boolean).join(" · ")}
+              aria-label="Reações"
+            >
+              {reacoes.map((r, i) => (
+                <span key={i}>{r}</span>
+              ))}
+            </button>
+          )}
         </div>
-        <p className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px] text-ink-3">
-          {hora(m.criadoEm)}
-          {saida && <Tiques status={m.status} />}
-        </p>
-        {m.status === "failed" && <p className="mt-1 text-[11.5px] text-critico">Não enviada{meta.erro ? `: ${meta.erro}` : ""}</p>}
-        {reacoes.length > 0 && (
-          <button
-            className={cn("absolute -bottom-3.5 flex items-center gap-0.5 rounded-full border border-linha bg-elevado px-1.5 py-0.5 text-[13px] shadow-sm", saida ? "right-2" : "left-2")}
-            onClick={() => {
-              if (minhaReacao) acoes.aoReagir(m, "");
-            }}
-            title={[meta.reacoes?.cliente && `${nomeCliente}: ${meta.reacoes.cliente}`, meta.reacoes?.equipe && `Loja: ${meta.reacoes.equipe} (toque para tirar)`].filter(Boolean).join(" · ")}
-            aria-label="Reações"
-          >
-            {reacoes.map((r, i) => (
-              <span key={i}>{r}</span>
-            ))}
-          </button>
-        )}
       </div>
     </li>
   );

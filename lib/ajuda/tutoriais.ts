@@ -84,6 +84,7 @@ export const TUTORIAIS: Tutorial[] = [
       { texto: "Toque em \"Atendimento\" no menu. À esquerda ficam as conversas; o número no menu mostra quantas estão sem ler.", imagem: img("conversas", 1), legenda: "As três colunas: conversas, chat e dados do cliente" },
       { texto: "Toque numa conversa para abrir. Se ela estiver \"Sem responsável\", toque em \"Assumir\" para ficar com o atendimento." },
       { texto: "Escreva no campo de baixo e envie. Para respostas prontas, digite / ou toque no botão de respostas rápidas. Para mandar foto ou PDF, use o clipe. Para áudio, toque no microfone, fale e toque em enviar (ou \"Cancelar\").", imagem: img("conversas", 2), legenda: "Campo de mensagem com respostas rápidas, anexo e áudio" },
+      { texto: "Para responder uma mensagem específica, dê dois cliques nela (ou use a setinha ao lado dela → \"Responder\"). A mesma setinha tem reagir, copiar e apagar. Tocando na citação de uma resposta, o chat pula para a mensagem original." },
       { texto: "Para anotar algo que só a equipe vê, use a \"Nota interna\". O cliente não recebe." },
       { texto: "Na coluna da direita: se aparecer \"Contato sem cadastro\", toque em \"Cadastrar cliente\" (ou ligue a um cliente que já existe). Ali você também cria o negócio no funil e agenda o follow-up.", imagem: img("conversas", 3), legenda: "Dados do cliente, negócio e próximo follow-up" },
       { texto: "Mude o status da conversa no alto do chat (Em atendimento, Aguardando cliente, Resolvida…) para a equipe saber em que pé está." },
