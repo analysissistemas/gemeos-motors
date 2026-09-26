@@ -150,7 +150,7 @@ carro**, vende acessórios e tem **assistência técnica própria**.
 
 | | |
 |---|---|
-| Site oficial | gemeosmotors.com.br (React, feito no Hostinger Horizons) |
+| Site oficial | gemeosmotors.com.br — desde 26/09/2026 é este sistema (antes era um site do Hostinger Horizons) |
 | WhatsApp | **5511948709625** — (11) 94870-9625 (desde 26/09/2026; antes (81) 99386-9767) |
 | Instagram | @gemeosmotors_goiana |
 | Logo | amarelo e preto, com os dois memojis: "#A MELHOR DA REGIÃO" |
