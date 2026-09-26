@@ -71,6 +71,13 @@
       "when": 1790452930117,
       "tag": "0009_so_moto_eletrica",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790455479951,
+      "tag": "0010_cores_modelo",
+      "breakpoints": true
     }
   ]
 }

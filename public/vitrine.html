@@ -716,11 +716,12 @@ a{color:inherit;text-decoration:none}
 <!-- O ?v= força o navegador a buscar a versão nova em vez de usar a guardada.
      Suba o número sempre que mexer nestes arquivos, senão você (e o cliente)
      continuam vendo a versão antiga sem entender por quê. -->
-<script src="cores-motos.js?v=17"></script>
-<script src="fotos-disponiveis.js?v=17"></script>
+<script src="cores-motos.js?v=18"></script>
+<script src="fotos-disponiveis.js?v=18"></script>
 <!-- antes do estoque.js: é daqui que sai fotoDoProduto -->
-<script src="foto-produto.js?v=17"></script>
-<script src="estoque.js?v=17"></script>
+<script src="foto-produto.js?v=18"></script>
+<script src="estoque.js?v=18"></script>
+<script src="cores-sistema.js?v=18"></script>
 <script>
 /* ============================================================
    Número que recebe as mensagens do site.
@@ -1038,6 +1039,10 @@ fetch("/api/promocoes", {cache:"no-store"})
     setInterval(redesenhaPromos, 1000);
   })
   .catch(()=>{});
+
+/* cores e foto de cada cor cadastradas no sistema da equipe: a página já abriu com o
+   estoque.js e redesenha quando elas chegam; se o sistema não responder, fica como está */
+carregarCoresDoSistema().then(m => { if(m && aplicarCoresDoSistema(PRODUTOS, escolha)) pinta(); });
 
 /* busca ao digitar, com uma pausa curta para não redesenhar a cada tecla */
 (function(){

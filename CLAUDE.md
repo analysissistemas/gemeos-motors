@@ -198,6 +198,8 @@ por padrão evita esse ciclo.
 > - 26/09/2026 (mais uma) — tira toda menção a Carpina (título, prévia do link,
 >   selo do topo, "Quem somos", FAQ de entrega, rodapé) e cria a seção "Onde
 >   estamos" com o mapa da loja e botões para Google Maps, Waze e Mapas (iPhone).
+> - 26/09/2026 (cores) — a vitrine carrega do sistema (`/api/vitrine/cores`, via
+>   `public/cores-sistema.js`) as cores e a foto de cada cor de cada modelo; `v=18`.
 
 ## O dono
 
@@ -356,7 +358,7 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
   processo `node` morreu mesmo.
 - **Cache do navegador na vitrine.** Os scripts são chamados com `?v=N` em
   `public/vitrine.html`. **Suba esse número sempre que mexer em `estoque.js`,
-  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=17`.
+  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=18`.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O
   teste da vitrine confere que não existe `custo:` no arquivo.
 - **Prévia do link no WhatsApp usa endereço completo** nas tags `og:` do
