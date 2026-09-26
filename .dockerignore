@@ -1,20 +1,42 @@
-# O que NAO entra na imagem Docker do EasyPanel (mesma ideia do .vercelignore)
+# O que NAO entra na imagem Docker do EasyPanel (VPS da Hostinger).
+# O EasyPanel compila a partir do GitHub; daqui só vai o código-fonte e o que
+# o site usa. O resto é material de trabalho ou segredo.
+
+# dependências e compilação local (a imagem instala e compila do zero)
 node_modules/
 .next/
 tsconfig.tsbuildinfo
+
+# segredos locais: no VPS as variáveis vêm da aba Ambiente do EasyPanel
 .env*
+
+# mídia do chat gravada no computador durante o desenvolvimento
+.midia/
+
+# scripts de fotos em Python (scripts/*.mjs ENTRAM: migrations e cópias)
 *.py
-scripts/
+
+# testes e seus relatórios
 tests/
 test-results/
 playwright-report/
 playwright.config.ts
+
+# rascunhos e arquivo morto (tudo que começa com _ na raiz)
 _*
+
+# material do sistema antigo de celular e apresentação
 apresentacao/
 public/video/iphone-*.mp4
+
+# originais pesados: o site usa o .webp
 public/fotos/**/*.png
 public/fotos/**/*.jpg
 public/fotos/**/*.jpeg
+
+# credenciais coladas em texto: nunca entram
 configuracoes-api-oficial.txt
+
 .git/
+.claude/
 Dockerfile

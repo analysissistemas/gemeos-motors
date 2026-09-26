@@ -44,30 +44,53 @@ A branch local já se chama `vitrine-html` e rastreia a do GitHub, então
 sem precisar perguntar a cada vez.** O repositório é **público**: nunca
 commitar `.env*`, senha ou token.
 
-### No ar (Vercel)
+### No ar (Hostinger — EasyPanel)
+
+Desde 26/09/2026 o dono decidiu: **nada depende mais da Vercel**. O sistema
+roda só no VPS da Hostinger, com o EasyPanel.
 
 | | |
 |---|---|
-| Endereço | **https://gemeos-motors.vercel.app** (abre a loja; equipe em `/login`) |
-| Conta Vercel | `analysissistemas-3246`, projeto `gemeos-motors`, região `gru1` |
-| Banco | Neon Postgres (free), criado pelo Marketplace da Vercel (`gemeos-motors-db`) |
-| Como publicar | na pasta do projeto: `vercel deploy --prod` (a pasta já está ligada) |
+| Teste | **https://teste.gemeosmotors.com.br** (loja em `/`, equipe em `/login`) |
+| Domínio principal | gemeosmotors.com.br — em manutenção até o dono liberar |
+| VPS | `srv2001302.hstgr.cloud`, IP `2.25.240.204`; EasyPanel em `http://2.25.240.204:3000` |
+| Projeto no EasyPanel | `gemeos-motors`: serviço **sistema** (este código) e serviço **banco** (PostgreSQL 18, base `gemeos`, endereço interno `gemeos-motors_banco:5432`, sem SSL) |
+| Mídia do chat | volume montado em **`/data`** no serviço sistema (`MIDIA_DIR=/data/midia`) |
+| DNS | na Hostinger (`dns-parking.com`); registro A `teste` → `2.25.240.204` |
+| Como publicar | enviar para o GitHub e clicar em **Implantar** no serviço sistema (o EasyPanel puxa a branch `vitrine-html` e compila pelo `Dockerfile`) |
 
-**Não é ligado ao GitHub**: `git push` não atualiza o site.
+O container, ao subir (`scripts/iniciar.mjs`): confere se `/data/midia` aceita
+gravação (se não, para com mensagem clara), aplica as migrations pendentes no
+banco de `DATABASE_URL` (banco novo e vazio ganha as tabelas sozinho) e liga o
+servidor.
 
-> **26/09/2026 — saída da Vercel.** O dono decidiu levar o sistema para o VPS
-> da Hostinger (EasyPanel, IP `2.25.240.204`), compilado pelo `Dockerfile` da
-> raiz. Os testes são em **teste.gemeosmotors.com.br**; o domínio principal fica
-> em manutenção (`MODO_MANUTENCAO=1`) até ser republicado. `SITE_URL` define o
-> endereço do callback do WhatsApp. O botão "Chamar no WhatsApp" da tela de
-> manutenção vai para **5511948709625**.
+**Variáveis** (aba Ambiente do serviço sistema): `DATABASE_URL` (o endereço
+interno do serviço banco), `SESSION_SECRET` (32+ caracteres; assina o cookie de
+sessão e cifra as credenciais do WhatsApp salvas no banco — trocar obriga a
+digitar de novo as credenciais em Configurações), `SITE_URL`
+(`teste.gemeosmotors.com.br`; é o endereço do callback do WhatsApp),
+`MIDIA_DIR` (já vem `/data/midia` na imagem). Opcionais: `OPENAI_API_KEY`,
+`IA_MODELO`, `MODO_MANUTENCAO=1` + `MANUTENCAO_LIBERADOS`, e as `WHATSAPP_*`
+de reserva. Localmente: `.env.local` na pasta (nunca no Git).
 
-Variáveis no painel da Vercel: `DATABASE_URL` e afins (vêm da integração Neon),
-`SESSION_SECRET` (assina o cookie de sessão). Opcionais: `IA_MODELO` (padrão
-`anthropic/claude-sonnet-5`) e, para o WhatsApp real,
-`MENSAGERIA_PROVEDOR=whatsapp_cloud` + `WHATSAPP_TOKEN`,
-`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`.
-Localmente: `vercel env pull .env.local`.
+**Saída da Vercel — cópia única dos dados** (rodar no console do serviço
+sistema do EasyPanel, com o serviço já no ar e ANTES de a equipe usar):
+
+```
+# banco: Neon -> Postgres do EasyPanel (só lê a origem; recusa destino com dado)
+ORIGEM_DATABASE_URL='<endereço da Neon>' DESTINO_DATABASE_URL="$DATABASE_URL" node scripts/copiar-banco.mjs
+# mídia do chat: Vercel Blob -> /data/midia (pode rodar de novo; pula o que já veio)
+BLOB_READ_WRITE_TOKEN='<token do Blob>' node scripts/copiar-midia.mjs
+```
+
+Os dois mostram só contagens. Depois de conferir o sistema no teste, a Vercel
+(projeto `gemeos-motors` da conta `analysissistemas-3246`), a Neon
+(`gemeos-motors-db`) e o Blob (`gemeos-motors-midia`) podem ser desligados.
+
+> **Exceção que ainda existe:** a IA (`lib/ia/cliente.ts`) chama o modelo
+> `anthropic/claude-sonnet-5` pelo AI Gateway da Vercel. Ela está desligada; antes
+> de ligar, trocar esse provedor (o atendimento já tem `lib/ia/modelo-openai.ts`,
+> que fala direto com a OpenAI).
 
 O site antigo do celular, `gemeos-do-iphone.vercel.app`, **continua no ar** numa
 conta da Vercel que não abre neste computador. Para tirá-lo do ar precisa de
@@ -256,26 +279,34 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O
   teste da vitrine confere que não existe `custo:` no arquivo.
 - **Prévia do link no WhatsApp usa endereço completo** nas tags `og:` do
-  `vitrine.html` (`https://gemeos-motors.vercel.app/...`). Mudou o domínio,
+  `vitrine.html` (`https://gemeosmotors.com.br/...`). Mudou o domínio,
   troque lá.
-- **`.vercelignore` decide o que sobe.** Notas, scripts, testes, pastas com `_`,
-  fotos da Apple, vídeos do iPhone e os PNG/JPG originais ficam de fora. Arquivo
-  novo que o site precise e que caia numa dessas regras não aparece no ar.
+- **`.dockerignore` decide o que entra na imagem.** Notas em Python, testes,
+  pastas com `_` na raiz, vídeos do iPhone e os PNG/JPG originais ficam de fora
+  (os `scripts/*.mjs` entram: migrations e cópias). Arquivo novo que o site
+  precise e que caia numa dessas regras não aparece no ar.
+- **Mídia do chat só sobrevive no volume `/data`.** Qualquer arquivo gravado fora
+  dele some na próxima implantação. Sem o volume, o container nem sobe (de
+  propósito).
+- **O banco novo vem vazio de tabelas e se monta sozinho** ao subir o container
+  (migrations no `scripts/iniciar.mjs`). Migration nova: `npm run db:generate`,
+  commit, Implantar — não precisa rodar nada no servidor.
+- **IP do visitante** vem do cabeçalho `x-real-ip`, que o proxy do EasyPanel
+  (Traefik) preenche. Rodando sem proxy, fica vazio.
 - **`sem_acento` em Python ≠ `semAcento` em JavaScript** (o `isalnum()` do Python
   aceita "ª"). O `baixar_fotos_motos.py` usa a mesma regra do `estoque.js`.
 - **Só o `.webp` vai para o GitHub.** Depois de acrescentar foto em
   `public/fotos/`, rodar `python otimizar_fotos.py` **e**
   `python gerar_lista_fotos.py`.
-- **IA pelo AI Gateway da Vercel** exige cartão cadastrado na conta, mesmo no
-  crédito grátis. Sem isso a resposta é "requires a valid credit card" e o
-  sistema mostra "A IA ainda não está ativada".
+- **IA pelo AI Gateway da Vercel** (`lib/ia/cliente.ts`) é o último pedaço
+  ligado à Vercel: exige cartão na conta. Trocar o provedor antes de ligar a IA.
 
 ## Como mexer
 
 ```
 npm run dev                      # sistema em http://localhost:3000
 npm run db:generate              # depois de mudar lib/db/schema.ts
-npm run db:migrate               # aplica no banco do .env.local
+npm run db:migrate               # aplica no banco do .env.local (no VPS é automático)
 python baixar_fotos_motos.py     # baixa a foto oficial de cada moto do site da loja
 python otimizar_fotos.py         # gera o .webp (obrigatório após baixar)
 python gerar_lista_fotos.py      # atualiza public/fotos-disponiveis.js (obrigatório)
@@ -283,16 +314,15 @@ python gerar_lista_fotos.py      # atualiza public/fotos-disponiveis.js (obrigat
 
 ## O que falta (em ordem de impacto)
 
-1. **Cadastrar o cartão no AI Gateway da Vercel** — liga diagnóstico de perda,
-   triagem do atendimento e apoio da OS. O código já está pronto.
-2. **WhatsApp real** — conta WhatsApp Business na Meta, credenciais nas
-   variáveis da Vercel e o webhook `/api/webhooks/whatsapp` cadastrado no app da
-   Meta. Mídia recebida ainda precisa ser baixada e guardada (Vercel Blob).
-3. **Vitrine lendo o estoque do banco** — hoje ela mostra o exemplo do
+1. **Terminar a saída da Vercel** — rodar as duas cópias (banco e mídia), conferir
+   no teste e desligar Vercel, Neon e Blob.
+2. **IA sem Vercel** — trocar o provedor de `lib/ia/cliente.ts` (hoje AI Gateway)
+   antes de ligar diagnóstico de perda, triagem e apoio da OS.
+3. **WhatsApp real** — credenciais da Meta em Configurações e o webhook
+   `https://<SITE_URL>/api/webhooks/whatsapp` cadastrado no app da Meta.
+4. **Vitrine lendo o estoque do banco** — hoje ela mostra o exemplo do
    `estoque.js`; o sistema da equipe já tem o estoque de verdade.
-4. **Mídia do chat simulado** fica gravada dentro do banco (limite de 2 MB);
-   com o WhatsApp real, passar para armazenamento de arquivos.
-5. **Upload de foto do veículo pelo sistema** — principalmente seminovas.
+5. **Upload de foto do veículo pelo sistema.**
 6. Atualização em tempo real no chat (hoje consulta a cada 3 s com a tela aberta).
 7. Tirar do ar o `gemeos-do-iphone.vercel.app` (precisa da outra conta).
 

@@ -28,7 +28,7 @@ export type ConfigWhatsApp = {
 const VAZIO: Guardado = { ativo: false, telefone: "", phoneNumberId: "", wabaId: "", verifyToken: "", tokenCifrado: "", appSecretCifrado: "" };
 
 /* Token e segredo do app ficam cifrados (AES-256-GCM) no banco; a chave sai do
-   SESSION_SECRET, que só existe na Vercel. O repositório é público: nada disso
+   SESSION_SECRET, que só existe na aba Ambiente do EasyPanel. O repositório é público: nada disso
    pode aparecer em arquivo. */
 function chave() {
   const s = process.env.SESSION_SECRET;
@@ -127,8 +127,8 @@ async function gravar(valor: Guardado, usuarioId: number) {
     .onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor, atualizadoEm: new Date(), atualizadoPor: usuarioId } });
 }
 
-/** Endereço público que a Meta chama. No VPS vem de SITE_URL; no Vercel, do domínio de produção. */
+/** Endereço público que a Meta chama: o domínio em SITE_URL (aba Ambiente do EasyPanel). */
 export function urlCallback() {
-  const host = (process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || "gemeos-motors.vercel.app").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const host = (process.env.SITE_URL || "teste.gemeosmotors.com.br").replace(/^https?:\/\//, "").replace(/\/+$/, "");
   return `https://${host}/api/webhooks/whatsapp`;
 }

@@ -63,3 +63,6 @@ skills-lock.json
 
 # relatório dos testes de ponta a ponta (Playwright)
 playwright-report/
+
+# mídia do chat gravada no computador durante o desenvolvimento (no VPS fica em /data/midia)
+.midia/

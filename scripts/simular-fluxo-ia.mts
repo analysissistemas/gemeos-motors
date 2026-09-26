@@ -17,7 +17,7 @@
    ============================================================ */
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
-import { neon } from "@neondatabase/serverless";
+import pg from "pg";
 import { CAMPOS_DO_ITEM, decidirEstoque, type ItemEstoque } from "../lib/ia/estoque-tipos.ts";
 import { criarModeloOpenAI, custoEstimadoUsd, ENDPOINT_OPENAI, MODELO_PADRAO, type ChamarModelo } from "../lib/ia/modelo-openai.ts";
 import { CONTROLE_PADRAO, type ControleIa } from "../lib/ia/permissoes.ts";
@@ -40,12 +40,15 @@ if (!process.env.DATABASE_URL) abortar("DATABASE_URL ausente no .env.local.");
 const oculta = (s: string) => (chave ? s.split(chave).join("[chave oculta]") : s);
 
 /* ---------------- leitura do banco: só SELECT ---------------- */
-const sql = neon(process.env.DATABASE_URL);
-const linhas = (await sql`select id, tipo, marca, modelo, versao, cor, condicao, status from veiculos limit 1000`) as unknown as ItemEstoque[];
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+const ler = async (texto: string) => (await pool.query(texto)).rows;
+const linhas = (await ler("select id, tipo, marca, modelo, versao, cor, condicao, status from veiculos limit 1000")) as unknown as ItemEstoque[];
 if (linhas[0] && Object.keys(linhas[0]).sort().join() !== [...CAMPOS_DO_ITEM].sort().join()) abortar("as colunas lidas do estoque não são exatamente as permitidas.");
-const modelosCatalogo = (await sql`select nome, marca from modelos`) as unknown as { nome: string; marca: string | null }[];
-const publicadas = (await sql`select secao, conteudo, versao from ia_prompt_versoes where status = 'publicada'`) as unknown as { secao: string; conteudo: string; versao: number }[];
-const conhecimento = (await sql`select categoria, titulo, conteudo from ia_conhecimento where ativo = true order by categoria, titulo`) as unknown as { categoria: string; titulo: string; conteudo: string }[];
+const modelosCatalogo = (await ler("select nome, marca from modelos")) as unknown as { nome: string; marca: string | null }[];
+const publicadas = (await ler("select secao, conteudo, versao from ia_prompt_versoes where status = 'publicada'")) as unknown as { secao: string; conteudo: string; versao: number }[];
+const conhecimento = (await ler("select categoria, titulo, conteudo from ia_conhecimento where ativo = true order by categoria, titulo")) as unknown as { categoria: string; titulo: string; conteudo: string }[];
+
+await pool.end();
 
 const promptSistema = compilarPrompt(publicadas, conhecimento);
 const promptHash = createHash("sha256").update(promptSistema).digest("hex").slice(0, 12);

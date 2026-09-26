@@ -28,7 +28,7 @@ export class ProvedorSimulado implements ProvedorMensagens {
    PROVEDOR WHATSAPP CLOUD API (Meta)
    Só é usado quando a API Oficial está ATIVA em Configurações e o token e o
    ID do número estão salvos. Sem isso, o sistema continua no simulado e não
-   finge conexão. (As variáveis WHATSAPP_* da Vercel ainda servem de reserva.)
+   finge conexão. (As variáveis WHATSAPP_* do ambiente ainda servem de reserva.)
    ============================================================ */
 export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   readonly id = "whatsapp_cloud" as const;

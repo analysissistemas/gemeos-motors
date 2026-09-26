@@ -7,9 +7,9 @@
    - os registros de histórico dessas entidades
    Dado real nunca tem essa marca. Uso: npm run test:limpar
    ============================================================ */
-import { neon } from "@neondatabase/serverless";
+import { criarSql } from "./sql.mjs";
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = criarSql(process.env.DATABASE_URL);
 
 const ids = async (q) => (await q).map((r) => r.id);
 const cli = await ids(sql`select id from clientes where nome like 'E2E %'`);
@@ -54,3 +54,4 @@ const maxUsr = (await sql`select coalesce(max(id), 0)::int as m from usuarios`)[
 await sql.query(`alter table usuarios alter column id restart with ${maxUsr + 1}`);
 
 console.log(`limpeza E2E: ${cli.length} clientes, ${vei.length} veículos, ${neg.length} negócios, ${ven.length} vendas, ${os.length} OS, ${conv.length} conversas, ${usr.length} usuários`);
+await sql.end();

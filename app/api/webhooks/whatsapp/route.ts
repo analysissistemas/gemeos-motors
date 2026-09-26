@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
 import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
-import { blobDisponivel, guardarMidia } from "@/lib/mensageria/midia";
+import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { medirDuracao } from "@/lib/mensageria/audio-formatos";
@@ -96,11 +96,12 @@ export async function POST(req: NextRequest) {
 
 type MensagemMeta = NonNullable<ValorMeta["messages"]>[number];
 
-/* A Meta manda só o id da mídia: baixamos com o token e guardamos no Blob
-   privado. Se falhar, a mensagem entra mesmo assim, sem o arquivo. */
+/* A Meta manda só o id da mídia: baixamos com o token e guardamos no disco do
+   VPS (volume /data, fora do alcance público). Se falhar, a mensagem entra mesmo
+   assim, sem o arquivo. */
 async function baixarEGuardar(cfg: Awaited<ReturnType<typeof lerConfigWhatsApp>>, m: MensagemMeta): Promise<{ midia: Midia | null; duracao: number | null }> {
   const anexo = m.image ?? m.document ?? m.audio;
-  if (!anexo || !blobDisponivel()) return { midia: null, duracao: null };
+  if (!anexo || !armazenamentoDisponivel()) return { midia: null, duracao: null };
   try {
     const arq = await new ProvedorWhatsAppCloud(cfg).baixarMidia(anexo.id);
     if (!arq) return { midia: null, duracao: null };
