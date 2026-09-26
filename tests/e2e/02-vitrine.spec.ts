@@ -26,6 +26,44 @@ test("vitrine abre sem parcela nem carnê, com acessórios e clientes reais", as
   await expect(page.getByText("Quais as formas de pagamento?")).toBeVisible();
 });
 
+/* muito cliente toca na foto: foto, nome e ficha abrem o mesmo WhatsApp do botão.
+   E desde 26/09/2026 o MM3 é moto elétrica e a palavra "triciclo" saiu do site. */
+test("foto, nome e ficha do card abrem o mesmo WhatsApp do botão; sem triciclo", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __zap: string[]; open: (u?: string | URL) => null };
+    w.__zap = [];
+    w.open = (u) => { w.__zap.push(String(u)); return null; };
+  });
+  await page.goto("/");
+  const abertos = () => page.evaluate(() => (window as unknown as { __zap: string[] }).__zap.splice(0));
+
+  expect(await page.locator("body").innerText()).not.toMatch(/tricicl/i);
+  const html = await page.content();
+  expect(html).not.toMatch(/tricicl/i);
+  const motos = page.locator("#cat-motos-eletricas");
+  await expect(motos.locator("article.prod", { hasText: "MM3" })).toBeVisible();
+
+  for (const nome of ["TANK AG11", "MM3", "Baú 28 litros"]) {
+    const card = page.locator("article.prod").filter({ has: page.locator(".prod-nome", { hasText: nome }) });
+    await card.scrollIntoViewIfNeeded();
+    await card.locator(".btn-consultar").click();
+    const [doBotao] = await abertos();
+    expect(doBotao).toContain("https://wa.me/");
+    expect(decodeURIComponent(doBotao)).toContain(`*${nome}*`);
+    const alvos = [card.locator(".prod-foto"), card.locator(".prod-nome a")];
+    if (await card.locator(".ficha").count()) alvos.push(card.locator(".ficha .ficha-i").first());
+    for (const alvo of alvos) {
+      await alvo.click();
+      expect(await abertos()).toEqual([doBotao]);
+    }
+    /* pelo teclado: Enter no nome */
+    await card.locator(".prod-nome a").focus();
+    await page.keyboard.press("Enter");
+    expect(await abertos()).toEqual([doBotao]);
+  }
+  await expect(page).toHaveURL(/\/$/);   // o link do nome não pulou para "#"
+});
+
 test("vitrine no celular não rola para o lado", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();

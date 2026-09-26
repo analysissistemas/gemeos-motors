@@ -17,7 +17,7 @@
    video = id do vídeo no YouTube, quando a loja gravou um daquele modelo. */
 /* eletrico:true é o que libera os selos "sem CNH" e "sem IPVA" na vitrine.
    genero define se a tela escreve "seminova" ou "seminovo". */
-const GENERO = {moto:"f", triciclo:"m", carro:"m", acessorio:"m"};
+const GENERO = {moto:"f", carro:"m", acessorio:"m"};
 
 const CATALOGO = {
   "TANK AG11": {
@@ -57,14 +57,12 @@ const CATALOGO = {
     var:["Única"], cor:["Branca"], base:5200, tipo:"Moto elétrica",
     ficha:{motor:"500W", autonomia:"Até 40 km", velocidade:"—",
            bateria:"Chumbo-ácido selada 48V 12Ah", pneu:"—", peso:"150 kg", recarga:"—"}
-  }
-};
-
-/* O triciclo tem seção própria: quem procura triciclo não está procurando
-   moto, e vice-versa. Mesma ficha técnica, mesma regra de preço. */
-const CAT_TRICICLO = {
+  },
+  /* O MM3 tinha seção própria até 26/09/2026. A pedido do dono, a vitrine só
+     fala em moto elétrica: ele entra aqui como os outros, com o mesmo preço,
+     cor e ficha. Fica por último para manter o mesmo id do card. */
   "MM3": {
-    var:["Única"], cor:["Vinho"], base:10500, tipo:"Triciclo elétrico",
+    var:["Única"], cor:["Vinho"], base:10500, tipo:"Moto elétrica",
     ficha:{motor:"1000W", autonomia:"45 a 55 km", velocidade:"32 km/h",
            bateria:"Lítio 60V 24Ah", pneu:"300/10", peso:"180 kg", recarga:"6h a 8h"}
   }
@@ -133,7 +131,7 @@ function fichaEmPedacos(ficha){
 }
 
 /** Todos os catálogos na ordem de procura — um lugar só para acrescentar linha. */
-const _CATALOGOS = [CATALOGO, CAT_TRICICLO, CAT_ACES];
+const _CATALOGOS = [CATALOGO, CAT_ACES];
 
 /** Info do modelo (base, cores, ficha, gênero) em qualquer catálogo. */
 function _infoModelo(modelo){
@@ -183,16 +181,14 @@ function _gerarQuantidade(catalogo, categoria){
 }
 
 const MOTOS      = _gerarVeiculos(CATALOGO,       "Motos elétricas");
-const TRICICLOS  = _gerarVeiculos(CAT_TRICICLO,   "Triciclos");
 const ACESSORIOS = _gerarQuantidade(CAT_ACES,     "Acessórios");
 
 /* tudo o que a loja vende, numa lista só */
-const PRODUTOS = [...MOTOS, ...TRICICLOS, ...ACESSORIOS];
+const PRODUTOS = [...MOTOS, ...ACESSORIOS];
 
 /* as seções do catálogo, na ordem em que aparecem para o cliente */
 const CATEGORIAS = [
   {nome:"Motos elétricas",   titulo:"Motos elétricas",   sub:"Sem CNH, sem emplacamento e sem IPVA. Você carrega na tomada de casa.", catalogo:CATALOGO,      campoVar:"var"},
-  {nome:"Triciclos",         titulo:"Triciclos",         sub:"Três rodas, mais estabilidade e assento para dois.",                    catalogo:CAT_TRICICLO,  campoVar:"var"},
   {nome:"Acessórios",        titulo:"Acessórios",        sub:"Capacetes e baú para o dia a dia. Consulte cor e disponibilidade no WhatsApp.", catalogo:CAT_ACES,      campoVar:"var"}
 ];
 

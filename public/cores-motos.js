@@ -17,7 +17,7 @@ const CORES_MOTOS = {
   "Branca":     {hex:"#f4f5f7", borda:true},   // TANK AG11, T1, M6, DF17, TCN Basket
   "Cinza":      {hex:"#7c8085"},               // AG08, com detalhe laranja
   "Bege":       {hex:"#e8dfcb", borda:true},   // T3 Retrô
-  "Vinho":      {hex:"#6d1f33"},               // MM3, o triciclo
+  "Vinho":      {hex:"#6d1f33"},               // MM3
 
   /* cores comuns em moto elétrica, prontas para quando a loja receber */
   "Preta":      {hex:"#1f2020"},
