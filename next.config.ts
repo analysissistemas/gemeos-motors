@@ -33,6 +33,16 @@ const nextConfig: NextConfig = {
       /* o sistema nunca é embutido em outro site (evita clique sequestrado) */
       { source: "/sistema/:path*", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
       { source: "/login", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
+      /* Cache no navegador da loja: sem isso (max-age=0) cada visita perguntava de novo por
+         cada foto e script, e cada pergunta custa ~0,17 s até o VPS. Fotos e vídeo: 1 dia
+         (e até 1 semana mostrando o guardado enquanto confere). Scripts com ?v=N são imutáveis:
+         mudou o arquivo, sobe o N no vitrine.html. O vitrine.html continua sem cache. */
+      { source: "/:pasta(fotos|social|video|tutoriais)/:arquivo*", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }] },
+      {
+        source: "/:script(estoque|cores-motos|cores-sistema|catalogo-sistema|foto-produto|fotos-disponiveis).js",
+        has: [{ type: "query", key: "v" }],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

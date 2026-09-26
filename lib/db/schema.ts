@@ -109,6 +109,9 @@ export const clientes = pgTable(
     uniqueIndex("clientes_cpf_unico").on(t.cpf).where(sql`${t.cpf} is not null`),
     index("clientes_nome_idx").on(sql`lower(${t.nome})`),
     index("clientes_responsavel_idx").on(t.responsavelId),
+    /* toda mensagem recebida procura o cliente pelo telefone (lib/mensageria/servico.ts) */
+    index("clientes_whatsapp_idx").on(t.whatsapp),
+    index("clientes_telefone_idx").on(t.telefone),
   ],
 );
 
