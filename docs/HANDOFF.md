@@ -14,19 +14,19 @@ travas, regras do dono, armadilhas). Este arquivo só diz **o que está no meio*
 
 ## Tarefas abertas (em ordem)
 
-### 1. Catálogo gerenciado no sistema + lançamentos + reservas — FEITO (26/09/2026, falta implantar)
+### 1. Catálogo gerenciado no sistema + lançamentos + reservas — FEITO E IMPLANTADO (26/09/2026)
 Juntado na `vitrine-html` (branch `catalogo-sistema`). Aba **Estoque → Catálogo**,
 tela **Reservas**, rotas `GET /api/vitrine/catalogo` e `POST /api/vitrine/reserva` no
 contrato que o site já usa, migration com os 3 acessórios e tutoriais. Testado em banco
 descartável (embedded-postgres UTF-8): e2e 20/20, lint e typecheck ok; lançamento aparece
 em destaque, reserva grava cliente + negócio (origem `reserva_lancamento`) sem duplicar,
 armadilha de robô dá 422, JSON sem custo nem estoque.
-- **Conferir no ar depois de Implantar (com o dono):** catálogo igual, com os 3
+- **LEMBRETE PARA O DONO (ainda não conferido):** no teste, confirmar: catálogo igual, com os 3
   acessórios; marcar lançamento em Estoque → Catálogo faz aparecer em destaque (até
   60 s de cache); reserva pelo site aparece em Reservas e no Funil.
-- **Pendência pequena:** o ajudante corrigiu uma contagem errada de reservas; o mesmo
-  jeito de escrever a consulta existe nas consultas antigas de clientes e conversas.
-  Vale conferir.
+- Contagem em subconsulta: sem junção na consulta, o drizzle escreve `${tabela.id}` como
+  `"id"` solto (pega a tabela de dentro). Corrigido no catálogo; as outras 20 consultas
+  de `lib/consultas` foram conferidas e estão certas (todas têm junção).
 - Para testar de novo: banco descartável com `embedded-postgres`, banco **UTF-8**
   (`create database x with encoding 'UTF8' template template0 lc_collate 'C' lc_ctype 'C'`),
   `node scripts/migrar.mjs` e `SEED_ADMIN_SENHA=... node scripts/semear.mjs` com
@@ -41,7 +41,7 @@ calado há mais de 24 h (erro 131047, já traduzido em `lib/mensageria/provedore
 Precisa: listar os templates aprovados da WABA, escolher e enviar com variáveis, e
 um jeito de o botão "Conversar" do contato compartilhado usar isso.
 
-### 3. Conferir no ar depois da próxima implantação (com o dono)
+### 3. Conferir no ar depois da próxima implantação — FEITO (o dono conferiu em 26/09/2026: tudo certo)
 - Configurações → API Oficial: token do usuário do sistema **chatsystem** + App
   Secret colados e "Testar conexão" ok (o Chrome tinha sobrescrito o token antes).
 - Mandar texto e áudio para um cliente: chegou como mensagem de voz? Risquinhos
