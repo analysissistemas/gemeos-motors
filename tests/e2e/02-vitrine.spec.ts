@@ -4,7 +4,7 @@ import { semRolagemLateral } from "./ajuda";
 /* a loja que o cliente vê: sem parcela, acessórios reais, fotos da loja */
 test("vitrine abre sem parcela nem carnê, com acessórios e clientes reais", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveURL(/\/vitrine/);
+  await expect(page).toHaveURL(/\/$/);
   const html = await page.content();
   expect(html).not.toMatch(/18x|carnê|parcel/i);
   /* custo não pode chegar ao cliente nem como dado no código-fonte */

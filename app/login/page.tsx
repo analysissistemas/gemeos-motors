@@ -21,7 +21,7 @@ export default async function PaginaLogin({ searchParams }: { searchParams: Prom
           <p className="mt-1 text-[13px] text-ink-2">Atendimento, funil, vendas, estoque e assistência.</p>
         </div>
         <FormularioLogin de={de} />
-        <Link href="/vitrine" className="mt-6 block text-center text-[12.5px] text-ink-3 hover:text-ink">
+        <Link href="/" className="mt-6 block text-center text-[12.5px] text-ink-3 hover:text-ink">
           ← Voltar para a loja
         </Link>
       </div>

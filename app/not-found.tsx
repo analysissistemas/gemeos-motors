@@ -7,7 +7,7 @@ export default function NaoEncontrado() {
       titulo="Página não encontrada"
       texto="O endereço pode estar incompleto ou o conteúdo foi removido. Volte para o início e continue de lá."
       acoes={[
-        { rotulo: "Ver as motos", href: "/vitrine", primaria: true },
+        { rotulo: "Ver as motos", href: "/", primaria: true },
         { rotulo: "Entrar no sistema", href: "/sistema" },
       ]}
     />

@@ -55,6 +55,13 @@ commitar `.env*`, senha ou token.
 
 **Não é ligado ao GitHub**: `git push` não atualiza o site.
 
+> **26/09/2026 — saída da Vercel.** O dono decidiu levar o sistema para o VPS
+> da Hostinger (EasyPanel, IP `2.25.240.204`), compilado pelo `Dockerfile` da
+> raiz. Os testes são em **teste.gemeosmotors.com.br**; o domínio principal fica
+> em manutenção (`MODO_MANUTENCAO=1`) até ser republicado. `SITE_URL` define o
+> endereço do callback do WhatsApp. O botão "Chamar no WhatsApp" da tela de
+> manutenção vai para **5511948709625**.
+
 Variáveis no painel da Vercel: `DATABASE_URL` e afins (vêm da integração Neon),
 `SESSION_SECRET` (assina o cookie de sessão). Opcionais: `IA_MODELO` (padrão
 `anthropic/claude-sonnet-5`) e, para o WhatsApp real,
@@ -128,7 +135,7 @@ precisa mudar junto. Carro e moto a combustão existem **só aqui**.
 
 | Pasta | O quê |
 |---|---|
-| `public/vitrine.html` + `public/*.js` | A loja do cliente (estática). `/` redireciona para `/vitrine` |
+| `public/vitrine.html` + `public/*.js` | A loja do cliente (estática). `/` serve a vitrine (`/vitrine` redireciona para `/`) |
 | `app/login`, `app/sistema/*` | Telas da equipe (Next.js App Router, componentes de servidor + ações de servidor) |
 | `app/assinar/[token]` | Página pública de assinatura do cliente |
 | `app/api/*` | PDFs, contadores do menu, sincronização do chat, webhook do WhatsApp |

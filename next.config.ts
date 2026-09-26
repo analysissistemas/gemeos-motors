@@ -5,18 +5,21 @@ import type { NextConfig } from "next";
    mantêm vivos os endereços antigos — o botão "Sistema" da vitrine aponta para
    login.html e, com sessão, para index.html; os dois agora caem no app novo. */
 const nextConfig: NextConfig = {
+  /* servidor enxuto para o Docker do VPS (EasyPanel); a Vercel ignora */
+  output: "standalone",
   serverExternalPackages: ["@react-pdf/renderer"],
   /* anexos do chat (até 2 MB) viajam codificados, ~35% maiores; a Vercel corta em 4,5 MB */
   experimental: { authInterrupts: true, serverActions: { bodySizeLimit: "4mb" } },
   async redirects() {
     return [
-      { source: "/", destination: "/vitrine", permanent: false },
+      /* a loja abre no endereço limpo (gemeosmotors.com.br); /vitrine antigo cai nele */
+      { source: "/vitrine", destination: "/", permanent: false },
       { source: "/login.html", destination: "/login", permanent: false },
       { source: "/index.html", destination: "/sistema", permanent: false },
     ];
   },
   async rewrites() {
-    return [{ source: "/vitrine", destination: "/vitrine.html" }];
+    return { beforeFiles: [{ source: "/", destination: "/vitrine.html" }], afterFiles: [], fallback: [] };
   },
   async headers() {
     const seguranca = [

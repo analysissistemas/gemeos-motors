@@ -127,8 +127,8 @@ async function gravar(valor: Guardado, usuarioId: number) {
     .onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor, atualizadoEm: new Date(), atualizadoPor: usuarioId } });
 }
 
-/** Endereço público que a Meta chama. No Vercel usa o domínio de produção. */
+/** Endereço público que a Meta chama. No VPS vem de SITE_URL; no Vercel, do domínio de produção. */
 export function urlCallback() {
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || "gemeos-motors.vercel.app";
+  const host = (process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || "gemeos-motors.vercel.app").replace(/^https?:\/\//, "").replace(/\/+$/, "");
   return `https://${host}/api/webhooks/whatsapp`;
 }
