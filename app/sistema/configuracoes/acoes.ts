@@ -133,6 +133,14 @@ export async function acaoSalvarApiOficial(dados: Record<string, unknown>) {
     if (d.ativo && !(d.token || atual.token)) throw new ErroRegra("Cole o token permanente antes de ativar a API Oficial.");
     if (d.ativo && !d.phoneNumberId) throw new ErroRegra("Informe o ID do número de telefone antes de ativar.");
     if (d.ativo && !(d.appSecret || atual.appSecret)) throw new ErroRegra("Informe o segredo do app da Meta antes de ativar: sem ele as mensagens recebidas não podem ser conferidas.");
+    if (d.appSecret && !/^[0-9a-f]{32}$/i.test(d.appSecret)) throw new ErroRegra("Esse não parece o segredo do app: ele tem 32 letras e números (Meta for Developers > Configurações do app > Básico). Nada foi salvo.");
+    // Token novo só entra se a Meta aceitar: um token errado no lugar do bom derruba o envio sem ninguém perceber.
+    if (d.token) {
+      const phoneNumberId = d.phoneNumberId || atual.phoneNumberId;
+      if (!phoneNumberId) throw new ErroRegra("Informe o ID do número de telefone para conferir o token.");
+      const erro = await conferirTokenNaMeta(d.token, phoneNumberId);
+      if (erro) throw new ErroRegra(`A Meta recusou esse token (${erro}). O token anterior continua salvo.`);
+    }
     await salvarConfigWhatsApp(d, u.id);
     await registrarLog(u, { acao: "configuracao.whatsapp", entidade: "configuracao", descricao: `Salvou a API Oficial do WhatsApp (${d.ativo ? "ativa" : "desativada"})` });
     revalidatePath("/sistema/configuracoes");
@@ -151,15 +159,30 @@ export async function acaoGerarVerifyToken() {
   }, "Novo token gerado. Cole o mesmo na Meta.");
 }
 
+async function consultarNumero(token: string, phoneNumberId: string) {
+  const versao = process.env.WHATSAPP_API_VERSAO || "v21.0";
+  const r = await fetch(`https://graph.facebook.com/${versao}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`, { headers: { Authorization: `Bearer ${token}` } });
+  const j = (await r.json().catch(() => ({}))) as { display_phone_number?: string; verified_name?: string; error?: { message?: string } };
+  return { ok: r.ok, erro: j.error?.message ?? `HTTP ${r.status}`, nome: j.verified_name, numero: j.display_phone_number };
+}
+
+/** Devolve o motivo da recusa, ou null se a Meta aceitou o token. */
+async function conferirTokenNaMeta(token: string, phoneNumberId: string) {
+  try {
+    const r = await consultarNumero(token, phoneNumberId);
+    return r.ok ? null : r.erro;
+  } catch {
+    throw new ErroRegra("Não deu para falar com a Meta agora para conferir o token. Tente de novo em instantes; nada foi salvo.");
+  }
+}
+
 export async function acaoTestarApiOficial() {
   return executar(async () => {
     await autorizar("config.gerenciar");
     const c = await lerConfigWhatsApp();
     if (!c.token || !c.phoneNumberId) throw new ErroRegra("Salve o token e o ID do número primeiro.");
-    const versao = process.env.WHATSAPP_API_VERSAO || "v21.0";
-    const r = await fetch(`https://graph.facebook.com/${versao}/${c.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`, { headers: { Authorization: `Bearer ${c.token}` } });
-    const j = (await r.json().catch(() => ({}))) as { display_phone_number?: string; verified_name?: string; error?: { message?: string } };
-    if (!r.ok) throw new ErroRegra(`A Meta recusou: ${j.error?.message ?? `HTTP ${r.status}`}`);
-    return `${j.verified_name ?? "Número"} · ${j.display_phone_number ?? c.phoneNumberId}`;
+    const r = await consultarNumero(c.token, c.phoneNumberId);
+    if (!r.ok) throw new ErroRegra(`A Meta recusou: ${r.erro}`);
+    return `${r.nome ?? "Número"} · ${r.numero ?? c.phoneNumberId}`;
   });
 }

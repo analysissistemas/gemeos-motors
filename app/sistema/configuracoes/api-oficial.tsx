@@ -18,6 +18,18 @@ export type ApiOficial = {
   appSecretSalvo: boolean;
 };
 
+/* Campo de senha o Chrome preenche sozinho com a senha salva do site, mesmo com
+   autoComplete="off" — e o Salvar gravava essa senha no lugar do token da Meta.
+   Campo de texto com as letras mascaradas não recebe senha salva. */
+const semAutopreencher = {
+  type: "text",
+  autoComplete: "off",
+  spellCheck: false,
+  "data-1p-ignore": true,
+  "data-lpignore": "true",
+  style: { WebkitTextSecurity: "disc" } as React.CSSProperties,
+} as const;
+
 function Copiavel({ valor }: { valor: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -61,10 +73,10 @@ export function PainelApiOficial({ inicial, urlCallback }: { inicial: ApiOficial
             <Entrada value={f.wabaId} onChange={set("wabaId")} />
           </Campo>
           <Campo rotulo="Token permanente" dica={inicial.tokenSalvo ? "Já salvo e guardado com criptografia. Deixe vazio para manter." : "Fica criptografado e nunca volta para a tela."}>
-            <Entrada type="password" autoComplete="off" value={f.token} onChange={set("token")} placeholder={inicial.tokenSalvo ? "••••••••••••••••" : "EAA..."} />
+            <Entrada {...semAutopreencher} name="gm-meta-token" value={f.token} onChange={set("token")} placeholder={inicial.tokenSalvo ? "••••••••••••••••" : "EAA..."} />
           </Campo>
           <Campo rotulo="Segredo do app (App Secret)" dica={inicial.appSecretSalvo ? "Já salvo. Deixe vazio para manter." : "Meta for Developers > Configurações do app > Básico. Serve para conferir que as mensagens recebidas vêm mesmo da Meta."}>
-            <Entrada type="password" autoComplete="off" value={f.appSecret} onChange={set("appSecret")} placeholder={inicial.appSecretSalvo ? "••••••••••••••••" : ""} />
+            <Entrada {...semAutopreencher} name="gm-meta-app-secret" value={f.appSecret} onChange={set("appSecret")} placeholder={inicial.appSecretSalvo ? "••••••••••••••••" : ""} />
           </Campo>
           <Alternar marcado={f.ativo} aoMudar={(v) => setF({ ...f, ativo: v })} rotulo="Ativar a API Oficial" descricao="Ligado: as conversas passam a enviar e receber pelo WhatsApp de verdade. Desligado: continua o modo simulado." />
           <div className="flex flex-wrap justify-end gap-2">
