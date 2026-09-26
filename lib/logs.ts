@@ -10,6 +10,8 @@ export type EntradaLog = {
   descricao: string; // frase pronta para ler: "Moveu o negócio X de A para B"
   dados?: Record<string, unknown>;
   origem?: "sistema" | "assinatura_publica" | "webhook";
+  /** nome que aparece no histórico quando não há usuário (ex.: "Site") */
+  autor?: string;
 };
 
 async function ipAtual() {
@@ -32,7 +34,7 @@ export async function registrarLog(
   await alvo.insert(schema.logs).values({
     usuarioId: quem?.id ?? null,
     usuarioNome:
-      quem?.nome ?? (e.origem === "assinatura_publica" ? "Cliente (assinatura)" : e.origem === "webhook" ? "WhatsApp" : "Sistema"),
+      quem?.nome ?? e.autor ?? (e.origem === "assinatura_publica" ? "Cliente (assinatura)" : e.origem === "webhook" ? "WhatsApp" : "Sistema"),
     acao: e.acao,
     entidade: e.entidade,
     entidadeId: e.entidadeId == null ? null : String(e.entidadeId),

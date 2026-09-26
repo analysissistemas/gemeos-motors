@@ -112,17 +112,29 @@ export const clientes = pgTable(
   ],
 );
 
-/* ---------- catálogo de modelos (ficha técnica e preço de tabela) ---------- */
+/* ---------- catálogo de modelos (ficha técnica e preço de tabela) ----------
+   É também o catálogo do site (/api/vitrine/catalogo): a equipe decide o que
+   aparece, com ou sem estoque. Acessório entra aqui sem ficha, com descrição.
+   precoTabela null = "Consultar preço" no site. */
 export const modelos = pgTable(
   "modelos",
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    tipo: text().notNull(), // moto_eletrica | moto_combustao | carro
+    tipo: text().notNull(), // moto_eletrica | moto_combustao | carro | acessorio
     marca: text(),
     nome: text().notNull(),
     precoTabela: dinheiro(),
     eletrico: boolean().notNull().default(true),
     ficha: jsonb().$type<Record<string, string>>(),
+    descricao: text(),
+    /* foto principal do card (/api/vitrine/foto/...; pública) */
+    fotoUrl: text(),
+    mostrarNoSite: boolean().notNull().default(true),
+    disponibilidade: text().notNull().default("consultar"), // pronta_entrega | sob_encomenda | consultar
+    /* lançamento: destaque no site e formulário de reserva */
+    lancamento: boolean().notNull().default(false),
+    lancamentoTexto: text(), // frase curta: "Chega em outubro"
+    ordem: integer().notNull().default(0),
     ativo: boolean().notNull().default(true),
     criadoEm: criadoEm(),
   },
@@ -840,4 +852,27 @@ export const testDrives = pgTable(
     index("test_drives_conversa_idx").on(t.conversaId),
     index("test_drives_cliente_idx").on(t.clienteId),
   ],
+);
+
+/* ---------- reservas de lançamento (formulário público do site) ----------
+   O cliente escolhe o modelo em lançamento, deixa nome, WhatsApp e cor; o
+   sistema acha ou cria o cliente e abre um negócio no funil. `telefone` é só
+   dígitos, com o 55. `ip` serve para limitar abuso do formulário. */
+export const reservasLancamento = pgTable(
+  "reservas_lancamento",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    modeloId: integer().references(() => modelos.id, { onDelete: "set null" }),
+    clienteId: integer().references(() => clientes.id, { onDelete: "set null" }),
+    negocioId: integer().references(() => negocios.id, { onDelete: "set null" }),
+    nome: text().notNull(),
+    telefone: text().notNull(),
+    cor: text(),
+    status: text().notNull().default("nova"), // nova | contatada | confirmada | cancelada
+    observacoes: text(),
+    ip: text(),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [index("reservas_status_idx").on(t.status, t.criadoEm), index("reservas_modelo_idx").on(t.modeloId)],
 );

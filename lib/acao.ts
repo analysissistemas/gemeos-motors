@@ -7,8 +7,15 @@ export type Resultado<T = undefined> =
   | { ok: true; dados: T; mensagem?: string }
   | { ok: false; erro: string; campos?: Record<string, string> };
 
-/** Erro de regra de negócio: a mensagem vai direto para a tela. */
-export class ErroRegra extends Error {}
+/** Erro de regra de negócio: a mensagem vai direto para a tela (e `campos`, se vier, destaca o campo). */
+export class ErroRegra extends Error {
+  constructor(
+    mensagem: string,
+    public campos?: Record<string, string>,
+  ) {
+    super(mensagem);
+  }
+}
 
 type ErroPg = { code?: string; detail?: string; constraint?: string; cause?: ErroPg };
 
@@ -29,6 +36,7 @@ export async function executar<T>(fn: () => Promise<T>, mensagem?: string): Prom
     return { ok: true, dados, mensagem };
   } catch (e) {
     unstable_rethrow(e);
+    if (e instanceof ErroRegra && e.campos) return { ok: false, erro: e.message, campos: e.campos };
     if (e instanceof ErroAcesso || e instanceof ErroRegra) return { ok: false, erro: e.message };
     if (e instanceof ZodError) {
       const campos: Record<string, string> = {};
