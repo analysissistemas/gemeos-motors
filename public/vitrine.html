@@ -304,6 +304,14 @@ a{color:inherit;text-decoration:none}
 .prod-preco{margin-top:auto;padding-top:15px}
 .preco{font-size:24px;font-weight:720;letter-spacing:-.035em}
 .parc{font-size:12px;color:var(--tinta-2);margin-top:3px}
+/* ---------- PROMOÇÃO POR TEMPO LIMITADO ----------
+   Preço de antes riscado, o da promoção no lugar de sempre e a contagem
+   no amarelo da marca. Sem promoção, nada disto aparece. */
+.preco-de{font-size:13.5px;font-weight:500;color:var(--tinta-3);text-decoration:line-through}
+.promo-timer{display:inline-flex;flex-wrap:wrap;align-items:center;gap:0 5px;margin-top:7px;max-width:100%;
+  padding:4px 11px;border-radius:980px;background:var(--marca);color:var(--tinta);
+  font-size:11.5px;font-weight:700;letter-spacing:.01em}
+.promo-resta{font-variant-numeric:tabular-nums}
 .btn-consultar{
   margin-top:13px;width:100%;padding:11px;border-radius:980px;border:none;cursor:pointer;
   background:var(--zap);color:#053d1c;font-size:13px;font-weight:700;font-family:inherit;
@@ -794,10 +802,45 @@ function molde(tipo){
 const CHECK = `<svg class="ic-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 4 4 8-9"/></svg>`;
 const ALERTA = `<svg class="ic-alerta" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3 2 17h16L10 3Z"/><path d="M10 8.5v4M10 15h.01"/></svg>`;
 
+/* ============================================================
+   PROMOÇÃO POR TEMPO LIMITADO
+   Vem do sistema da equipe (/api/promocoes, público): modelo, preço
+   promocional e a hora do fim — nunca custo nem estoque.
+   Como o modelo casa: nome sem acento, sem maiúscula e sem espaço sobrando
+   dos dois lados ("T3 RETRÔ" no sistema = "t3 retro" = card "T3 RETRÔ").
+   A promoção só vale no card se o preço dela for MENOR que o do card; passou
+   da hora do fim, o card volta sozinho ao preço normal, sem recarregar.
+   Sistema fora do ar ou sem promoção: a vitrine fica exatamente como era.
+   ============================================================ */
+const PROMOS = {};    // modelo normalizado -> {preco, fim (ms)}
+const chaveModelo = s => (s||"").toString().normalize("NFD")
+  .replace(/[̀-ͯ]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+function promoDe(a){
+  if(a.porQuantidade) return null;
+  const pr = PROMOS[chaveModelo(a.modelo)];
+  if(!pr) return null;
+  const resta = pr.fim - Date.now();
+  const de = precoEscolhido(a);
+  if(resta <= 0 || de == null || !(pr.preco < de)) return null;
+  return {preco:pr.preco, de, resta, fim:pr.fim};
+}
+/* "2d 04:13:09" / "04:13:09" */
+function fmtResta(ms){
+  const t = Math.max(0, Math.floor(ms/1000)), dd = n => String(n).padStart(2,"0");
+  const d = Math.floor(t/86400), h = Math.floor(t%86400/3600), m = Math.floor(t%3600/60), sg = t%60;
+  return `${d ? d + "d " : ""}${dd(h)}:${dd(m)}:${dd(sg)}`;
+}
+/* "26/09 às 18:00" — para a mensagem do WhatsApp */
+function fmtFim(ms){
+  const x = new Date(ms), dd = n => String(n).padStart(2,"0");
+  return `${dd(x.getDate())}/${dd(x.getMonth()+1)} às ${dd(x.getHours())}:${dd(x.getMinutes())}`;
+}
+
 function card(a){
   const e = esc(a), o = opcoesDe(a);
   const zero = e.cond==="Zero km";
   const p = precoEscolhido(a);
+  const promo = promoDe(a);
   const temKm = a.km !== null && !a.porQuantidade;
   const pedacos = fichaEmPedacos(a.ficha);
   /* elétrica e a de gasolina não têm a mesma conversa: uma se vende por não
@@ -844,7 +887,10 @@ function card(a){
       ${a.reserva ? `<div class="reserva">${ALERTA} Chega na ${a.disponivelEm}. Dá para reservar a sua agora.</div>` : ""}
 
       <div class="prod-preco">
-        <div class="preco">${p == null ? "Consultar preço" : brl(p)}</div>
+        ${promo ? `<div class="preco-de">${brl(promo.de)}</div>` : ""}
+        <div class="preco">${promo ? brl(promo.preco) : p == null ? "Consultar preço" : brl(p)}</div>
+        ${promo ? `<div class="promo-timer" data-promo>Oferta termina em
+          <span class="promo-resta">${fmtResta(promo.resta)}</span></div>` : ""}
         <button class="btn-consultar" data-consultar="${a.id}">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Z"/></svg>
           ${a.reserva ? "Reservar agora"
@@ -914,6 +960,28 @@ function pinta(){
   revelar();
 }
 pinta();
+
+/* promoções: busca uma vez ao abrir; o relógio só liga se houver alguma */
+function redesenhaPromos(){
+  document.querySelectorAll(".prod").forEach(c=>{
+    const a = PRODUTOS.find(x=>x.id===+c.dataset.id); if(!a) return;
+    const pr = promoDe(a), tem = !!c.querySelector("[data-promo]");
+    if(pr && tem) c.querySelector(".promo-resta").textContent = fmtResta(pr.resta);
+    else if(pr || tem) c.outerHTML = card(a);     // entrou ou acabou a promoção
+  });
+}
+fetch("/api/promocoes", {cache:"no-store"})
+  .then(r => r.ok ? r.json() : null)
+  .then(d => {
+    (d && Array.isArray(d.promocoes) ? d.promocoes : []).forEach(x=>{
+      const preco = Number(x.precoPromocional), fim = Date.parse(x.fimEm);
+      if(x.modelo && preco > 0 && fim > Date.now()) PROMOS[chaveModelo(x.modelo)] = {preco, fim};
+    });
+    if(!Object.keys(PROMOS).length) return;
+    redesenhaPromos();
+    setInterval(redesenhaPromos, 1000);
+  })
+  .catch(()=>{});
 
 /* busca ao digitar, com uma pausa curta para não redesenhar a cada tecla */
 (function(){
@@ -991,7 +1059,8 @@ document.addEventListener("click", e=>{
       /* travessão e ponto-do-meio trocados por hífen: são caracteres de vários
          bytes e já perdemos emoji por codificação uma vez. Hífen é ASCII puro
          e chega inteiro em qualquer aparelho. */
-      `*${brl(precoEscolhido(a))}*`,
+      (p => p ? `*${brl(p.preco)}* - preço de promoção, válido até ${fmtFim(p.fim)}`
+              : `*${brl(precoEscolhido(a))}*`)(promoDe(a)),
       "",
       a.reserva   ? "Como faço para reservar?"
       : !eletrico ? "Posso ver de perto? A documentação está em dia?"
