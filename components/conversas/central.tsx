@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { BellRing, MessagesSquare } from "lucide-react";
+import { BellRing, MessagesSquare, PanelRightClose } from "lucide-react";
 import type { ContextoConversa, ItemConversa, MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { FiltroConversa } from "@/lib/consultas/conversas.tipos";
 import { ETAPAS, type Etapa } from "@/lib/dominio";
@@ -64,6 +64,8 @@ export function CentralConversas({
   const [dados, setDados] = useState<Aberta | null>(null);
   const [carregandoChat, setCarregandoChat] = useState(false);
   const [info, setInfo] = useState(false);
+  /* painel do cliente ao lado do chat (telas largas): começa recolhido, pedido do dono */
+  const [painelAberto, setPainelAberto] = useState(false);
   const [simulador, setSimulador] = useState(false);
   const [perda, setPerda] = useState<AlvoEtapa | null>(null);
   const [fechar, setFechar] = useState<AlvoEtapa | null>(null);
@@ -408,12 +410,12 @@ export function CentralConversas({
             notas={dados.notas}
             temMais={dados.temMais}
             carregando={carregandoChat}
-            equipe={equipe}
             usuarioId={usuario.id}
             respostas={respostas}
             simulado={simulado}
             aoVoltar={fecharConversa}
-            aoInfo={() => setInfo(true)}
+            aoInfo={() => (window.matchMedia("(min-width: 1280px)").matches ? setPainelAberto((v) => !v) : setInfo(true))}
+            painelAberto={painelAberto}
             aoCarregarAntigas={async () => {
               const primeira = dados.mensagens.find((m) => m.id > 0);
               if (!primeira) return;
@@ -427,8 +429,6 @@ export function CentralConversas({
             }}
             aoEnviar={enviar}
             aoAssumir={() => executarAcao(acaoAssumir(aberta))}
-            aoAtribuir={(rid) => executarAcao(acaoAtribuir(aberta, rid))}
-            aoStatus={(s) => executarAcao(acaoStatusConversa(aberta, s))}
           />
         ) : aberta ? (
           <div className="flex h-full flex-col gap-3 p-6">
@@ -443,7 +443,16 @@ export function CentralConversas({
         )}
       </section>
 
-      {aberta && contexto && <aside className="rolagem-fina hidden w-[360px] shrink-0 overflow-y-auto border-l border-linha p-4 xl:block">{painel}</aside>}
+      {aberta && contexto && painelAberto && (
+        <aside className="rolagem-fina hidden w-[360px] shrink-0 overflow-y-auto border-l border-linha p-4 xl:block">
+          <div className="mb-2 flex justify-end">
+            <button className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-trilho" onClick={() => setPainelAberto(false)} aria-label="Recolher painel">
+              <PanelRightClose className="size-4" />
+            </button>
+          </div>
+          {painel}
+        </aside>
+      )}
 
       <Dialogo aberto={info && !!contexto} aoMudar={setInfo} tipo="gaveta" titulo={contexto ? (contexto.cliente?.nome ?? contexto.conversa.contatoNome ?? formatarTelefone(contexto.conversa.contatoTelefone)) : "Cliente"} descricao="Cliente, negócio, follow-up e histórico">
         {painel}

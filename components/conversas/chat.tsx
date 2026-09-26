@@ -3,7 +3,6 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, Bot, Check, CheckCheck, CircleAlert, Clock, FileText, Info, StickyNote, UserCheck } from "lucide-react";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
-import { STATUS_CONVERSA } from "@/lib/dominio";
 import { formatarTelefone, hora, iniciais } from "@/lib/formato";
 import { cn } from "@/lib/cn";
 import { Botao } from "@/components/ui/botao";
@@ -19,34 +18,30 @@ export function Chat({
   notas,
   temMais,
   carregando,
-  equipe,
   usuarioId,
   respostas,
   simulado,
   aoVoltar,
   aoInfo,
+  painelAberto,
   aoCarregarAntigas,
   aoEnviar,
   aoAssumir,
-  aoAtribuir,
-  aoStatus,
 }: {
   contexto: ContextoConversa;
   mensagens: MensagemChat[];
   notas: NotaChat[];
   temMais: boolean;
   carregando: boolean;
-  equipe: { id: number; nome: string }[];
   usuarioId: number;
   respostas: Resposta[];
   simulado: boolean;
   aoVoltar: () => void;
   aoInfo: () => void;
+  painelAberto: boolean;
   aoCarregarAntigas: () => Promise<void>;
   aoEnviar: (e: EnvioChat) => Promise<boolean>;
   aoAssumir: () => void;
-  aoAtribuir: (id: number | null) => void;
-  aoStatus: (s: string) => void;
 }) {
   const c = contexto.conversa;
   const nome = contexto.cliente?.nome ?? c.contatoNome ?? formatarTelefone(c.contatoTelefone);
@@ -103,7 +98,7 @@ export function Chat({
         <button className="grid size-10 place-items-center rounded-full text-ink-2 hover:bg-trilho lg:hidden" onClick={aoVoltar} aria-label="Voltar para a lista">
           <ArrowLeft className="size-5" />
         </button>
-        <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-trilho xl:pointer-events-none" onClick={aoInfo}>
+        <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-trilho" onClick={aoInfo}>
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-vidro-forte text-[14px] font-semibold ring-1 ring-linha">{iniciais(nome)}</span>
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-semibold">{nome}</span>
@@ -118,29 +113,12 @@ export function Chat({
             </span>
           </span>
         </button>
-        <div className="hidden items-center gap-2 md:flex">
-          <select value={c.status} onChange={(e) => aoStatus(e.target.value)} className="h-9 rounded-full border border-linha bg-plano/60 px-3 text-[12.5px]" aria-label="Status da conversa">
-            {Object.entries(STATUS_CONVERSA).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-          <select value={c.responsavelId ?? ""} onChange={(e) => aoAtribuir(e.target.value ? Number(e.target.value) : null)} className="h-9 max-w-[160px] rounded-full border border-linha bg-plano/60 px-3 text-[12.5px]" aria-label="Responsável">
-            <option value="">Sem responsável</option>
-            {equipe.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.id === usuarioId ? `${p.nome} (você)` : p.nome}
-              </option>
-            ))}
-          </select>
-        </div>
         {!souResponsavel && (
           <Botao tamanho="sm" variante="primario" onClick={aoAssumir}>
             <UserCheck className="size-4" /> Assumir
           </Botao>
         )}
-        <button className="grid size-10 place-items-center rounded-full text-ink-2 hover:bg-trilho xl:hidden" onClick={aoInfo} aria-label="Dados do cliente e negócio">
+        <button className={cn("grid size-10 place-items-center rounded-full text-ink-2 hover:bg-trilho", painelAberto && "xl:bg-trilho xl:text-ink")} onClick={aoInfo} aria-label={painelAberto ? "Recolher dados do cliente e negócio" : "Mostrar dados do cliente e negócio"} aria-expanded={painelAberto}>
           <Info className="size-5" />
         </button>
       </header>
