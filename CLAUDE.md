@@ -126,6 +126,34 @@ O site antigo do celular, `gemeos-do-iphone.vercel.app`, **continua no ar** numa
 conta da Vercel que não abre neste computador. Para tirá-lo do ar precisa de
 quem tem essa conta.
 
+### Espaço em disco do VPS — conferir sempre
+
+Em 26/09/2026: **11,7 GB usados de 95,8 GB (12%)**, com a **Limpeza Diária do
+Docker ligada** (EasyPanel → Configurações → Geral). Com ela, as imagens velhas
+de cada implantação somem sozinhas; o que cresce de verdade é a **mídia do chat**
+(`/data/midia`: áudio, foto, vídeo, documento, fotos de perfil e do catálogo) e o
+banco. Regras para qualquer sessão que mexer no sistema:
+
+1. **Nunca desligar a Limpeza Diária do Docker.** Sem ela, cada implantação
+   deixa ~1 GB para trás e o disco enche em poucos meses.
+2. Antes de uma leva grande de mudanças, e uma vez por mês, rodar no console do
+   serviço sistema `node scripts/espaco.mjs` (só lê; mostra mídia por tipo e por
+   mês, cópias de segurança e tamanho do banco) e anotar aqui o número do card
+   Disco do painel. Passou de **70%**, avisar o dono antes de qualquer coisa.
+3. Cópias de segurança em `/data/backup` (ex.: da limpeza de vendas) não se
+   apagam sozinhas: `MANTER_BACKUPS=5 node scripts/espaco.mjs` deixa só as 5
+   mais novas.
+4. Foto nova (perfil, catálogo) é reduzida no navegador antes de subir; não
+   guardar arquivo original grande no servidor. Mídia do cliente não se apaga
+   por conta própria: é registro do atendimento.
+5. Nada de arquivo gravado fora de `/data` (some a cada implantação e ainda
+   ocupa a camada do container).
+
+Previsão com a limpeza ligada: a mídia de WhatsApp de uma loja desse porte fica
+na casa de 1 a 3 GB por mês (vídeo é o que mais pesa), então os ~84 GB livres
+duram **anos**. Refazer a conta com os números do `espaco.mjs` depois do
+primeiro mês de uso real.
+
 ### Acesso
 
 O usuário `admin` foi criado pelo `npm run db:seed` com senha aleatória, mostrada
