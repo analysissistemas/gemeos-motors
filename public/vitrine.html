@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gêmeos Motors — Motos elétricas em Goiana e Carpina</title>
-<meta name="description" content="Moto elétrica sem CNH, sem emplacamento e sem IPVA, carregada na tomada de casa. Acessórios e assistência técnica própria. Goiana e Carpina, Pernambuco.">
+<title>Gêmeos Motors — Motos elétricas em Goiana, Pernambuco</title>
+<meta name="description" content="Moto elétrica sem CNH, sem emplacamento e sem IPVA, carregada na tomada de casa. Acessórios e assistência técnica própria. Loja em Goiana, Pernambuco, com entrega em toda a região.">
 <!-- Ícone da aba e da tela inicial do celular -->
 <link rel="icon" href="favicon.ico" sizes="48x48">
 <link rel="icon" type="image/png" href="social/icone-180.png" sizes="180x180">
@@ -16,7 +16,7 @@
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="Gêmeos Motors">
-<meta property="og:title" content="Gêmeos Motors — Moto elétrica sem CNH em Goiana e Carpina">
+<meta property="og:title" content="Gêmeos Motors — Moto elétrica sem CNH em Goiana, PE">
 <meta property="og:description" content="Sem CNH, sem emplacamento e sem IPVA. Veja as motos, a ficha técnica e o preço, e chame no WhatsApp.">
 <meta property="og:url" content="https://gemeosmotors.com.br/">
 <meta property="og:image" content="https://gemeosmotors.com.br/social/compartilhar.jpg">
@@ -340,6 +340,24 @@ a{color:inherit;text-decoration:none}
 .confia-c h3{font-size:17px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
 .confia-c p{font-size:13.5px;color:var(--tinta-2);line-height:1.6}
 
+/* ---------- ONDE ESTAMOS (mapa da loja; tocar abre o app de mapa) ---------- */
+.onde{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:48px;align-items:center}
+.onde h2{font-size:clamp(30px,4.4vw,52px);font-weight:700;letter-spacing:-.035em;line-height:1.05}
+.onde p{margin-top:16px;color:var(--tinta-2);font-size:16px;line-height:1.65;max-width:480px}
+.onde-end b{color:var(--tinta)}
+.onde-apps{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.app-mapa{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:980px;border:1px solid var(--linha);
+  background:#fff;color:var(--tinta);font-size:14px;font-weight:600;text-decoration:none;transition:.18s}
+.app-mapa:hover{border-color:var(--tinta)}
+.app-mapa:focus-visible,.onde-mapa:focus-visible{outline:2px solid var(--tinta);outline-offset:3px}
+.app-mapa svg{width:17px;height:17px;flex-shrink:0}
+.onde-mapa{position:relative;display:block;border-radius:24px;overflow:hidden;aspect-ratio:4/3;border:1px solid var(--linha);
+  background:var(--papel);box-shadow:0 24px 60px rgba(16,24,40,.14)}
+.onde-mapa iframe{display:block;width:100%;height:100%;border:0;pointer-events:none}
+.onde-abrir{position:absolute;left:16px;bottom:16px;background:var(--tinta);color:#fff;font-size:13px;font-weight:600;
+  padding:9px 15px;border-radius:980px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+@media(max-width:860px){ .onde{grid-template-columns:1fr;gap:26px} }
+
 /* ---------- QUEM SOMOS / CLIENTES ---------- */
 .quem{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:48px;align-items:center}
 .quem img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(16,24,40,.18)}
@@ -455,6 +473,7 @@ a{color:inherit;text-decoration:none}
     <a href="#catalogo">Catálogo</a>
     <a href="#garantia">Garantia</a>
     <a href="#quem-somos">Quem somos</a>
+    <a href="#onde-estamos">Onde estamos</a>
     <a href="#faq">FAQ</a>
   </div>
   <button class="menu-mob" id="menuMob" aria-label="Abrir menu">☰</button>
@@ -484,7 +503,7 @@ a{color:inherit;text-decoration:none}
        recorte competia com a cena. Quem faz o parallax agora e o video. -->
 
   <div class="hero-txt" id="heroTxt">
-    <span class="hero-selo">Goiana · Carpina — Pernambuco</span>
+    <span class="hero-selo">Goiana — Pernambuco</span>
     <img src="fotos/logo-gemeos-motors.webp" alt="Gêmeos Motors" class="logo-hero">
     <!-- O que a loja mais repete no material dela: as motos estao eletrizando
          o Nordeste. A promessa forte vem logo abaixo, porque e ela que faz o
@@ -563,7 +582,7 @@ a{color:inherit;text-decoration:none}
     <div>
       <span class="etiqueta">Quem somos</span>
       <h2>Quem atende é a gente mesmo.</h2>
-      <p>A Gêmeos Motors é a loja dos gêmeos em Goiana e Carpina, Pernambuco. Motos
+      <p>A Gêmeos Motors é a loja dos gêmeos em Goiana, Pernambuco. Motos
          elétricas zero km, acessórios e assistência técnica própria — tudo com o mesmo atendimento, do primeiro
          "oi" no WhatsApp até a revisão.</p>
       <button class="btn-preto" data-zap="Olá! Vim pelo site da Gêmeos Motors e quero falar com vocês.">Falar com a loja</button>
@@ -612,14 +631,46 @@ a{color:inherit;text-decoration:none}
       a de gasolina: não tem óleo, nem vela, nem correia, nem embreagem. O que pede atenção é
       freio, pneu e bateria.</p></details>
     <details><summary>Vocês entregam?</summary>
-      <p>Atendemos Goiana e Carpina, em Pernambuco, e a região toda. Combine no WhatsApp que a
-      gente acerta a melhor forma de a moto chegar até você.</p></details>
+      <p>Entregamos em toda a região. A loja física fica em Goiana, na Rodovia Margem da PE-75,
+      nº 1418. Combine no WhatsApp que a gente acerta a melhor forma de a moto chegar até você.</p></details>
     <details><summary>Aceitam minha moto usada na troca?</summary>
       <p>Aceitamos. Traga a sua que a gente avalia na hora, na sua frente, e o valor entra como
       desconto na nova. A avaliação leva em conta modelo, quilometragem, estado da bateria e
       da lataria.</p></details>
   </div>
 </section>
+
+<!-- ================= ONDE ESTAMOS ================= -->
+<div class="faixa-clara">
+<section class="secao" id="onde-estamos">
+  <div class="onde rev">
+    <div>
+      <span class="etiqueta">Onde estamos</span>
+      <h2>Venha conhecer a loja.</h2>
+      <p class="onde-end"><b>Rodovia Margem da PE-75, nº 1418</b><br>Goiana — Pernambuco</p>
+      <p>Nossa loja física fica em Goiana. Para o resto da região, a gente entrega: é só combinar no WhatsApp.</p>
+      <div class="onde-apps">
+        <a class="app-mapa" href="https://www.google.com/maps/search/?api=1&query=Rodovia%20Margem%20da%20PE-75%2C%201418%2C%20Goiana%20-%20PE" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          Google Maps
+        </a>
+        <a class="app-mapa" href="https://waze.com/ul?q=Rodovia%20Margem%20da%20PE-75%2C%201418%2C%20Goiana%20-%20PE&amp;navigate=yes" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2Z"/></svg>
+          Waze
+        </a>
+        <a class="app-mapa" href="https://maps.apple.com/?q=Rodovia%20Margem%20da%20PE-75%2C%201418%2C%20Goiana%20-%20PE" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 4-6 2.5v13L9 17l6 3 6-2.5v-13L15 7 9 4Z"/><path d="M9 4v13M15 7v13"/></svg>
+          Mapas (iPhone)
+        </a>
+      </div>
+    </div>
+    <a class="onde-mapa" href="https://www.google.com/maps/search/?api=1&query=Rodovia%20Margem%20da%20PE-75%2C%201418%2C%20Goiana%20-%20PE" target="_blank" rel="noopener" aria-label="Abrir a localização da loja no Google Maps">
+      <iframe src="https://www.google.com/maps?q=Rodovia%20Margem%20da%20PE-75%2C%201418%2C%20Goiana%20-%20PE&amp;output=embed" title="Mapa da Gêmeos Motors em Goiana" loading="lazy" referrerpolicy="no-referrer-when-downgrade" tabindex="-1" aria-hidden="true"></iframe>
+      <span class="onde-abrir">Abrir no mapa</span>
+    </a>
+  </div>
+</section>
+</div>
 
 <!-- ================= RODAPÉ ================= -->
 <footer class="rodape">
@@ -643,7 +694,7 @@ a{color:inherit;text-decoration:none}
       <a href="#" data-zap="Olá! Vim pelo site da Gêmeos Motors e quero falar com um consultor.">WhatsApp</a>
       <span id="foneRodape"></span></div>
     <div><h4>Onde estamos</h4>
-      <span>Goiana — PE</span><span>Carpina — PE</span>
+      <a href="#onde-estamos">Rodovia Margem da PE-75, nº 1418 — Goiana, PE</a><span>Entregamos em toda a região</span>
       <a href="https://www.instagram.com/gemeosmotors_goiana/" target="_blank" rel="noopener">@gemeosmotors_goiana</a></div>
   </div>
   <div class="rodape-fim">

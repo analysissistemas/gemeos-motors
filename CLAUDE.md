@@ -167,6 +167,9 @@ por padrão evita esse ciclo.
 >   WhatsApp do botão "Quero essa moto" (no acessório, o do "Consultar
 >   disponibilidade"); a palavra "triciclo" sai dos textos (descrição do site,
 >   "Quem somos", rodapé e o link "Triciclos"), só fica "moto elétrica"; `v=17`.
+> - 26/09/2026 (mais uma) — tira toda menção a Carpina (título, prévia do link,
+>   selo do topo, "Quem somos", FAQ de entrega, rodapé) e cria a seção "Onde
+>   estamos" com o mapa da loja e botões para Google Maps, Waze e Mapas (iPhone).
 
 ## O dono
 
@@ -178,9 +181,12 @@ dizer que algo funciona sem ter testado**.
 
 ## A loja
 
-**Gêmeos Motors**, em **Goiana e Carpina, Pernambuco**. Vende **moto elétrica**
-e **triciclo elétrico**, faz **compra, venda e repasse de moto a combustão e de
-carro**, vende acessórios e tem **assistência técnica própria**.
+**Gêmeos Motors**, em **Goiana, Pernambuco** — **Rodovia Margem da PE-75, nº
+1418**. É a **única loja física** (Carpina não existe mais, desde 26/09/2026);
+a loja **entrega em toda a região**. Vende **moto elétrica** (o MM3, de três
+rodas, é tratado como moto elétrica: não existe mais o tipo "triciclo"), faz
+**compra, venda e repasse de moto a combustão e de carro**, vende acessórios e
+tem **assistência técnica própria**.
 
 | | |
 |---|---|
