@@ -277,6 +277,16 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
 
 ## Armadilhas que já custaram tempo
 
+- **Áudio para o WhatsApp é convertido para OGG/Opus com ffmpeg no servidor**
+  (`lib/mensageria/transcodificar.ts`; o `Dockerfile` instala o ffmpeg). O MP4
+  fragmentado que o Chrome grava é aceito pela Meta (volta 200 e id), mas não é
+  entregue ao cliente: a mensagem fica com um risquinho só. O arquivo guardado
+  no chat continua o original. Teste local: `FFMPEG_BIN=<caminho> node --test
+  tests/unit/transcodificar.test.ts`.
+- **Falha de entrega vem pelo webhook** (status `failed`): o motivo da Meta
+  (`error_data.details`) aparece na mensagem como "Não enviada: …". Sem o
+  webhook apontado para o servidor e o App Secret salvo, não chega status
+  nenhum (nem entregue, nem lida).
 - **zod 4 e campo opcional.** `z.union([..., z.undefined()])` **não** torna a
   chave opcional: se o formulário não manda o campo, dá "expected nonoptional"
   e o cadastro falha sem campo destacado. Use `.optional()` fora da união. E

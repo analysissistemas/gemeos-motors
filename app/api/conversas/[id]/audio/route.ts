@@ -4,9 +4,8 @@ import { obterUsuario } from "@/lib/auth/dal";
 import { pode } from "@/lib/dominio";
 import { ErroRegra } from "@/lib/acao";
 import { enviarMensagem } from "@/lib/mensageria/servico";
-import { obterProvedor } from "@/lib/mensageria/provedores";
 import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
-import { DURACAO_MAXIMA_S, DURACAO_MINIMA_S, LIMITE_AUDIO_BYTES, decidirDuracao, ehAudioAceito, extensaoDoMime, medirDuracao, mimeBase, vaiParaWhatsApp } from "@/lib/mensageria/audio-formatos";
+import { DURACAO_MAXIMA_S, DURACAO_MINIMA_S, LIMITE_AUDIO_BYTES, decidirDuracao, ehAudioAceito, extensaoDoMime, medirDuracao, mimeBase } from "@/lib/mensageria/audio-formatos";
 
 /* Recebe a gravação feita no navegador (multipart), confere formato, tamanho e
    duração REAL do arquivo, guarda e envia. O número de segundos que o navegador
@@ -32,8 +31,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const mime = arq.type;
   if (!ehAudioAceito(mime)) return erro("Formato de áudio não aceito.", 415);
 
-  const prov = await obterProvedor();
-  if (!prov.simulado && !vaiParaWhatsApp(mime)) return erro("Este navegador grava em um formato que o WhatsApp não aceita. Use o Chrome, Edge ou Safari atualizados.", 415);
+  /* qualquer formato aceito aqui vai para o WhatsApp: o provedor converte para OGG/Opus no envio */
 
   const bytes = new Uint8Array(await arq.arrayBuffer());
   const doNavegador = Number(form.get("duracao"));

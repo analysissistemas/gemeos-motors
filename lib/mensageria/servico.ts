@@ -260,7 +260,11 @@ export async function aplicarStatus(externoId: string, status: "delivered" | "re
   const ordem = { sent: 1, delivered: 2, read: 3, failed: 9 } as Record<string, number>;
   const [m] = await db.select({ id: schema.mensagens.id, status: schema.mensagens.status }).from(schema.mensagens).where(eq(schema.mensagens.externoId, externoId)).limit(1);
   if (!m || (ordem[m.status] ?? 0) >= ordem[status]) return;
-  await db.update(schema.mensagens).set({ status, ...(erro && { metadados: { erro } }) }).where(eq(schema.mensagens.id, m.id));
+  /* junta o erro aos metadados que já existem (a duração do áudio, por exemplo), sem apagá-los */
+  await db
+    .update(schema.mensagens)
+    .set({ status, ...(erro && { metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ erro })}::jsonb` }) })
+    .where(eq(schema.mensagens.id, m.id));
 }
 
 export async function marcarLida(conversaId: number) {

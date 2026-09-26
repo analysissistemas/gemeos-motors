@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 type ValorMeta = {
   contacts?: { profile?: { name?: string }; wa_id?: string }[];
   messages?: { id: string; from: string; type: string; text?: { body?: string }; image?: { id: string; caption?: string; mime_type?: string }; document?: { id: string; filename?: string; mime_type?: string; caption?: string }; audio?: { id: string; mime_type?: string } }[];
-  statuses?: { id: string; status: "sent" | "delivered" | "read" | "failed"; errors?: { title?: string }[] }[];
+  statuses?: { id: string; status: "sent" | "delivered" | "read" | "failed"; errors?: { code?: number; title?: string; message?: string; error_data?: { details?: string } }[] }[];
 };
 
 export async function POST(req: NextRequest) {
@@ -58,7 +58,13 @@ export async function POST(req: NextRequest) {
   for (const entrada of corpo.entry ?? []) {
     for (const mudanca of entrada.changes ?? []) {
       const v = mudanca.value ?? {};
-      for (const s of v.statuses ?? []) if (s.status !== "sent") await aplicarStatus(s.id, s.status, s.errors?.[0]?.title);
+      for (const s of v.statuses ?? []) {
+        if (s.status === "sent") continue;
+        /* a Meta explica a falha em error_data.details; o título sozinho costuma ser genérico */
+        const e = s.errors?.[0];
+        const erro = e ? [e.error_data?.details ?? e.message ?? e.title, e.code ? `código ${e.code}` : null].filter(Boolean).join(" — ") : undefined;
+        await aplicarStatus(s.id, s.status, erro);
+      }
       for (const m of v.messages ?? []) {
         const nome = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? null;
         const tipo: TipoMensagem = m.type === "text" ? "texto" : m.type === "image" ? "imagem" : m.type === "document" ? "documento" : m.type === "audio" ? "audio" : "texto";

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 import { lerBytes } from "./midia";
-import { mimeBase, vaiParaWhatsApp } from "./audio-formatos";
+import { MIME_OGG_OPUS, nomeOgg, paraOggOpus } from "./transcodificar";
 
 /* ============================================================
    PROVEDOR SIMULADO (MOCK)
@@ -45,11 +45,14 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   private async subirMidia(m: NonNullable<PedidoEnvio["midia"]>): Promise<{ id: string } | { erro: string }> {
     const arq = await lerBytes(m.url);
     if (!arq) return { erro: "Arquivo não encontrado para envio." };
-    const mime = m.mime ?? arq.mime;
+    return this.subirBytes(arq.bytes, m.mime ?? arq.mime, m.nome ?? "arquivo");
+  }
+
+  private async subirBytes(bytes: Uint8Array, mime: string, nome: string): Promise<{ id: string } | { erro: string }> {
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
     form.append("type", mime);
-    form.append("file", new Blob([new Uint8Array(arq.bytes)], { type: mime }), m.nome ?? "arquivo");
+    form.append("file", new Blob([new Uint8Array(bytes)], { type: mime }), nome);
     const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/media`, { method: "POST", headers: { Authorization: `Bearer ${this.cfg.token}` }, body: form });
     const j = (await r.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
     if (!r.ok || !j.id) return { erro: j.error?.message ?? `Falha ao enviar o arquivo (HTTP ${r.status})` };
@@ -74,8 +77,17 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
     if (pedido.tipo === "texto") Object.assign(corpo, { type: "text", text: { body: pedido.conteudo ?? "", preview_url: true } });
     else if (pedido.tipo === "audio" && pedido.midia) {
-      if (!vaiParaWhatsApp(pedido.midia.mime ?? "")) return { externoId: null, status: "failed", erro: "Este formato de áudio não é aceito pelo WhatsApp." };
-      const up = await this.subirMidia({ ...pedido.midia, mime: mimeBase(pedido.midia.mime ?? "") });
+      /* Todo áudio vira OGG/Opus mono antes de subir: o MP4 fragmentado que o Chrome grava é
+         aceito pela Meta mas não chega ao cliente. O arquivo guardado no chat não muda. */
+      const arq = await lerBytes(pedido.midia.url);
+      if (!arq) return { externoId: null, status: "failed", erro: "Arquivo de áudio não encontrado para envio." };
+      let ogg: Buffer;
+      try {
+        ogg = await paraOggOpus(arq.bytes);
+      } catch (e) {
+        return { externoId: null, status: "failed", erro: `Não foi possível preparar o áudio para o WhatsApp: ${(e as Error).message}` };
+      }
+      const up = await this.subirBytes(ogg, MIME_OGG_OPUS, nomeOgg(pedido.midia.nome));
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
       Object.assign(corpo, { type: "audio", audio: { id: up.id } });
     }

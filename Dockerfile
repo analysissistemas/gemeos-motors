@@ -34,7 +34,9 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     MIDIA_DIR=/data/midia
-RUN addgroup -S app && adduser -S app -G app \
+# ffmpeg: converte o áudio do chat para OGG/Opus antes de mandar ao WhatsApp
+RUN apk add --no-cache ffmpeg \
+ && addgroup -S app && adduser -S app -G app \
  && mkdir -p /data/midia/chat && chown -R app:app /data
 COPY --from=build --chown=app:app /app/public ./public
 COPY --from=build --chown=app:app /app/.next/standalone ./
