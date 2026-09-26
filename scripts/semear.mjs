@@ -11,12 +11,12 @@
      - o catálogo das 8 elétricas, com ficha e preço do site oficial
      - respostas rápidas padrão do atendimento
    ============================================================ */
-import { neon } from "@neondatabase/serverless";
+import { criarSql } from "./sql.mjs";
 import { randomBytes, scryptSync } from "node:crypto";
 
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL não configurada");
-const sql = neon(url);
+const sql = criarSql(url);
 
 function hash(senha) {
   const sal = randomBytes(16);
@@ -86,3 +86,4 @@ await sql`insert into configuracoes (chave, valor) values ('ia.triagem_automatic
           on conflict (chave) do nothing`;
 
 console.log("dados iniciais conferidos");
+await sql.end();

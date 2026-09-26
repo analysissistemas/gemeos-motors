@@ -4,8 +4,8 @@ Sistema da **Gêmeos Motors** (Goiana e Carpina, Pernambuco): venda de **motos
 e triciclos elétricos**, **compra, venda e repasse de moto a combustão e de
 carro**, acessórios e assistência técnica própria.
 
-**No ar:** https://gemeos-motors.vercel.app — abre a loja; a equipe entra em
-`/login`.
+**No ar (teste):** https://teste.gemeosmotors.com.br — abre a loja; a equipe
+entra em `/login`. Roda no VPS da Hostinger, pelo EasyPanel (sem Vercel).
 
 **Código:** https://github.com/analysissistemas/gemeos-motors, branch
 `vitrine-html` (a branch `main` é outro sistema, do Leo — não misture as duas).
@@ -18,7 +18,7 @@ carro**, acessórios e assistência técnica própria.
 
 | Parte | Quem usa | Onde |
 |---|---|---|
-| **Loja (vitrine)** | Cliente | `/vitrine` — `public/vitrine.html` |
+| **Loja (vitrine)** | Cliente | `/` — `public/vitrine.html` |
 | **Sistema da equipe** | Admin, vendedor, técnico | `/sistema` — pastas `app/`, `components/`, `lib/` |
 
 A vitrine continua sendo uma página pronta, que lê o estoque de exemplo de
@@ -45,9 +45,8 @@ permissões por perfil e histórico de tudo que cada pessoa fez.
 
 Ao perder uma venda, o consultor informa motivo e observações e a IA lê o
 histórico para diagnosticar a perda. **A IA só usa o que está registrado** —
-quando falta informação, ela diz que falta. Enquanto o cartão não for cadastrado
-no AI Gateway da Vercel, a tela avisa isso com clareza e o negócio é encerrado
-do mesmo jeito.
+quando falta informação, ela diz que falta. Enquanto a IA estiver desligada ou sem
+provedor, a tela avisa isso com clareza e o negócio é encerrado do mesmo jeito.
 
 ### Assinatura
 
@@ -70,7 +69,8 @@ de dentro do chat. A ligação com a API oficial da Meta já está estruturada
 
 ```
 npm install
-npx vercel env pull .env.local     # banco e segredos do projeto na Vercel
+# crie .env.local com DATABASE_URL e SESSION_SECRET (nunca vai para o Git)
+npm run db:migrate                  # cria/atualiza as tabelas nesse banco
 npm run dev                         # http://localhost:3000
 ```
 
@@ -82,10 +82,14 @@ npm run dev                         # http://localhost:3000
 | `npm run db:seed` | Dados iniciais (usuário admin, lojas, modelos). Não apaga nada |
 | `npm run test:e2e` | Testes de ponta a ponta no Chrome (ver abaixo) |
 | `npm run test:limpar` | Apaga só o que os testes criaram (marca "E2E") |
+| `node scripts/copiar-banco.mjs` | Cópia única Neon → Postgres do EasyPanel (ver CLAUDE.md) |
+| `node scripts/copiar-midia.mjs` | Cópia única Vercel Blob → `/data/midia` (ver CLAUDE.md) |
 
 **Tecnologia:** Next.js 16 (App Router), React 19, Tailwind 4, Drizzle ORM com
-Postgres (Neon, pela Vercel), login próprio com sessão assinada, PDFs com
-`@react-pdf/renderer`, IA pelo AI SDK + AI Gateway da Vercel.
+PostgreSQL (driver `pg`; no VPS, o serviço "banco" do EasyPanel), login próprio
+com sessão assinada, PDFs com `@react-pdf/renderer`, mídia do chat em disco
+(`/data/midia`), IA pelo AI SDK (o diagnóstico ainda usa o AI Gateway da Vercel
+e precisa trocar de provedor antes de ligar).
 
 ### Testes de ponta a ponta
 
@@ -95,7 +99,7 @@ Rodam no Chrome instalado, contra o site e o banco configurados:
 npm run dev -- -p 3100
 E2E_ADMIN_SENHA=... npm run test:e2e
 # ou contra o site no ar:
-E2E_URL=https://gemeos-motors.vercel.app E2E_ADMIN_SENHA=... npm run test:e2e
+E2E_URL=https://teste.gemeosmotors.com.br E2E_ADMIN_SENHA=... npm run test:e2e
 ```
 
 Cobrem o dia de trabalho inteiro: login, usuários, cliente, estoque, funil,
@@ -105,8 +109,11 @@ celular e a vitrine. Tudo que criam leva a marca "E2E" e é apagado no fim.
 
 ### Publicar
 
-Na pasta do projeto: `vercel deploy --prod`. O `git push` **não** atualiza o
-site.
+Envie para a branch `vitrine-html` no GitHub e clique em **Implantar** no
+serviço **sistema** do EasyPanel (`http://2.25.240.204:3000`). A imagem é
+montada pelo `Dockerfile`; ao subir, o container confere o volume `/data`,
+aplica as migrations pendentes e liga o servidor. As variáveis ficam na aba
+Ambiente do serviço (lista no CLAUDE.md).
 
 ### Scripts de fotos (Python)
 

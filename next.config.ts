@@ -5,10 +5,10 @@ import type { NextConfig } from "next";
    mantêm vivos os endereços antigos — o botão "Sistema" da vitrine aponta para
    login.html e, com sessão, para index.html; os dois agora caem no app novo. */
 const nextConfig: NextConfig = {
-  /* servidor enxuto para o Docker do VPS (EasyPanel); a Vercel ignora */
+  /* servidor enxuto para o Docker do VPS (EasyPanel) */
   output: "standalone",
   serverExternalPackages: ["@react-pdf/renderer"],
-  /* anexos do chat (até 2 MB) viajam codificados, ~35% maiores; a Vercel corta em 4,5 MB */
+  /* anexos do chat (até 2 MB) viajam codificados, ~35% maiores que o arquivo */
   experimental: { authInterrupts: true, serverActions: { bodySizeLimit: "4mb" } },
   async redirects() {
     return [

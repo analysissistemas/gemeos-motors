@@ -6,7 +6,7 @@
    Meta); `audio/webm` é recusado e ainda não traz a duração no cabeçalho.
    Aceitos pela Meta: audio/aac, audio/mp4 (AAC), audio/mpeg, audio/amr, audio/ogg (Opus). */
 
-export const LIMITE_AUDIO_BYTES = 4 * 1024 * 1024; // a Vercel corta requisições acima de 4,5 MB
+export const LIMITE_AUDIO_BYTES = 4 * 1024 * 1024; // cabe no limite de 4 MB das ações do servidor (next.config.ts)
 export const DURACAO_MAXIMA_S = 300;
 export const DURACAO_MINIMA_S = 1;
 

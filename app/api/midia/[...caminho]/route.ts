@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { obterUsuario } from "@/lib/auth/dal";
 import { pode } from "@/lib/dominio";
-import { abrirMidia } from "@/lib/mensageria/midia";
+import { abrirMidia, caminhoValido, infoMidia } from "@/lib/mensageria/midia";
 
-/* Entrega mídia do chat guardada no Blob privado, só para quem está logado
+/* Entrega mídia do chat guardada no disco do VPS, só para quem está logado
    e tem acesso ao atendimento. Áudio precisa de "Range" (resposta 206): sem isso
    o Safari/iPhone não toca e nenhum navegador consegue avançar no áudio. */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ caminho: string[] }> }) {
@@ -13,9 +13,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ caminho: st
 
   const { caminho } = await ctx.params;
   const pathname = caminho.map(decodeURIComponent).join("/");
-  if (!pathname.startsWith("chat/") || pathname.includes("..")) return NextResponse.json({ erro: "arquivo inválido" }, { status: 400 });
+  if (!caminhoValido(pathname)) return NextResponse.json({ erro: "arquivo inválido" }, { status: 400 });
 
-  const r = await abrirMidia(pathname);
+  const r = await infoMidia(pathname);
   if (!r) return NextResponse.json({ erro: "arquivo não encontrado" }, { status: 404 });
 
   const tocavel = /^(image\/|audio\/|video\/|application\/pdf)/.test(r.mime);
@@ -28,7 +28,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ caminho: st
   };
 
   const faixa = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") ?? "");
-  if (!faixa || (faixa[1] === "" && faixa[2] === "")) return new Response(r.stream, { headers: { ...base, "Content-Length": String(r.tamanho) } });
+  if (!faixa || (faixa[1] === "" && faixa[2] === "")) {
+    const inteiro = await abrirMidia(pathname);
+    if (!inteiro) return NextResponse.json({ erro: "arquivo não encontrado" }, { status: 404 });
+    return new Response(inteiro.stream, { headers: { ...base, "Content-Length": String(r.tamanho) } });
+  }
 
   let ini: number;
   let fim: number;
@@ -41,8 +45,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ caminho: st
   }
   if (ini >= r.tamanho || ini > fim) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${r.tamanho}` } });
 
-  /* o Blob entrega o arquivo inteiro: lemos e devolvemos só o pedaço (áudios são pequenos, até 4 MB) */
-  const todos = new Uint8Array(await new Response(r.stream).arrayBuffer());
-  const pedaco = todos.slice(ini, fim + 1);
-  return new Response(pedaco, { status: 206, headers: { ...base, "Content-Range": `bytes ${ini}-${fim}/${r.tamanho}`, "Content-Length": String(pedaco.byteLength) } });
+  /* lê do disco só o pedaço pedido */
+  const pedaco = await abrirMidia(pathname, { ini, fim });
+  if (!pedaco) return NextResponse.json({ erro: "arquivo não encontrado" }, { status: 404 });
+  return new Response(pedaco.stream, { status: 206, headers: { ...base, "Content-Range": `bytes ${ini}-${fim}/${r.tamanho}`, "Content-Length": String(fim - ini + 1) } });
 }

@@ -5,7 +5,7 @@ import { pode } from "@/lib/dominio";
 import { ErroRegra } from "@/lib/acao";
 import { enviarMensagem } from "@/lib/mensageria/servico";
 import { obterProvedor } from "@/lib/mensageria/provedores";
-import { blobDisponivel, guardarMidia } from "@/lib/mensageria/midia";
+import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { DURACAO_MAXIMA_S, DURACAO_MINIMA_S, LIMITE_AUDIO_BYTES, decidirDuracao, ehAudioAceito, extensaoDoMime, medirDuracao, mimeBase, vaiParaWhatsApp } from "@/lib/mensageria/audio-formatos";
 
 /* Recebe a gravação feita no navegador (multipart), confere formato, tamanho e
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const base = mimeBase(mime);
     const nome = `audio.${extensaoDoMime(base)}`;
-    const midia = blobDisponivel()
+    const midia = armazenamentoDisponivel()
       ? await guardarMidia(bytes, nome, base)
       : { url: `data:${base};base64,${Buffer.from(bytes).toString("base64")}`, nome, mime: base, tamanho: bytes.byteLength };
     const id = await enviarMensagem(u, conversaId, {
