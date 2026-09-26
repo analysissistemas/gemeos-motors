@@ -96,13 +96,43 @@ export async function listarMovimentacoes() {
   return { entradas, saidas };
 }
 
+/** Modelos que viram veículo no estoque (acessório fica de fora: é por quantidade). */
 export async function listarModelos() {
   return db
     .select({ id: schema.modelos.id, nome: schema.modelos.nome, tipo: schema.modelos.tipo, marca: schema.modelos.marca, precoTabela: schema.modelos.precoTabela, ficha: schema.modelos.ficha })
     .from(schema.modelos)
-    .where(eq(schema.modelos.ativo, true))
+    .where(and(eq(schema.modelos.ativo, true), ne(schema.modelos.tipo, "acessorio")))
     .orderBy(asc(schema.modelos.nome));
 }
+
+/** Aba "Catálogo": todos os itens (inclusive desativados), na ordem do site, com
+ *  o que a tela precisa para decidir o que pode (veículos ligados, reservas). */
+export async function listarCatalogo() {
+  const m = schema.modelos;
+  return db
+    .select({
+      id: m.id,
+      nome: m.nome,
+      tipo: m.tipo,
+      marca: m.marca,
+      precoTabela: m.precoTabela,
+      ficha: m.ficha,
+      descricao: m.descricao,
+      fotoUrl: m.fotoUrl,
+      mostrarNoSite: m.mostrarNoSite,
+      disponibilidade: m.disponibilidade,
+      lancamento: m.lancamento,
+      lancamentoTexto: m.lancamentoTexto,
+      ordem: m.ordem,
+      ativo: m.ativo,
+      veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = "modelos"."id")`,
+      reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status <> 'cancelada')`,
+      reservasNovas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status = 'nova')`,
+    })
+    .from(m)
+    .orderBy(desc(m.ativo), asc(m.ordem), asc(m.nome));
+}
+export type ItemCatalogo = Awaited<ReturnType<typeof listarCatalogo>>[number];
 
 /** Veículos que podem entrar num negócio ou venda. */
 export async function listarVeiculosVendaveis() {

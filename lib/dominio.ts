@@ -38,6 +38,8 @@ export const PERMISSOES = {
   "cameras.ver": ADMIN,
   "testdrives.ver": VENDAS,
   "testdrives.editar": VENDAS,
+  "reservas.ver": VENDAS,
+  "reservas.editar": VENDAS,
   "ajuda.ver": TODOS,
 } as const satisfies Record<string, Papel[]>;
 export type Permissao = keyof typeof PERMISSOES;
@@ -76,6 +78,7 @@ export const ORIGENS = {
   indicacao: "Indicação",
   loja: "Passou na loja",
   site: "Site",
+  reserva_lancamento: "Reserva de lançamento",
   outro: "Outro",
 } as const;
 
@@ -88,6 +91,47 @@ export const TIPOS_VEICULO = {
 export type TipoVeiculo = keyof typeof TIPOS_VEICULO;
 /* "triciclo_eletrico" saiu em 26/09/2026 (virou moto elétrica); segue aceito aqui por segurança */
 export const ehEletrico = (t: string) => t === "moto_eletrica" || t === "triciclo_eletrico";
+
+/* ---------- catálogo (o que o site mostra) ----------
+   Acessório é item do catálogo, mas não é veículo do estoque: por isso fica
+   fora de TIPOS_VEICULO. */
+export const TIPOS_CATALOGO = {
+  moto_eletrica: "Moto elétrica",
+  moto_combustao: "Moto a combustão",
+  carro: "Carro",
+  acessorio: "Acessório",
+} as const;
+export type TipoCatalogo = keyof typeof TIPOS_CATALOGO;
+
+export const DISPONIBILIDADES = {
+  pronta_entrega: "Pronta entrega",
+  sob_encomenda: "Sob encomenda",
+  consultar: "Consulte disponibilidade",
+} as const;
+export type Disponibilidade = keyof typeof DISPONIBILIDADES;
+
+/* Ficha técnica: as mesmas chaves que a vitrine escreve nos chips do card.
+   `exemplo` mostra como o chip sai no site. Campo vazio não é guardado. */
+export const CAMPOS_FICHA = [
+  { chave: "motor", rotulo: "Motor", exemplo: "1000W", comoSai: (v: string) => `${v} motor` },
+  { chave: "autonomia", rotulo: "Autonomia", exemplo: "50 a 55 km", comoSai: (v: string) => `${v} de autonomia` },
+  { chave: "velocidade", rotulo: "Velocidade", exemplo: "32 km/h", comoSai: (v: string) => v },
+  { chave: "bateria", rotulo: "Bateria", exemplo: "Lítio 60V 32Ah", comoSai: (v: string) => `Bateria ${v}` },
+  { chave: "pneu", rotulo: "Pneu", exemplo: "2.75-10", comoSai: (v: string) => `Pneu ${v}` },
+  { chave: "peso", rotulo: "Peso", exemplo: "180 kg", comoSai: (v: string) => `Peso ${v}` },
+  { chave: "recarga", rotulo: "Recarga", exemplo: "4h a 8h", comoSai: (v: string) => `Recarga ${v}` },
+] as const;
+export type ChaveFicha = (typeof CAMPOS_FICHA)[number]["chave"];
+/** "—" e "-" eram o jeito antigo de dizer "sem informação": contam como vazio. */
+export const valorFichaVazio = (v: unknown) => typeof v !== "string" || !v.trim() || v.trim() === "—" || v.trim() === "-";
+
+export const STATUS_RESERVA = {
+  nova: "Nova",
+  contatada: "Contatada",
+  confirmada: "Confirmada",
+  cancelada: "Cancelada",
+} as const;
+export type StatusReserva = keyof typeof STATUS_RESERVA;
 
 export const CONDICOES = {
   zero_km: "Zero km",

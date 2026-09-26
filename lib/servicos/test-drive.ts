@@ -298,7 +298,7 @@ export type ItemTestDrive = Awaited<ReturnType<typeof listarTestDrives>>[number]
 /** O que o formulário de agendamento oferece: modelos do catálogo e veículos à venda. */
 export async function opcoesTestDrive() {
   const [modelos, veiculos] = await Promise.all([
-    db.select({ id: schema.modelos.id, nome: schema.modelos.nome, marca: schema.modelos.marca, tipo: schema.modelos.tipo }).from(schema.modelos).where(eq(schema.modelos.ativo, true)).orderBy(asc(schema.modelos.nome)),
+    db.select({ id: schema.modelos.id, nome: schema.modelos.nome, marca: schema.modelos.marca, tipo: schema.modelos.tipo }).from(schema.modelos).where(and(eq(schema.modelos.ativo, true), ne(schema.modelos.tipo, "acessorio"))).orderBy(asc(schema.modelos.nome)),
     db
       .select({
         id: schema.veiculos.id,
