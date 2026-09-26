@@ -61,9 +61,10 @@ const catalogo = [
   ["moto_eletrica", "TCN BASKET", 5200, { motor: "500W", autonomia: "Até 40 km", bateria: "Chumbo-ácido selada 48V 12Ah", peso: "150 kg" }],
   ["moto_eletrica", "MM3", 10500, { motor: "1000W", autonomia: "45 a 55 km", velocidade: "32 km/h", bateria: "Lítio 60V 24Ah", pneu: "300/10", peso: "180 kg", recarga: "6h a 8h" }],
 ];
-for (const [tipo, nome, preco, ficha] of catalogo) {
-  await sql`insert into modelos (tipo, nome, preco_tabela, eletrico, ficha)
-            values (${tipo}, ${nome}, ${preco}, true, ${JSON.stringify(ficha)}::jsonb)
+for (const [ordem, [tipo, nome, preco, ficha]] of catalogo.entries()) {
+  /* ordem do site = a desta lista (a equipe muda depois em Estoque → Catálogo) */
+  await sql`insert into modelos (tipo, nome, preco_tabela, eletrico, ficha, ordem)
+            values (${tipo}, ${nome}, ${preco}, true, ${JSON.stringify(ficha)}::jsonb, ${ordem})
             on conflict (nome) do nothing`;
 }
 

@@ -125,9 +125,9 @@ export async function listarCatalogo() {
       lancamentoTexto: m.lancamentoTexto,
       ordem: m.ordem,
       ativo: m.ativo,
-      veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = ${m.id})`,
-      reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = ${m.id} and r.status <> 'cancelada')`,
-      reservasNovas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = ${m.id} and r.status = 'nova')`,
+      veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = "modelos"."id")`,
+      reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status <> 'cancelada')`,
+      reservasNovas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status = 'nova')`,
     })
     .from(m)
     .orderBy(desc(m.ativo), asc(m.ordem), asc(m.nome));

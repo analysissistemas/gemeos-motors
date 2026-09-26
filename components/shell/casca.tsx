@@ -28,6 +28,7 @@ import {
   Tag,
   BookOpen,
   KeyRound,
+  BookmarkCheck,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
@@ -55,6 +56,7 @@ const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   ia: Sparkles,
   ajuda: BookOpen,
   testdrives: KeyRound,
+  reservas: BookmarkCheck,
 };
 
 function ativo(pathname: string, href: string) {

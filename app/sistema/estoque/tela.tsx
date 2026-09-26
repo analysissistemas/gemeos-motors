@@ -3,7 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Bike, Pencil, Plus, Search } from "lucide-react";
-import type { CorModelo, VeiculoLinha } from "@/lib/consultas/estoque";
+import type { CorModelo, ItemCatalogo, VeiculoLinha } from "@/lib/consultas/estoque";
 import { CONDICOES, ORIGENS_ENTRADA, STATUS_VEICULO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
 import { brl, data, formatarPlaca, km } from "@/lib/formato";
 import { Abas } from "@/components/ui/abas";
@@ -12,7 +12,8 @@ import { Botao } from "@/components/ui/botao";
 import { AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { mudarStatusVeiculo, salvarVeiculo } from "./acoes";
-import { BolinhaCor, CatalogoCores } from "./cores";
+import { BolinhaCor } from "./cores";
+import { Catalogo } from "./catalogo";
 
 type Modelo = { id: number; nome: string; tipo: string; marca: string | null; precoTabela: number | null; ficha: Record<string, string> | null };
 type Mov = {
@@ -29,6 +30,7 @@ export function TelaEstoque({
   unidades,
   movimentacoes,
   cores,
+  catalogo,
   filtros,
   permissoes,
 }: {
@@ -38,6 +40,7 @@ export function TelaEstoque({
   unidades: { id: number; nome: string }[];
   movimentacoes: Mov;
   cores: CorModelo[];
+  catalogo: ItemCatalogo[];
   filtros: { q?: string; status?: string; tipo?: string };
   permissoes: { editar: boolean; custo: boolean };
 }) {
@@ -236,7 +239,7 @@ export function TelaEstoque({
         </>
       )}
 
-      {aba === "catalogo" && <CatalogoCores modelos={modelos} cores={cores} editar={permissoes.editar} />}
+      {aba === "catalogo" && <Catalogo itens={catalogo} cores={cores} editar={permissoes.editar} />}
 
       {aba === "mov" && (
         <div className="grid gap-4 lg:grid-cols-2">
