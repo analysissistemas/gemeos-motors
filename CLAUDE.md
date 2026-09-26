@@ -163,6 +163,10 @@ por padrão evita esse ciclo.
 >   gemeosmotors.com.br e cronômetro das promoções. Depois, só dado verdadeiro:
 >   um card por modelo real, sem aviso de chegada inventado, rodapé sem
 >   "exemplo", `v=16`.
+> - 26/09/2026 (de novo) — foto, nome e ficha técnica do card abrem o mesmo
+>   WhatsApp do botão "Quero essa moto" (no acessório, o do "Consultar
+>   disponibilidade"); a palavra "triciclo" sai dos textos (descrição do site,
+>   "Quem somos", rodapé e o link "Triciclos"), só fica "moto elétrica"; `v=17`.
 
 ## O dono
 
@@ -265,7 +269,7 @@ página, ação e rota de API — esconder botão não é segurança.
 ## Só dado verdadeiro (desde 26/09/2026)
 
 Pedido do dono: **nada de dado fictício**. A vitrine mostra um card por modelo
-real (os 7 elétricos e o triciclo MM3, todos zero km), com preço de tabela, cor
+real (as 8 motos elétricas, com o MM3, todas zero km), com preço de tabela, cor
 e ficha técnica da loja, e os 3 acessórios reais. Não existe mais estoque
 sorteado, chassi, placa, quilometragem, avaria nem data de chegada inventados
 no `public/estoque.js`, nem catálogo de moto a combustão ou carro. A
@@ -318,7 +322,7 @@ testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
   processo `node` morreu mesmo.
 - **Cache do navegador na vitrine.** Os scripts são chamados com `?v=N` em
   `public/vitrine.html`. **Suba esse número sempre que mexer em `estoque.js`,
-  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=16`.
+  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=17`.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O
   teste da vitrine confere que não existe `custo:` no arquivo.
 - **Prévia do link no WhatsApp usa endereço completo** nas tags `og:` do

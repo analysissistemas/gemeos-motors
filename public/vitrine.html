@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gêmeos Motors — Motos elétricas em Goiana e Carpina</title>
-<meta name="description" content="Moto elétrica sem CNH, sem emplacamento e sem IPVA, carregada na tomada de casa. Triciclos, acessórios e assistência própria. Goiana e Carpina, Pernambuco.">
+<meta name="description" content="Moto elétrica sem CNH, sem emplacamento e sem IPVA, carregada na tomada de casa. Acessórios e assistência técnica própria. Goiana e Carpina, Pernambuco.">
 <!-- Ícone da aba e da tela inicial do celular -->
 <link rel="icon" href="favicon.ico" sizes="48x48">
 <link rel="icon" type="image/png" href="social/icone-180.png" sizes="180x180">
@@ -237,6 +237,9 @@ a{color:inherit;text-decoration:none}
 .prod-corpo{padding:16px 17px 18px;display:flex;flex-direction:column;flex:1}
 .prod-nome{font-size:17px;font-weight:700;letter-spacing:-.02em}
 .prod-spec{font-size:12.5px;color:var(--tinta-2);margin-top:4px}
+/* foto, nome e ficha abrem o WhatsApp, igual ao botão do card */
+.prod [data-consultar]{cursor:pointer}
+.prod-nome a:focus-visible{outline:2px solid var(--tinta);outline-offset:3px;border-radius:4px}
 /* ---------- FICHA TÉCNICA NO CARD ----------
    Motor, autonomia, velocidade, bateria e recarga são as cinco perguntas que
    o cliente faz antes de qualquer outra. Ficam no card, não escondidas atrás
@@ -560,8 +563,8 @@ a{color:inherit;text-decoration:none}
     <div>
       <span class="etiqueta">Quem somos</span>
       <h2>Quem atende é a gente mesmo.</h2>
-      <p>A Gêmeos Motors é a loja dos gêmeos em Goiana e Carpina, Pernambuco. Moto e
-         triciclo elétricos zero km, acessórios e assistência técnica própria — tudo com o mesmo atendimento, do primeiro
+      <p>A Gêmeos Motors é a loja dos gêmeos em Goiana e Carpina, Pernambuco. Motos
+         elétricas zero km, acessórios e assistência técnica própria — tudo com o mesmo atendimento, do primeiro
          "oi" no WhatsApp até a revisão.</p>
       <button class="btn-preto" data-zap="Olá! Vim pelo site da Gêmeos Motors e quero falar com vocês.">Falar com a loja</button>
     </div>
@@ -622,7 +625,7 @@ a{color:inherit;text-decoration:none}
 <footer class="rodape">
   <div class="rodape-topo">
     <img src="fotos/logo-gemeos-motors.webp" alt="Gêmeos Motors">
-    <p>Motos e triciclos elétricos zero km e acessórios, tudo revisado
+    <p>Motos elétricas zero km e acessórios, tudo revisado
        pela nossa equipe técnica. Aceitamos seu veículo usado como forma de pagamento.</p>
     <button class="btn-consultar" data-zap="Olá! Quero garantir minha moto elétrica.">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Z"/></svg>
@@ -631,7 +634,7 @@ a{color:inherit;text-decoration:none}
   </div>
   <div class="rodape-cols">
     <div><h4>Categorias</h4>
-      <a href="#catalogo">Motos elétricas</a><a href="#catalogo">Triciclos</a>
+      <a href="#catalogo">Motos elétricas</a>
       <a href="#catalogo">Acessórios</a><a href="#garantia">Assistência técnica</a></div>
     <div><h4>Links rápidos</h4>
       <a href="#topo">Home</a><a href="#catalogo">Catálogo</a>
@@ -662,11 +665,11 @@ a{color:inherit;text-decoration:none}
 <!-- O ?v= força o navegador a buscar a versão nova em vez de usar a guardada.
      Suba o número sempre que mexer nestes arquivos, senão você (e o cliente)
      continuam vendo a versão antiga sem entender por quê. -->
-<script src="cores-motos.js?v=16"></script>
-<script src="fotos-disponiveis.js?v=16"></script>
+<script src="cores-motos.js?v=17"></script>
+<script src="fotos-disponiveis.js?v=17"></script>
 <!-- antes do estoque.js: é daqui que sai fotoDoProduto -->
-<script src="foto-produto.js?v=16"></script>
-<script src="estoque.js?v=16"></script>
+<script src="foto-produto.js?v=17"></script>
+<script src="estoque.js?v=17"></script>
 <script>
 /* ============================================================
    Número que recebe as mensagens do site.
@@ -850,22 +853,25 @@ function card(a){
      cliente. O botão existia e o preço não acompanhava — trocar uma seminova
      de R$ 8.260 para "Zero km" mantinha R$ 8.260 e o WhatsApp chegava pedindo
      "zero km, sem uso" por esse valor. A condição fica no selo da foto. */
+  /* Foto, nome e ficha fazem o mesmo que o botão verde (data-consultar): muito
+     cliente toca direto na foto. O nome é um link de verdade, para quem navega
+     pelo teclado; foto e ficha repetem esse link e por isso não entram no Tab. */
   return `<article class="prod" data-id="${a.id}">
-    <div class="prod-foto">
+    <div class="prod-foto" data-consultar="${a.id}">
       <span class="selo ${zero?"lac":"semi"}">${
         a.porQuantidade ? "Novo" : condRotulo(e.cond, a.genero)}</span>
       ${fotoDupla(a)}
     </div>
     <div class="prod-corpo">
-      <h3 class="prod-nome">${a.modelo}</h3>
-      ${a.descricao ? `<div class="prod-spec">${a.descricao}</div>` : ""}
+      <h3 class="prod-nome"><a href="#" data-consultar="${a.id}">${a.modelo}</a></h3>
+      ${a.descricao ? `<div class="prod-spec" data-consultar="${a.id}">${a.descricao}</div>` : ""}
       <div class="prod-spec">${[
         a.ano ? `Ano ${a.ano}` : "",
         e.cor,
         temKm && !zero ? `${a.km.toLocaleString("pt-BR")} km rodados` : ""
       ].filter(Boolean).join(" • ")}</div>
 
-      ${pedacos.length ? `<div class="ficha">
+      ${pedacos.length ? `<div class="ficha" data-consultar="${a.id}">
         ${pedacos.map(f=>`<span class="ficha-i">${f.antes ? f.antes + " " : ""}${
           f.destaque ? `<b>${f.valor}</b>` : f.valor}${f.depois ? " " + f.depois : ""}</span>`).join("")}
       </div>` : ""}
@@ -1022,6 +1028,7 @@ document.addEventListener("click", e=>{
 
   const bz = e.target.closest("[data-consultar]");
   if(bz){
+    e.preventDefault();    // o nome é um link (href="#"): não pular para o topo
     const el = esc(a), zero = el.cond==="Zero km";
     const igual = el.cor===a.cor && el.cond===a.cond;
     /* Sem emoji, de propósito: emoji ocupa 4 bytes e é o primeiro a quebrar
