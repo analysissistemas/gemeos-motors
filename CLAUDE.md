@@ -208,18 +208,17 @@ página, ação e rota de API — esconder botão não é segurança.
   `estoque.js` **e** em `cores-motos.js`, com o nome igual nos dois.
 - **Vídeo do hero: "a tropa chegou"**, o vídeo da própria loja.
 
-## O que é real e o que é exemplo
+## Só dado verdadeiro (desde 26/09/2026)
 
-| Real | Exemplo |
-|---|---|
-| Os 8 modelos elétricos, preços de tabela e ficha técnica (site da loja) | O **estoque da vitrine** (`public/estoque.js`): quantidades, chassi, km, placa |
-| As fotos das motos, da loja, dos gêmeos e dos clientes (site da loja) | **Modelos e preços de moto a combustão e de carro** da vitrine |
-| Os acessórios da vitrine: Capacete TOMATE Azul, Capacete TOMATE Branco, Baú 28 litros Pro Tork | |
-| WhatsApp, Instagram, cidades | |
-| Tudo que está no banco do sistema da equipe | |
+Pedido do dono: **nada de dado fictício**. A vitrine mostra um card por modelo
+real (os 7 elétricos e o triciclo MM3, todos zero km), com preço de tabela, cor
+e ficha técnica da loja, e os 3 acessórios reais. Não existe mais estoque
+sorteado, chassi, placa, quilometragem, avaria nem data de chegada inventados
+no `public/estoque.js`, nem catálogo de moto a combustão ou carro. A
+disponibilidade o cliente confirma no WhatsApp. Não reintroduzir exemplo.
 
-A vitrine **ainda não lê o banco**: mostra o estoque de exemplo do
-`estoque.js`. O rodapé da vitrine avisa isso ao cliente.
+A vitrine **ainda não lê o banco**; quando ler, o estoque passa a ser o do
+sistema da equipe.
 
 ## Testes
 

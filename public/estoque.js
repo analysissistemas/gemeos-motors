@@ -1,40 +1,14 @@
 /* ============================================================
-   ESTOQUE COMPARTILHADO — a fonte única da verdade
+   CATÁLOGO DA VITRINE — só dado verdadeiro
    ============================================================
-   Os DOIS arquivos leem daqui:
-     · index.html   (você e a equipe)  — vê custo, lucro, margem
-     · vitrine.html (o cliente)        — vê só o preço de venda
+   Lido pela vitrine.html (o cliente). Modelos, preços de tabela, cores e ficha
+   técnica são os da loja (site gemeosmotors.com.br). Desde 26/09/2026, a pedido
+   do dono, NADA aqui é de exemplo: sem estoque sorteado, sem chassi, placa ou
+   quilometragem inventados, sem data de chegada inventada. Cada modelo vira um
+   card; a disponibilidade o cliente confirma no WhatsApp.
 
-   Assim o preço nunca fica escrito dentro do site. Você ajusta na área do
-   vendedor e a vitrine muda junto, sem ninguém editar código.
-
-   DE ONDE VEIO ESTE CATÁLOGO
-   Os modelos, os preços e a ficha técnica (motor, autonomia, bateria, peso,
-   recarga) foram tirados do site gemeosmotors.com.br — são os dados REAIS da
-   loja. A cor de cada moto é a cor da foto oficial, conferida uma a uma; onde
-   a loja tiver outras cores, é só acrescentar na lista.
-
-   O que é EXEMPLO e você troca pelo cadastro: a quantidade em estoque, o
-   chassi, a quilometragem das seminovas e o custo de compra. O sistema sorteia
-   um estoque de demonstração com semente fixa, para as duas telas mostrarem
-   sempre a mesma coisa.
-
-   COMO O PREÇO É GUARDADO
-   O preço que você digita fica salvo no navegador (localStorage), por cima do
-   valor calculado. Enquanto você não mexer, vale a sugestão do sistema; assim
-   que você define um valor, ele manda.
-
-   ⚠️ Limite de hoje: por ser protótipo sem servidor, o preço salvo vale
-   NESTE computador e NESTE navegador. Quando o sistema virar de verdade
-   (com banco de dados), essa mesma função passa a gravar no servidor e o
-   preço vale para todo mundo — o resto do código não muda.
+   Este arquivo é PÚBLICO: nunca pôr custo, lucro ou margem nele.
    ============================================================ */
-
-/* gerador com semente fixa: a lista de motos de exemplo é sempre a mesma,
-   nas duas telas — senão o cliente veria um estoque e você veria outro */
-const _rnd = (s => () => (s = s*16807 % 2147483647) / 2147483647)(42);
-const _ent  = (a,b) => Math.floor(_rnd()*(b-a+1))+a;
-const _pick = a => a[Math.floor(_rnd()*a.length)];
 
 /* ---------- CATÁLOGO: as motos que a loja realmente vende ----------
    base  = preço de tabela da loja (o mesmo do site)
@@ -96,89 +70,6 @@ const CAT_TRICICLO = {
   }
 };
 
-/* ---------- MOTOS A COMBUSTÃO ----------
-   A loja não vende só elétrica: o Instagram anuncia "compra, venda e repasse
-   de veículos", e moto de gasolina é boa parte disso. São todas de repasse —
-   entram usadas, com placa, ano e quilometragem de verdade.
-
-   ⚠️ EXEMPLO. Estes modelos e valores são um ponto de partida para a tela não
-   nascer vazia. O site da loja não lista essa linha, então NÃO existe preço
-   oficial aqui: quem define é o cadastro, moto por moto. O valor de tabela
-   abaixo é só a referência de onde o cálculo parte.
-
-   ATENÇÃO, e isso não é detalhe: moto a combustão PRECISA de CNH, PAGA IPVA e
-   PRECISA de emplacamento. O contrário de tudo que a vitrine promete na
-   elétrica. Por isso `eletrico:false` — é ele que apaga aqueles selos. */
-const CAT_MOTO_COMB = {
-  "Honda CG 160 Fan": {
-    var:["Única"], cor:["Preta","Vermelha","Branca"], base:14500,
-    tipo:"Moto a combustão", eletrico:false, genero:"f",
-    ficha:{motor:"162,7 cc", cambio:"5 marchas", combustivel:"Flex",
-           partida:"Elétrica", consumo:"Cerca de 45 km/l", freio:"Disco / tambor"}
-  },
-  "Honda Biz 125": {
-    var:["Única"], cor:["Vermelha","Branca","Preta"], base:13900,
-    tipo:"Moto a combustão", eletrico:false, genero:"f",
-    ficha:{motor:"124,9 cc", cambio:"4 marchas", combustivel:"Flex",
-           partida:"Elétrica", consumo:"Cerca de 50 km/l", freio:"Disco / tambor"}
-  },
-  "Honda POP 110i": {
-    var:["Única"], cor:["Vermelha","Preta"], base:10900,
-    tipo:"Moto a combustão", eletrico:false, genero:"f",
-    ficha:{motor:"109,1 cc", cambio:"4 marchas", combustivel:"Flex",
-           partida:"Elétrica", consumo:"Cerca de 55 km/l", freio:"Tambor"}
-  },
-  "Yamaha Factor 150": {
-    var:["Única"], cor:["Azul","Preta","Vermelha"], base:15900,
-    tipo:"Moto a combustão", eletrico:false, genero:"f",
-    ficha:{motor:"149,7 cc", cambio:"5 marchas", combustivel:"Flex",
-           partida:"Elétrica", consumo:"Cerca de 42 km/l", freio:"Disco / tambor"}
-  },
-  "Honda Titan 160": {
-    var:["Única"], cor:["Vermelha","Preta","Prata"], base:16500,
-    tipo:"Moto a combustão", eletrico:false, genero:"f",
-    ficha:{motor:"162,7 cc", cambio:"5 marchas", combustivel:"Flex",
-           partida:"Elétrica", consumo:"Cerca de 43 km/l", freio:"Disco / disco"}
-  }
-};
-
-/* ---------- CARROS ----------
-   Também de repasse. Mesma regra: ⚠️ modelos e valores de EXEMPLO, o preço
-   real sai do cadastro de cada carro, porque em carro usado o ano e o estado
-   mandam mais que o modelo. Carro tambem precisa de CNH e paga IPVA. */
-const CAT_CARRO = {
-  "Fiat Uno": {
-    var:["Única"], cor:["Branco","Prata","Vermelho","Preto"], base:32000,
-    tipo:"Carro", eletrico:false, genero:"m",
-    ficha:{motor:"1.0 Fire", cambio:"Manual, 5 marchas", combustivel:"Flex",
-           portas:"4 portas", consumo:"Cerca de 12 km/l", direcao:"Mecânica"}
-  },
-  "Volkswagen Gol": {
-    var:["Única"], cor:["Branco","Prata","Preto"], base:38000,
-    tipo:"Carro", eletrico:false, genero:"m",
-    ficha:{motor:"1.0 MPI", cambio:"Manual, 5 marchas", combustivel:"Flex",
-           portas:"4 portas", consumo:"Cerca de 13 km/l", direcao:"Hidráulica"}
-  },
-  "Chevrolet Onix": {
-    var:["Única"], cor:["Branco","Prata","Preto","Vermelho"], base:52000,
-    tipo:"Carro", eletrico:false, genero:"m",
-    ficha:{motor:"1.0 Turbo", cambio:"Manual, 6 marchas", combustivel:"Flex",
-           portas:"4 portas", consumo:"Cerca de 14 km/l", direcao:"Elétrica"}
-  },
-  "Hyundai HB20": {
-    var:["Única"], cor:["Branco","Prata","Preto"], base:49000,
-    tipo:"Carro", eletrico:false, genero:"m",
-    ficha:{motor:"1.0 Flex", cambio:"Manual, 5 marchas", combustivel:"Flex",
-           portas:"4 portas", consumo:"Cerca de 13 km/l", direcao:"Elétrica"}
-  },
-  "Renault Kwid": {
-    var:["Única"], cor:["Branco","Prata","Laranja"], base:41000,
-    tipo:"Carro", eletrico:false, genero:"m",
-    ficha:{motor:"1.0 SCe", cambio:"Manual, 5 marchas", combustivel:"Flex",
-           portas:"4 portas", consumo:"Cerca de 15 km/l", direcao:"Elétrica"}
-  }
-};
-
 /* ---------- ACESSÓRIOS ----------
    Os que a loja mostra no site oficial (gemeosmotors.com.br), com a foto de lá.
    O site não publica preço de acessório: base null e o card mostra
@@ -190,71 +81,13 @@ const CAT_ACES = {
   "Baú 28 litros":          {var:["Única"], cor:["Preto"],  base:null, desc:"Base universal Pro Tork, ideal para bagagem no dia a dia"}
 };
 
-/* ---------- CONDIÇÃO E DESGASTE ----------
-   A condição é guardada no MASCULINO e traduzida na hora de mostrar. Sem isso
-   a tela escreve "moto seminovo" e "carro seminova" — erro de concordância na
-   cara do cliente, numa loja que vende confiança. O gênero vem do catálogo:
-   a moto é "ela", o triciclo e o carro são "ele". */
-const COND = ["Zero km","Seminovo","Vitrine","Usado"];
-
+/* ---------- CONDIÇÃO ----------
+   Guardada no MASCULINO e traduzida na hora de mostrar ("moto seminova"). Hoje
+   a loja só vende zero km, mas a regra fica para quando entrar outra condição. */
 /** Condição escrita do jeito certo para aquele produto. */
 function condRotulo(cond, genero){
   if(genero !== "f") return cond;
   return {"Seminovo":"Seminova", "Usado":"Usada"}[cond] || cond;
-}
-
-/* Fator por condição. O de vitrine rodou pouco, mas rodou. O "usado" é o
-   repasse: veículo com dono anterior e rodagem de verdade. */
-const FATOR_COND = {"Zero km":1.00, "Vitrine":0.92, "Seminovo":0.82, "Usado":0.70};
-
-/* Avarias de moto elétrica — o que a loja realmente encontra numa troca.
-   O desconto é em reais, para o cliente entender de onde saiu o abatimento. */
-const AVARIAS = [
-  {k:"Risco na carenagem",        d: 250},
-  {k:"Carenagem trincada",        d: 600},
-  {k:"Bateria com autonomia baixa",d:1500},
-  {k:"Pneu gasto",                d: 300},
-  {k:"Farol quebrado",            d: 220},
-  {k:"Retrovisor faltando",       d:  90},
-  {k:"Freio precisando de ajuste",d: 180},
-  {k:"Banco rasgado",             d: 200},
-  {k:"Chave reserva faltando",    d: 120},
-  {k:"Sinal de queda",            d: 800}
-];
-
-/* Veículo a combustão quebra em outros lugares: não tem bateria de lítio para
-   viciar, mas tem óleo, embreagem, câmbio e motor. Lista separada para o
-   cadastro não oferecer "bateria com autonomia baixa" num Gol 1.0. */
-const AVARIAS_COMBUSTAO = [
-  {k:"Risco na lataria",           d: 400},
-  {k:"Amassado na lataria",        d: 900},
-  {k:"Pneus carecas",              d: 800},
-  {k:"Embreagem gasta",            d:1500},
-  {k:"Câmbio com folga",           d:2000},
-  {k:"Motor fumaçando",            d:3000},
-  {k:"Ar-condicionado sem gelar",  d:1200},
-  {k:"Farol ou lanterna quebrada", d: 300},
-  {k:"Estofado rasgado",           d: 500},
-  {k:"Revisão atrasada",           d: 600},
-  {k:"IPVA em aberto",             d: 900},
-  {k:"Documento com pendência",    d:1500}
-];
-/* o preço procura a avaria nas duas listas — a peça sabe qual é a dela */
-const TODAS_AVARIAS = [...AVARIAS, ...AVARIAS_COMBUSTAO];
-
-/** Lista de avarias que faz sentido oferecer para este produto. */
-function avariasDe(p){
-  return (p && p.eletrico === false) ? AVARIAS_COMBUSTAO : AVARIAS;
-}
-
-/* A quilometragem faz na moto o que a saúde da bateria fazia no celular:
-   é o desgaste que o cliente pergunta antes de fechar. */
-function fatorKm(km){
-  if(km <=  500) return 1.00;
-  if(km <= 2000) return 0.95;
-  if(km <= 5000) return 0.90;
-  if(km <=10000) return 0.84;
-  return 0.76;
 }
 
 /* ---------- COMO A FICHA É ESCRITA NA TELA ----------
@@ -300,7 +133,7 @@ function fichaEmPedacos(ficha){
 }
 
 /** Todos os catálogos na ordem de procura — um lugar só para acrescentar linha. */
-const _CATALOGOS = [CATALOGO, CAT_TRICICLO, CAT_MOTO_COMB, CAT_CARRO, CAT_ACES];
+const _CATALOGOS = [CATALOGO, CAT_TRICICLO, CAT_ACES];
 
 /** Info do modelo (base, cores, ficha, gênero) em qualquer catálogo. */
 function _infoModelo(modelo){
@@ -310,96 +143,24 @@ function _infoModelo(modelo){
 /** Ficha técnica de um modelo, venha ele de qual catálogo for. */
 function fichaDe(modelo){ return _infoModelo(modelo).ficha || null; }
 
-/* preço sugerido com cada desconto explicado — nada de número que cai do céu */
-function precificar({modelo,cond,km,avarias}){
-  const base = _infoModelo(modelo).base || 5000;
-  const fc = FATOR_COND[cond] ?? 0.82;
-  const fk = cond==="Zero km" ? 1 : fatorKm(km);
-  const descAv = (avarias||[]).reduce((s,k)=>s+(TODAS_AVARIAS.find(a=>a.k===k)?.d||0),0);
-  const bruto = base*fc*fk;
-  const linhas = [
-    {r:`Tabela da ${modelo}`, v:base},
-    {r:`Condição: ${cond}`,   v:Math.round(base*fc-base), neg:fc<1}
-  ];
-  if(cond!=="Zero km") linhas.push({r:`${km.toLocaleString("pt-BR")} km rodados`, v:Math.round(base*fc*fk-base*fc), neg:fk<1});
-  (avarias||[]).forEach(k=>linhas.push({r:k, v:-(TODAS_AVARIAS.find(a=>a.k===k)?.d||0), neg:true}));
-  return {sugerido:Math.max(500,Math.round((bruto-descAv)/10)*10), linhas};
-}
-
 /* ============================================================
-   AS MOTOS — cada uma é peça única
-   ============================================================
-   Diferente de acessório, moto tem CHASSI. Duas TANK AG11 zero km parecem
-   iguais, mas a nota fiscal e a garantia são de uma delas especificamente —
-   e na seminova ainda entra quilometragem e avaria. Por isso cada moto que
-   entra na loja vira uma linha própria, nunca uma contagem por modelo.
+   OS CARDS — um por modelo real
    ============================================================ */
 let proximoId = 1;
 
-/* Placa no padrão Mercosul: 3 letras, 1 número, 1 letra, 2 números.
-   Só veículo emplacado tem — a elétrica não tem placa, e é justamente esse
-   o argumento de venda dela. */
-const _LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-function _placa(){
-  const L = () => _LETRAS[_ent(0,25)];
-  return `${L()}${L()}${L()}${_ent(0,9)}${L()}${_ent(10,99)}`;
-}
-
 function _gerarVeiculos(catalogo, categoria){
-  const out = [];
-  Object.keys(catalogo).forEach(m=>{
+  return Object.keys(catalogo).map(m=>{
     const info = catalogo[m];
-    const eletrico = info.eletrico !== false;
-    /* Modelo em reserva ainda NÃO está na loja: vira um card só, zero km,
-       com a data de chegada. Gerar estoque para ele daria a contradição de
-       uma moto "seminova, 3.491 km rodados" que ao mesmo tempo "chega na
-       semana que vem" — e o cliente percebe. */
-    /* 26/09/2026: só dado verdadeiro (pedido do dono). A quantidade de cada
-       modelo não é conhecida aqui, então a vitrine mostra UM card por modelo
-       real, com preço, cor e ficha da loja; a disponibilidade é no WhatsApp. */
-    const qtd = 1;
-    for(let i=0;i<qtd;i++){
-      /* Veículo de repasse não é zero km nem de vitrine: ele chega usado, e a
-         quilometragem é bem maior que a de uma elétrica de bairro. */
-      /* 26/09/2026: a loja só vende elétrica NOVA (pedido do dono: "não temos
-         motos seminovas"). Toda elétrica sai zero km. */
-      const cond = info.reserva || eletrico ? "Zero km"
-                                            : _pick(["Seminovo","Usado"]);
-      const zero = cond==="Zero km";
-      const km  = zero      ? 0
-                : !eletrico ? _ent(12000, 95000)
-                : cond==="Vitrine" ? _ent(20,400) : _ent(600,9000);
-      const lista = eletrico ? AVARIAS : AVARIAS_COMBUSTAO;
-      const avs = zero ? [] : (_rnd()>(eletrico?0.6:0.35) ? [_pick(lista).k] : []);
-      const {sugerido} = precificar({modelo:m, cond, km, avarias:avs});
-      out.push({
-        id: proximoId++, categoria, modelo:m, tipo:info.tipo,
-        eletrico, genero: info.genero || "f",
-        arm:"Única", cor:_pick(info.cor), cond,
-        km, avarias:avs,
-        chassi:`9C2${_ent(100000,999999)}${_ent(10000,99999)}`,
-        /* placa, ano e Renavam só existem em veículo emplacado */
-        placa:   eletrico ? null : _placa(),
-        /* ano-modelo e o de fabricacao ou o seguinte — nunca antes.
-           Sorteando os dois soltos saia "2019/2015", que nao existe. */
-        ano:     eletrico ? null : (()=>{ const f=_ent(2012,2023); return `${f}/${f+_ent(0,1)}`; })(),
-        renavam: eletrico ? null : `${_ent(10000000000,99999999999)}`,
-        ficha:info.ficha, video:info.video || null,
-        reserva:!!info.reserva, disponivelEm:info.disponivelEm || null,
-        /* SEM custo aqui: este arquivo é carregado pela vitrine, e quem abre o
-           código-fonte do cliente não pode achar custo nem margem. A área da
-           equipe tem a cópia própria dela, com custo. O _rnd() continua sendo
-           chamado de propósito: tirar a chamada muda o sorteio de tudo que vem
-           depois, e a vitrine passaria a mostrar outro estoque. */
-        ...(_rnd(), {}),
-        venda:sugerido,
-        entrada:`${String(_ent(1,28)).padStart(2,"0")}/08/2026`,
-        vendido:false,
-        naVitrine:true            // desmarcado = fica só no seu estoque, cliente não vê
-      });
-    }
+    return {
+      id: proximoId++, categoria, modelo:m, tipo:info.tipo,
+      eletrico: info.eletrico !== false, genero: info.genero || "f",
+      arm:info.var[0], cor:info.cor[0], cond:"Zero km",
+      km:0, avarias:[], chassi:"", placa:null, ano:null, renavam:null,
+      ficha:info.ficha, video:info.video || null,
+      reserva:false, disponivelEm:null,
+      venda:info.base, entrada:null, vendido:false, naVitrine:true
+    };
   });
-  return out;
 }
 
 /* por quantidade — sem chassi e sem quilometragem */
@@ -415,7 +176,7 @@ function _gerarQuantidade(catalogo, categoria){
       reserva:false, disponivelEm:null,
       /* disponibilidade confirmada no WhatsApp: o card aparece sempre */
       qtd:1, venda:info.base, descricao:info.desc || null,
-      entrada:"01/08/2026", vendido:false, naVitrine:true, porQuantidade:true
+      entrada:null, vendido:false, naVitrine:true, porQuantidade:true
     });
   });
   return out;
@@ -423,8 +184,6 @@ function _gerarQuantidade(catalogo, categoria){
 
 const MOTOS      = _gerarVeiculos(CATALOGO,       "Motos elétricas");
 const TRICICLOS  = _gerarVeiculos(CAT_TRICICLO,   "Triciclos");
-/* 26/09/2026: moto a combustão e carro saíram da vitrine (pedido do dono).
-   Os catálogos CAT_MOTO_COMB e CAT_CARRO ficam acima só para consulta. */
 const ACESSORIOS = _gerarQuantidade(CAT_ACES,     "Acessórios");
 
 /* tudo o que a loja vende, numa lista só */
