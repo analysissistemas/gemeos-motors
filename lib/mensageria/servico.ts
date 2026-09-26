@@ -100,8 +100,14 @@ export async function receberMensagem(m: MensagemEntrante) {
       await registrarLog(null, { acao: "conversa.criada", entidade: "conversa", entidadeId: conversa.id, descricao: `Nova conversa no WhatsApp com ${m.nomeContato ?? formatarTelefone(telefone)}`, origem: "webhook" }, tx);
     }
     const resumo = resumoMensagem(m.tipo, m.conteudo, m.midia);
+    let respostaA: number | null = null;
+    if (m.respostaAExternoId) {
+      const [orig] = await tx.select({ id: schema.mensagens.id }).from(schema.mensagens).where(and(eq(schema.mensagens.externoId, m.respostaAExternoId), eq(schema.mensagens.conversaId, conversa.id))).limit(1);
+      respostaA = orig?.id ?? null;
+    }
     await tx.insert(schema.mensagens).values({
       conversaId: conversa.id,
+      respostaA,
       direcao: "incoming",
       autor: "cliente",
       tipo: m.tipo,
@@ -263,8 +269,76 @@ export async function aplicarStatus(externoId: string, status: "delivered" | "re
   /* junta o erro aos metadados que já existem (a duração do áudio, por exemplo), sem apagá-los */
   await db
     .update(schema.mensagens)
-    .set({ status, ...(erro && { metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ erro })}::jsonb` }) })
+    .set({ status, alteradaEm: new Date(), ...(erro && { metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ erro })}::jsonb` }) })
     .where(eq(schema.mensagens.id, m.id));
+}
+
+/* ---------------- reações e mensagens apagadas ---------------- */
+type Reacoes = { cliente?: string; equipe?: string };
+
+async function juntarMetadados(id: number, patch: Record<string, unknown>) {
+  await db
+    .update(schema.mensagens)
+    .set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`, alteradaEm: new Date() })
+    .where(eq(schema.mensagens.id, id));
+}
+
+async function trocarReacao(id: number, atual: unknown, lado: keyof Reacoes, emoji: string) {
+  const reacoes: Reacoes = { ...((atual as { reacoes?: Reacoes } | null)?.reacoes ?? {}) };
+  if (emoji) reacoes[lado] = emoji;
+  else delete reacoes[lado];
+  await juntarMetadados(id, { reacoes });
+}
+
+/** Webhook: o cliente reagiu (ou tirou a reação) de uma mensagem do chat. */
+export async function aplicarReacaoDoCliente(externoIdAlvo: string, emoji: string) {
+  const [m] = await db.select({ id: schema.mensagens.id, metadados: schema.mensagens.metadados }).from(schema.mensagens).where(eq(schema.mensagens.externoId, externoIdAlvo)).limit(1);
+  if (m) await trocarReacao(m.id, m.metadados, "cliente", emoji);
+}
+
+/** Webhook: o cliente apagou para todos uma mensagem que tinha mandado. O texto
+ *  continua guardado para a equipe (registro), marcado como apagado. */
+export async function aplicarRevogacao(externoIdOriginal: string) {
+  const [m] = await db.select({ id: schema.mensagens.id }).from(schema.mensagens).where(eq(schema.mensagens.externoId, externoIdOriginal)).limit(1);
+  if (m) await juntarMetadados(m.id, { apagadaPeloCliente: new Date().toISOString() });
+}
+
+async function mensagemComConversa(mensagemId: number) {
+  const [m] = await db
+    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, direcao: schema.mensagens.direcao, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo, externoId: schema.mensagens.externoId, metadados: schema.mensagens.metadados, telefone: schema.conversas.contatoTelefone })
+    .from(schema.mensagens)
+    .innerJoin(schema.conversas, eq(schema.conversas.id, schema.mensagens.conversaId))
+    .where(eq(schema.mensagens.id, mensagemId))
+    .limit(1);
+  if (!m || m.direcao === "system") throw new ErroRegra("Mensagem não encontrada.");
+  return m;
+}
+
+/** A equipe reage a uma mensagem: vai para o WhatsApp do cliente de verdade. */
+export async function reagirMensagem(u: Quem, mensagemId: number, emoji: string) {
+  const m = await mensagemComConversa(mensagemId);
+  if ((m.metadados as { apagada?: unknown } | null)?.apagada) throw new ErroRegra("Essa mensagem foi apagada.");
+  if (!m.externoId) throw new ErroRegra("Essa mensagem não chegou ao WhatsApp, então não dá para reagir.");
+  const prov = await obterProvedor();
+  const r = await prov.reagir(m.telefone, m.externoId, emoji);
+  if (!r.ok) throw new ErroRegra(`A reação não foi enviada: ${r.erro}`);
+  await trocarReacao(m.id, m.metadados, "equipe", emoji);
+  await registrarLog(u, { acao: "mensagem.reacao", entidade: "conversa", entidadeId: m.conversaId, descricao: emoji ? `Reagiu com ${emoji} a uma mensagem` : "Tirou a reação de uma mensagem", dados: { mensagemId: m.id } });
+}
+
+/** Apagar para mim: some do chat da equipe. Não sai do celular do cliente (a API
+ *  oficial da Meta não apaga mensagem enviada). O conteúdo fica no histórico. */
+export async function apagarMensagemParaMim(u: Quem, mensagemId: number) {
+  const m = await mensagemComConversa(mensagemId);
+  if ((m.metadados as { apagada?: unknown } | null)?.apagada) return;
+  await juntarMetadados(m.id, { apagada: { por: u.nome, em: new Date().toISOString() } });
+  await registrarLog(u, {
+    acao: "mensagem.apagada",
+    entidade: "conversa",
+    entidadeId: m.conversaId,
+    descricao: `Apagou do chat uma mensagem ${m.direcao === "incoming" ? "do cliente" : "da loja"}`,
+    dados: { mensagemId: m.id, tipo: m.tipo, conteudo: m.conteudo },
+  });
 }
 
 export async function marcarLida(conversaId: number) {

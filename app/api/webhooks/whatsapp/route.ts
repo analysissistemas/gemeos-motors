@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
-import { aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
+import { aplicarReacaoDoCliente, aplicarRevogacao, aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
 import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
 import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
@@ -34,7 +34,24 @@ export async function GET(req: NextRequest) {
 
 type ValorMeta = {
   contacts?: { profile?: { name?: string }; wa_id?: string }[];
-  messages?: { id: string; from: string; type: string; text?: { body?: string }; image?: { id: string; caption?: string; mime_type?: string }; document?: { id: string; filename?: string; mime_type?: string; caption?: string }; audio?: { id: string; mime_type?: string } }[];
+  messages?: {
+    id: string;
+    from: string;
+    type: string;
+    context?: { id?: string };
+    text?: { body?: string };
+    image?: { id: string; caption?: string; mime_type?: string };
+    document?: { id: string; filename?: string; mime_type?: string; caption?: string };
+    audio?: { id: string; mime_type?: string };
+    video?: { id: string; caption?: string; mime_type?: string };
+    sticker?: { id: string; mime_type?: string };
+    location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+    contacts?: { name?: { formatted_name?: string; first_name?: string }; phones?: { phone?: string; wa_id?: string; type?: string }[] }[];
+    reaction?: { message_id?: string; emoji?: string };
+    revoke?: { original_message_id?: string };
+    button?: { text?: string };
+    interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  }[];
   statuses?: { id: string; status: "sent" | "delivered" | "read" | "failed"; errors?: { code?: number; title?: string; message?: string; error_data?: { details?: string } }[] }[];
 };
 
@@ -66,19 +83,30 @@ export async function POST(req: NextRequest) {
         await aplicarStatus(s.id, s.status, erro);
       }
       for (const m of v.messages ?? []) {
+        /* reação e "apagar para todos" não são mensagens novas: mudam uma que já existe */
+        if (m.type === "reaction" && m.reaction?.message_id) {
+          await aplicarReacaoDoCliente(m.reaction.message_id, m.reaction.emoji ?? "");
+          continue;
+        }
+        if (m.revoke?.original_message_id) {
+          await aplicarRevogacao(m.revoke.original_message_id);
+          continue;
+        }
         const nome = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? null;
-        const tipo: TipoMensagem = m.type === "text" ? "texto" : m.type === "image" ? "imagem" : m.type === "document" ? "documento" : m.type === "audio" ? "audio" : "texto";
+        const t = traduzir(m);
         const baixado = await baixarEGuardar(cfg, m);
+        const anexo = m.image ?? m.document ?? m.audio ?? m.video ?? m.sticker;
         recebidas.push({
           canal: "whatsapp",
           provedor: "whatsapp_cloud",
           telefone: m.from,
           nomeContato: nome,
           externoId: m.id,
-          tipo,
-          conteudo: m.text?.body ?? m.image?.caption ?? m.document?.caption ?? (tipo === "texto" ? `[${m.type}]` : null),
+          tipo: t.tipo,
+          conteudo: t.conteudo,
           midia: baixado.midia,
-          metadados: { mediaId: m.image?.id ?? m.document?.id ?? m.audio?.id, mime: m.image?.mime_type ?? m.document?.mime_type ?? m.audio?.mime_type, arquivo: m.document?.filename, ...(baixado.duracao ? { duracao: baixado.duracao } : {}) },
+          respostaAExternoId: m.context?.id ?? null,
+          metadados: { mediaId: anexo?.id, mime: anexo?.mime_type, arquivo: m.document?.filename, ...t.metadados, ...(baixado.duracao ? { duracao: baixado.duracao } : {}) },
         });
       }
     }
@@ -102,11 +130,46 @@ export async function POST(req: NextRequest) {
 
 type MensagemMeta = NonNullable<ValorMeta["messages"]>[number];
 
+/* Cada tipo da Meta vira um tipo do chat, sem deixar "[contacts]" ou "[location]" na tela. */
+function traduzir(m: MensagemMeta): { tipo: TipoMensagem; conteudo: string | null; metadados?: Record<string, unknown> } {
+  switch (m.type) {
+    case "text":
+      return { tipo: "texto", conteudo: m.text?.body ?? "" };
+    case "image":
+      return { tipo: "imagem", conteudo: m.image?.caption ?? null };
+    case "sticker":
+      return { tipo: "imagem", conteudo: null, metadados: { figurinha: true } };
+    case "document":
+      return { tipo: "documento", conteudo: m.document?.caption ?? null };
+    case "audio":
+      return { tipo: "audio", conteudo: null };
+    case "video":
+      return { tipo: "video", conteudo: m.video?.caption ?? null };
+    case "location": {
+      const l = m.location ?? {};
+      return { tipo: "localizacao", conteudo: [l.name, l.address].filter(Boolean).join(" — ") || null, metadados: { latitude: l.latitude, longitude: l.longitude } };
+    }
+    case "contacts": {
+      const contatos = (m.contacts ?? []).map((c) => ({
+        nome: c.name?.formatted_name ?? c.name?.first_name ?? null,
+        telefones: (c.phones ?? []).map((p) => ({ numero: p.wa_id ?? (p.phone ?? "").replace(/\D/g, ""), rotulo: p.type ?? null })).filter((p) => p.numero),
+      }));
+      return { tipo: "contato", conteudo: contatos.map((c) => c.nome ?? "Contato").join(", "), metadados: { contatos } };
+    }
+    case "button":
+      return { tipo: "texto", conteudo: m.button?.text ?? "" };
+    case "interactive":
+      return { tipo: "texto", conteudo: m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "" };
+    default:
+      return { tipo: "texto", conteudo: "Mensagem de um tipo que o sistema ainda não mostra. Veja no celular." };
+  }
+}
+
 /* A Meta manda só o id da mídia: baixamos com o token e guardamos no disco do
    VPS (volume /data, fora do alcance público). Se falhar, a mensagem entra mesmo
    assim, sem o arquivo. */
 async function baixarEGuardar(cfg: Awaited<ReturnType<typeof lerConfigWhatsApp>>, m: MensagemMeta): Promise<{ midia: Midia | null; duracao: number | null }> {
-  const anexo = m.image ?? m.document ?? m.audio;
+  const anexo = m.image ?? m.document ?? m.audio ?? m.video ?? m.sticker;
   if (!anexo || !armazenamentoDisponivel()) return { midia: null, duracao: null };
   try {
     const arq = await new ProvedorWhatsAppCloud(cfg).baixarMidia(anexo.id);

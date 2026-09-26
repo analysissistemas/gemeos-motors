@@ -509,6 +509,8 @@ export const mensagens = pgTable(
     metadados: jsonb().$type<Record<string, unknown>>(),
     lidaEm: quando(),
     criadoEm: criadoEm(),
+    /* muda quando a mensagem já existente muda (reação, apagada, status): a tela sincroniza por aqui */
+    alteradaEm: quando(),
   },
   (t) => [
     index("mensagens_conversa_idx").on(t.conversaId, t.id),

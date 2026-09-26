@@ -22,6 +22,9 @@ export class ProvedorSimulado implements ProvedorMensagens {
     void pedido;
     return { externoId: `mock-${randomUUID()}`, status: "sent" };
   }
+  async reagir() {
+    return { ok: true as const };
+  }
 }
 
 /* ============================================================
@@ -105,10 +108,30 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
     });
-    const j = (await r.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string } };
-    if (!r.ok) return { externoId: null, status: "failed", erro: j.error?.message ?? `HTTP ${r.status}` };
+    const j = (await r.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string; code?: number } };
+    if (!r.ok) return { externoId: null, status: "failed", erro: explicarErroMeta(j.error) ?? `HTTP ${r.status}` };
     return { externoId: j.messages?.[0]?.id ?? null, status: "sent" };
   }
+
+  async reagir(telefone: string, externoId: string, emoji: string) {
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: telefone, type: "reaction", reaction: { message_id: externoId, emoji } }),
+    });
+    if (r.ok) return { ok: true as const };
+    const j = (await r.json().catch(() => ({}))) as { error?: { message?: string; code?: number } };
+    return { ok: false as const, erro: explicarErroMeta(j.error) ?? `HTTP ${r.status}` };
+  }
+}
+
+/* Os erros da Meta que a equipe mais vai ver, em português. */
+function explicarErroMeta(e?: { message?: string; code?: number }) {
+  if (!e) return null;
+  if (e.code === 131047 || e.code === 470)
+    return "Passaram mais de 24 horas desde a última mensagem do cliente. A Meta só deixa a loja escrever de novo com um modelo de mensagem aprovado, ou depois que o cliente mandar mensagem.";
+  if (e.code === 190) return "A Meta recusou o token (Authentication Error). Confira o token em Configurações → API Oficial.";
+  return e.message ?? null;
 }
 
 export async function obterProvedor(): Promise<ProvedorMensagens> {

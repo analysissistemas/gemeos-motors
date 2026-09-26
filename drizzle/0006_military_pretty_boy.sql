@@ -1,0 +1,1 @@
+ALTER TABLE "mensagens" ADD COLUMN "alterada_em" timestamp with time zone;

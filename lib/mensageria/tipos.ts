@@ -31,6 +31,8 @@ export type MensagemEntrante = {
   midia?: Midia | null;
   metadados?: Record<string, unknown>;
   demo?: boolean;
+  /** mensagem do próprio chat que o cliente respondeu (id do provedor) */
+  respostaAExternoId?: string | null;
 };
 
 export type PedidoEnvio = {
@@ -53,4 +55,6 @@ export interface ProvedorMensagens {
   readonly simulado: boolean;
   configurado(): boolean;
   enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio>;
+  /** Reação a uma mensagem (emoji vazio tira a reação). */
+  reagir(telefone: string, externoId: string, emoji: string): Promise<{ ok: true } | { ok: false; erro: string }>;
 }
