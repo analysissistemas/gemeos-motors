@@ -7,7 +7,7 @@ import { brl, dataHora } from "@/lib/formato";
 import { formatarRestante, promocaoVale } from "@/lib/promocao";
 import { Pagina } from "@/components/ui/pagina";
 import { CabecalhoPagina, EstadoVazio, Painel } from "@/components/ui/basicos";
-import { EncerrarPromocao, FormPromocao } from "./form-promocao";
+import { EncerrarPromocao, ExcluirPromocao, FormPromocao } from "./form-promocao";
 
 export const metadata: Metadata = { title: "Promoções" };
 
@@ -49,7 +49,10 @@ export default async function PaginaPromocoes() {
                       {dataHora(p.inicioEm)} até {dataHora(p.fimEm)} · {situacao}
                     </span>
                   </span>
-                  {vale && <EncerrarPromocao id={p.id} />}
+                  <span className="flex shrink-0 gap-1">
+                    {vale && <EncerrarPromocao id={p.id} />}
+                    <ExcluirPromocao id={p.id} nome={p.modelo} />
+                  </span>
                 </li>
               );
             })}

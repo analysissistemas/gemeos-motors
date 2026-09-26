@@ -1,15 +1,16 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import { Painel } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { Campo, Entrada } from "@/components/ui/campos";
-import { acaoDesbloquearConfig, acaoTrancarConfig } from "./desbloqueio";
+import type { AreaConfig } from "@/lib/auth/desbloqueio";
+import { acaoConfigLiberada, acaoDesbloquearConfig, acaoTrancarConfig } from "./desbloqueio";
 
 /** Tela de senha na frente das configurações. */
-export function TelaBloqueio({ titulo, usuario, minutos }: { titulo: string; usuario: string; minutos: number }) {
+export function TelaBloqueio({ titulo, usuario, area }: { titulo: string; usuario: string; area: AreaConfig }) {
   const router = useRouter();
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -18,7 +19,7 @@ export function TelaBloqueio({ titulo, usuario, minutos }: { titulo: string; usu
   const enviar = (e: React.FormEvent) => {
     e.preventDefault();
     iniciar(async () => {
-      const r = await acaoDesbloquearConfig(senha);
+      const r = await acaoDesbloquearConfig(senha, area);
       if (!r.ok) {
         setErro(r.erro);
         setSenha("");
@@ -48,23 +49,49 @@ export function TelaBloqueio({ titulo, usuario, minutos }: { titulo: string; usu
         <Botao type="submit" variante="primario" carregando={pendente} disabled={!senha}>
           Desbloquear
         </Botao>
-        <p className="text-[12px] text-ink-3">Fica liberado por {minutos} minutos e depois tranca sozinho.</p>
+        <p className="text-[12px] text-ink-3">Por segurança, a senha vale só enquanto você estiver nesta tela: saiu, tranca de novo.</p>
       </form>
     </Painel>
   );
 }
 
-/** Botão para trancar antes do tempo. */
-export function BotaoTrancar() {
+/* quantas telas liberadas de cada área estão montadas: o React (modo dev) desmonta e monta
+   de novo na hora; só tranca se, depois disso, a tela não voltou */
+const montadas: Partial<Record<AreaConfig, number>> = {};
+
+/** Botão para trancar na hora. Ele só existe com a tela liberada, então também é ele que
+    tranca ao sair: navegar para outra tela, recarregar ou fechar a aba pede a senha de novo. */
+export function BotaoTrancar({ area }: { area: AreaConfig }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
+  useEffect(() => {
+    let vivo = true;
+    montadas[area] = (montadas[area] ?? 0) + 1;
+    /* voltou pelo "Voltar" do navegador: o roteador pode mostrar a tela guardada sem perguntar ao servidor */
+    void acaoConfigLiberada(area).then((r) => {
+      if (vivo && r.ok && !r.dados) router.refresh();
+    });
+    /* sair da tela (menu, recarregar, fechar a aba): um beacon direto para a rota que apaga o
+       cookie. Ação de servidor aqui não serve: disparada no meio da troca de tela, o Next
+       responde sem o Set-Cookie e a tela continuava liberada. */
+    const trancar = () => navigator.sendBeacon(`/api/config/trancar?area=${area}`);
+    window.addEventListener("pagehide", trancar);
+    return () => {
+      vivo = false;
+      window.removeEventListener("pagehide", trancar);
+      montadas[area] = (montadas[area] ?? 1) - 1;
+      setTimeout(() => {
+        if (!montadas[area]) trancar();
+      }, 0);
+    };
+  }, [area, router]);
   return (
     <div className="mb-3 flex justify-end">
       <Botao
         carregando={pendente}
         onClick={() =>
           iniciar(async () => {
-            const r = await acaoTrancarConfig();
+            const r = await acaoTrancarConfig(area);
             if (!r.ok) return void toast.error(r.erro);
             router.refresh();
           })

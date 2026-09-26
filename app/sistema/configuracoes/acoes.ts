@@ -34,7 +34,7 @@ const esquemaEmpresa = z.object({
 
 export async function acaoSalvarEmpresa(dados: Record<string, unknown>) {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const d = esquemaEmpresa.parse(dados);
     await db
       .insert(schema.empresa)
@@ -60,7 +60,7 @@ const esquemaResposta = z.object({
 
 export async function acaoSalvarResposta(id: number | null, dados: Record<string, unknown>) {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const d = esquemaResposta.parse(dados);
     if (id) await db.update(schema.respostasRapidas).set({ ...d, atualizadoEm: new Date() }).where(eq(schema.respostasRapidas.id, id));
     else await db.insert(schema.respostasRapidas).values(d);
@@ -72,7 +72,7 @@ export async function acaoSalvarResposta(id: number | null, dados: Record<string
 
 export async function acaoExcluirResposta(id: number) {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const [r] = await db.delete(schema.respostasRapidas).where(eq(schema.respostasRapidas.id, id)).returning({ atalho: schema.respostasRapidas.atalho });
     if (!r) throw new ErroRegra("Resposta não encontrada.");
     await registrarLog(u, { acao: "configuracao.resposta_rapida", entidade: "configuracao", descricao: `Excluiu a resposta rápida /${r.atalho}` });
@@ -83,7 +83,7 @@ export async function acaoExcluirResposta(id: number) {
 
 export async function acaoTriagemAutomatica(ligada: boolean) {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     await db
       .insert(schema.configuracoes)
       .values({ chave: "ia.triagem_automatica", valor: ligada, atualizadoPor: u.id })
@@ -96,7 +96,7 @@ export async function acaoTriagemAutomatica(ligada: boolean) {
 
 export async function acaoCarregarDemo() {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const r = await carregarDemonstracao(u);
     revalidatePath("/sistema/conversas");
     revalidatePath("/sistema/funil");
@@ -106,7 +106,7 @@ export async function acaoCarregarDemo() {
 
 export async function acaoLimparDemo() {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const r = await limparDemonstracao(u);
     revalidatePath("/sistema/conversas");
     revalidatePath("/sistema/funil");
@@ -127,7 +127,7 @@ const esquemaApiOficial = z.object({
 
 export async function acaoSalvarApiOficial(dados: Record<string, unknown>) {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const d = esquemaApiOficial.parse(dados);
     const atual = await lerConfigWhatsApp();
     if (d.ativo && !(d.token || atual.token)) throw new ErroRegra("Cole o token permanente antes de ativar a API Oficial.");
@@ -151,7 +151,7 @@ export async function acaoSalvarApiOficial(dados: Record<string, unknown>) {
 
 export async function acaoGerarVerifyToken() {
   return executar(async () => {
-    const u = await autorizarConfig();
+    const u = await autorizarConfig("config");
     const t = await gerarVerifyToken(u.id);
     await registrarLog(u, { acao: "configuracao.whatsapp", entidade: "configuracao", descricao: "Gerou um novo token de verificação do webhook do WhatsApp" });
     revalidatePath("/sistema/configuracoes");
@@ -178,7 +178,7 @@ async function conferirTokenNaMeta(token: string, phoneNumberId: string) {
 
 export async function acaoTestarApiOficial() {
   return executar(async () => {
-    await autorizarConfig();
+    await autorizarConfig("config");
     const c = await lerConfigWhatsApp();
     if (!c.token || !c.phoneNumberId) throw new ErroRegra("Salve o token e o ID do número primeiro.");
     const r = await consultarNumero(c.token, c.phoneNumberId);

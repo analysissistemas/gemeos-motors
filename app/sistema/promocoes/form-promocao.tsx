@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Botao } from "@/components/ui/botao";
 import { Campo, Entrada, Selecao } from "@/components/ui/campos";
-import { acaoCriarPromocao, acaoEncerrarPromocao } from "./acoes";
+import { acaoCriarPromocao, acaoEncerrarPromocao, acaoExcluirPromocao } from "./acoes";
 
 export function FormPromocao({ modelos }: { modelos: { id: number; nome: string; precoTabela: number }[] }) {
   const [modeloId, setModeloId] = useState(modelos[0]?.id ?? 0);
@@ -73,6 +73,31 @@ export function EncerrarPromocao({ id }: { id: number }) {
       }
     >
       Encerrar agora
+    </Botao>
+  );
+}
+
+/** Apaga a promoção de vez (a moto continua no catálogo). */
+export function ExcluirPromocao({ id, nome }: { id: number; nome: string }) {
+  const [carregando, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <Botao
+      tamanho="sm"
+      variante="fantasma"
+      carregando={carregando}
+      className="text-critico"
+      onClick={() => {
+        if (!window.confirm(`Excluir a promoção de ${nome}? A moto continua no catálogo.`)) return;
+        iniciar(async () => {
+          const r = await acaoExcluirPromocao(id);
+          if (!r.ok) return void toast.error(r.erro);
+          toast.success(r.mensagem);
+          router.refresh();
+        });
+      }}
+    >
+      Excluir
     </Botao>
   );
 }

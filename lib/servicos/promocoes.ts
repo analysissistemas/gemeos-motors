@@ -36,3 +36,18 @@ export async function encerrarPromocao(u: Quem, id: number) {
     await registrarLog(u, { acao: "promocao.encerrada", entidade: "modelo", entidadeId: p.modeloId, descricao: "Encerrou a promoção antes do fim" }, tx);
   });
 }
+
+/** Apaga a promoção de vez (ex.: teste). O modelo continua no catálogo; fica o registro no histórico. */
+export async function excluirPromocao(u: Quem, id: number) {
+  const [p] = await db
+    .select({ id: schema.promocoes.id, modeloId: schema.promocoes.modeloId, precoPromocional: schema.promocoes.precoPromocional, modelo: schema.modelos.nome })
+    .from(schema.promocoes)
+    .innerJoin(schema.modelos, eq(schema.modelos.id, schema.promocoes.modeloId))
+    .where(eq(schema.promocoes.id, id))
+    .limit(1);
+  if (!p) throw new ErroRegra("Promoção não encontrada.");
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.promocoes).where(eq(schema.promocoes.id, id));
+    await registrarLog(u, { acao: "promocao.excluida", entidade: "modelo", entidadeId: p.modeloId, descricao: `Excluiu a promoção de ${p.modelo} (${brl(p.precoPromocional)})`, dados: { promocaoId: p.id } }, tx);
+  });
+}

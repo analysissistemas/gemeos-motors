@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { asc, desc, eq } from "drizzle-orm";
 import { exigirPermissao } from "@/lib/auth/dal";
-import { configLiberada, DESBLOQUEIO_MIN } from "@/lib/auth/desbloqueio";
+import { configLiberada } from "@/lib/auth/desbloqueio";
 import { db, schema } from "@/lib/db";
 import { carregarPrompts } from "@/lib/ia/prompt";
 import { lerControle } from "@/lib/ia/controle";
@@ -13,10 +13,10 @@ export const metadata: Metadata = { title: "Inteligência artificial" };
 
 export default async function PaginaIa() {
   const u = await exigirPermissao("config.gerenciar");
-  if (!(await configLiberada(u)))
+  if (!(await configLiberada(u, "ia")))
     return (
       <Pagina estreita>
-        <TelaBloqueio titulo="Configurações da IA" usuario={u.usuario} minutos={DESBLOQUEIO_MIN} />
+        <TelaBloqueio titulo="Configurações da IA" usuario={u.usuario} area="ia" />
       </Pagina>
     );
   const [prompts, conhecimento, controle, execucoes] = await Promise.all([
@@ -41,7 +41,7 @@ export default async function PaginaIa() {
   ]);
   return (
     <Pagina>
-      <BotaoTrancar />
+      <BotaoTrancar area="ia" />
       <TelaIa prompts={prompts} conhecimento={conhecimento} controle={controle} execucoes={execucoes} />
     </Pagina>
   );

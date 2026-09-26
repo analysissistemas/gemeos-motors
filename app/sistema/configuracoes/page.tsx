@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { asc, eq, sql } from "drizzle-orm";
 import { exigirPermissao } from "@/lib/auth/dal";
-import { configLiberada, DESBLOQUEIO_MIN } from "@/lib/auth/desbloqueio";
+import { configLiberada } from "@/lib/auth/desbloqueio";
 import { db, schema } from "@/lib/db";
 import { MODELO_IA } from "@/lib/ia/cliente";
 import { obterProvedor } from "@/lib/mensageria/provedores";
@@ -14,10 +14,10 @@ export const metadata: Metadata = { title: "Configurações" };
 
 export default async function PaginaConfiguracoes() {
   const u = await exigirPermissao("config.gerenciar");
-  if (!(await configLiberada(u)))
+  if (!(await configLiberada(u, "config")))
     return (
       <Pagina estreita>
-        <TelaBloqueio titulo="Configurações" usuario={u.usuario} minutos={DESBLOQUEIO_MIN} />
+        <TelaBloqueio titulo="Configurações" usuario={u.usuario} area="config" />
       </Pagina>
     );
   const [empresa, respostas, triagem, demo] = await Promise.all([
@@ -29,7 +29,7 @@ export default async function PaginaConfiguracoes() {
   const [provedor, apiOficial] = await Promise.all([obterProvedor(), lerConfigParaTela()]);
   return (
     <Pagina>
-      <BotaoTrancar />
+      <BotaoTrancar area="config" />
       <TelaConfiguracoes
         empresa={empresa[0] ?? null}
         respostas={respostas}

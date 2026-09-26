@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { autorizar } from "@/lib/auth/dal";
 import { executar } from "@/lib/acao";
-import { criarPromocao, encerrarPromocao } from "@/lib/servicos/promocoes";
+import { criarPromocao, encerrarPromocao, excluirPromocao } from "@/lib/servicos/promocoes";
 
 const esquema = z.object({
   modeloId: z.number().int().positive(),
@@ -32,4 +32,13 @@ export async function acaoEncerrarPromocao(id: number) {
     revalidatePath("/sistema/promocoes");
     return null;
   }, "Promoção encerrada");
+}
+
+export async function acaoExcluirPromocao(id: number) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    await excluirPromocao(u, z.number().int().positive().parse(id));
+    revalidatePath("/sistema/promocoes");
+    return null;
+  }, "Promoção excluída");
 }
