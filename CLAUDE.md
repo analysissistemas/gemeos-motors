@@ -315,12 +315,13 @@ sorteado, chassi, placa, quilometragem, avaria nem data de chegada inventados
 no `public/estoque.js`, nem catálogo de moto a combustão ou carro. A
 disponibilidade o cliente confirma no WhatsApp. Não reintroduzir exemplo.
 
-A vitrine **ainda não lê o banco**; quando ler, o estoque passa a ser o do
-sistema da equipe.
+Desde 26/09/2026 o **catálogo** da vitrine vem do sistema (Estoque → Catálogo,
+via `/api/vitrine/catalogo`); se a rota falhar, o site cai no `estoque.js`. O
+estoque (quantidade) continua fora do site.
 
 ## Testes
 
-`npm run test:e2e` roda 19 testes no Chrome (sistema inteiro + vitrine) contra
+`npm run test:e2e` roda 20 testes no Chrome (sistema inteiro + vitrine) contra
 `E2E_URL` (padrão `http://localhost:3100`), com `E2E_ADMIN_SENHA` definida.
 Tudo que os testes criam leva a marca **"E2E"** (clientes, veículos, usuários
 `e2e.*`) e é apagado no fim por `scripts/limpar-e2e.mjs`, que não toca em
@@ -328,7 +329,8 @@ nada sem essa marca. `E2E_MANTER=1` deixa os dados para olhar. Os logins do
 admin feitos pelos testes ficam no histórico — é o registro verdadeiro.
 
 Antes de publicar: `npm run lint`, `npm run typecheck`, `npm run build` e os
-testes. Rodados em 15/09/2026: 19/19 no build local e 19/19 no site no ar.
+testes. Rodados em 26/09/2026: 20/20 em banco descartável. A limpeza dos testes usa
+`--env-file=.env.local`: defina antes o `DATABASE_URL` do banco de teste.
 
 ## Armadilhas que já custaram tempo
 
@@ -407,8 +409,8 @@ python gerar_lista_fotos.py      # atualiza public/fotos-disponiveis.js (obrigat
    antes de ligar diagnóstico de perda, triagem e apoio da OS.
 3. **WhatsApp real** — credenciais da Meta em Configurações e o webhook
    `https://<SITE_URL>/api/webhooks/whatsapp` cadastrado no app da Meta.
-4. **Vitrine lendo o estoque do banco** — hoje ela mostra o exemplo do
-   `estoque.js`; o sistema da equipe já tem o estoque de verdade.
+4. **Vitrine lendo a quantidade em estoque do banco** — o catálogo já vem do
+   sistema (26/09/2026); a quantidade ainda não aparece no site.
 5. **Upload de foto do veículo pelo sistema.**
 6. Atualização em tempo real no chat (hoje consulta a cada 3 s com a tela aberta).
 7. Tirar do ar o `gemeos-do-iphone.vercel.app` (precisa da outra conta).
