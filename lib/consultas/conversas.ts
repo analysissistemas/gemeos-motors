@@ -139,7 +139,7 @@ export type MensagemChat = Awaited<ReturnType<typeof mensagensDaConversa>>[numbe
 export async function statusRecentes(conversaId: number) {
   const m = schema.mensagens;
   return db
-    .select({ id: m.id, status: m.status })
+    .select({ id: m.id, status: m.status, metadados: m.metadados })
     .from(m)
     .where(and(eq(m.conversaId, conversaId), eq(m.direcao, "outgoing"), gt(m.criadoEm, sql`now() - interval '1 day'`)))
     .orderBy(desc(m.id))

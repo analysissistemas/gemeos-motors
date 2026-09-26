@@ -89,7 +89,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       }
       const up = await this.subirBytes(ogg, MIME_OGG_OPUS, nomeOgg(pedido.midia.nome));
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
-      Object.assign(corpo, { type: "audio", audio: { id: up.id } });
+      // voice: o cliente vê mensagem de voz (foto da loja com microfone), não arquivo de áudio com fone
+      Object.assign(corpo, { type: "audio", audio: { id: up.id, voice: true } });
     }
     else if ((pedido.tipo === "imagem" || pedido.tipo === "documento") && pedido.midia) {
       const up = await this.subirMidia(pedido.midia);

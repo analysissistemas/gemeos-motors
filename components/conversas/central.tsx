@@ -185,7 +185,7 @@ export function CentralConversas({
     try {
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return;
-      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; status: { id: number; status: string }[]; notas: NotaChat[] | null };
+      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; status: { id: number; status: string; metadados: MensagemChat["metadados"] }[]; notas: NotaChat[] | null };
       desde.current = j.agora;
 
       if (j.conversas.length) {
@@ -217,8 +217,15 @@ export function CentralConversas({
         setDados((atual) => {
           if (!atual || abertaRef.current !== id) return atual;
           const existentes = new Set(atual.mensagens.map((m) => m.id));
-          const statusPor = new Map(j.status.map((s) => [s.id, s.status]));
-          const mensagens = [...atual.mensagens.map((m) => (statusPor.has(m.id) ? { ...m, status: statusPor.get(m.id)! } : m)), ...j.mensagens.filter((m) => !existentes.has(m.id))];
+          /* o status traz os metadados junto: o motivo de "Não enviada" chega pelo webhook depois do envio */
+          const statusPor = new Map(j.status.map((s) => [s.id, s]));
+          const mensagens = [
+            ...atual.mensagens.map((m) => {
+              const s = statusPor.get(m.id);
+              return s && s.status !== m.status ? { ...m, status: s.status, metadados: s.metadados } : m;
+            }),
+            ...j.mensagens.filter((m) => !existentes.has(m.id)),
+          ];
           return { ...atual, mensagens, notas: j.notas && j.notas.length !== atual.notas.length ? j.notas : atual.notas };
         });
         if (mudouConversa) recarregarContexto();
