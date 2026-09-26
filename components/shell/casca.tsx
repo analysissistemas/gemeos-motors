@@ -26,6 +26,7 @@ import {
   X,
   PhoneCall,
   Camera,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { pode, PAPEIS, type Papel } from "@/lib/dominio";
@@ -40,6 +41,7 @@ const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   followups: CalendarClock,
   ligacoes: PhoneCall,
   cameras: Camera,
+  promocoes: Tag,
   clientes: Users,
   estoque: Bike,
   vendas: Receipt,

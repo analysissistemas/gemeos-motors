@@ -24,6 +24,7 @@ export const SECOES_MENU: { titulo: string; itens: ItemMenu[] }[] = [
     itens: [
       { href: "/sistema/clientes", rotulo: "Clientes", icone: "clientes", permissao: "clientes.ver" },
       { href: "/sistema/estoque", rotulo: "Estoque", icone: "estoque", permissao: "estoque.ver" },
+      { href: "/sistema/promocoes", rotulo: "Promoções", icone: "promocoes", permissao: "estoque.editar" },
     ],
   },
   {

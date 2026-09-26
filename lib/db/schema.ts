@@ -761,3 +761,19 @@ export const cameraSnapshots = pgTable(
   },
   (t) => [index("camera_snapshots_cam_data_idx").on(t.cameraId, t.capturadoEm)],
 );
+
+/* ---------- promoções por tempo limitado (o preço volta ao normal sozinho quando acaba) ---------- */
+export const promocoes = pgTable(
+  "promocoes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    modeloId: integer().notNull().references(() => modelos.id, { onDelete: "cascade" }),
+    precoPromocional: dinheiro().notNull(),
+    inicioEm: quando().notNull(),
+    fimEm: quando().notNull(),
+    ativo: boolean().notNull().default(true), // false = encerrada à mão
+    criadoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("promocoes_modelo_idx").on(t.modeloId, t.fimEm)],
+);
