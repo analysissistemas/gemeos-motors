@@ -1,7 +1,25 @@
 /* Regra do vigia do atendente (pedido do dono, 27/09/2026: "se o atendente esquecer de responder, a
    IA continua ou notifica"). Pura, sem banco, para os testes rodarem direto no Node. */
 
-export type DecisaoVigia = "nada" | "avisar" | "assumir" | "responder_fechada";
+export type DecisaoVigia = "nada" | "avisar" | "assumir" | "responder_fechada" | "tentar_de_novo";
+
+/** Pedido do dono (27/09/2026): o cliente SEMPRE tem resposta, em qualquer horário. Se a IA devia ter
+    respondido e nada saiu (servidor reiniciou no meio, falha da OpenAI, etc.), tenta de novo. */
+export const ESPERA_NOVA_TENTATIVA_MIN = 3;
+export const MAX_TENTATIVAS = 3;
+
+export function decidirNovaTentativa(p: {
+  iaPodeResponder: boolean;
+  /** minutos desde a última mensagem do cliente sem resposta */
+  esperaMin: number;
+  /** tentativas do vigia para esta mensagem e minutos desde a última delas (null = nenhuma) */
+  tentativas: number;
+  minDesdeTentativa: number | null;
+}): boolean {
+  if (!p.iaPodeResponder || p.tentativas >= MAX_TENTATIVAS) return false;
+  if (p.minDesdeTentativa !== null) return p.minDesdeTentativa >= ESPERA_NOVA_TENTATIVA_MIN;
+  return p.esperaMin >= ESPERA_NOVA_TENTATIVA_MIN;
+}
 
 export function decidirVigia(p: {
   /** minutos desde a primeira mensagem do cliente sem resposta */

@@ -31,3 +31,14 @@ test("token da rota interna depende do segredo", async () => {
   assert.equal(await tokenDoVigia("a"), await tokenDoVigia("a"));
   assert.notEqual(await tokenDoVigia("a"), await tokenDoVigia("b"));
 });
+
+test("vigia: cliente sem resposta ganha nova tentativa da IA, em qualquer horário, até 3 vezes", async () => {
+  const { decidirNovaTentativa } = await import("../../lib/ia/workflow/vigia-regra.ts");
+  const b = { iaPodeResponder: true, esperaMin: 5, tentativas: 0, minDesdeTentativa: null };
+  assert.equal(decidirNovaTentativa({ ...b, esperaMin: 1 }), false);
+  assert.equal(decidirNovaTentativa(b), true);
+  assert.equal(decidirNovaTentativa({ ...b, tentativas: 1, minDesdeTentativa: 1 }), false);
+  assert.equal(decidirNovaTentativa({ ...b, tentativas: 1, minDesdeTentativa: 3 }), true);
+  assert.equal(decidirNovaTentativa({ ...b, tentativas: 3, minDesdeTentativa: 10 }), false);
+  assert.equal(decidirNovaTentativa({ ...b, iaPodeResponder: false }), false);
+});

@@ -678,6 +678,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
     if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
+    /* a loja já falou hoje e a IA só cumprimentou de novo ("Olá! Tudo bem?"): o cumprimento repetido saiu e
+       não sobrou nada. O cliente NUNCA fica sem resposta (pedido do dono, 27/09/2026). */
+    if (!saudacao && !resposta.length) resposta = [nomeConhecido ? "Tudo certo por aqui 😊 Como posso te ajudar?" : "Tudo certo por aqui 😊 Com quem eu falo?"];
     /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
        (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
     const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));

@@ -7,7 +7,7 @@ import { lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { lerConfigWorkflow } from "./config";
 import { rodarWorkflowAtendimento } from "./executar";
-import { decidirVigia } from "./vigia-regra";
+import { decidirNovaTentativa, decidirVigia, MAX_TENTATIVAS } from "./vigia-regra";
 
 /* ============================================================
    VIGIA DO ATENDENTE — roda a cada minuto (instrumentation.ts → /api/interno/vigia)
@@ -34,20 +34,50 @@ export async function vigiarAtendimentos(agora = new Date()) {
   const aberta = lojaAberta(horario, agora);
   const iaPodeResponder = controle.ligada && config.ativo;
   const candidatas = await db
-    .select({ id: C.id, demo: C.demo })
+    .select({ id: C.id, demo: C.demo, modo: C.modo })
     .from(C)
-    .where(and(eq(C.modo, "humano"), eq(C.ultimaMensagemDirecao, "incoming"), notInArray(C.status, ["resolvida", "encerrada"])))
+    .where(and(eq(C.ultimaMensagemDirecao, "incoming"), notInArray(C.status, ["resolvida", "encerrada"])))
     .limit(200);
 
-  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, erros: 0 };
+  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, erros: 0 };
   for (const cv of candidatas) {
     try {
       const [ultimaSaida] = await db.select({ id: M.id }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"))).orderBy(desc(M.id)).limit(1);
       const depois = and(eq(M.conversaId, cv.id), eq(M.direcao, "incoming"), ultimaSaida ? gt(M.id, ultimaSaida.id) : undefined);
       const [primeira] = await db.select({ id: M.id, em: M.criadoEm }).from(M).where(depois).orderBy(asc(M.id)).limit(1);
-      const [ultima] = await db.select({ id: M.id }).from(M).where(depois).orderBy(desc(M.id)).limit(1);
+      const [ultima] = await db.select({ id: M.id, em: M.criadoEm }).from(M).where(depois).orderBy(desc(M.id)).limit(1);
       if (!primeira || !ultima) continue;
       const esperaMin = Math.floor((agora.getTime() - new Date(primeira.em).getTime()) / 60_000);
+      const esperaUltimaMin = Math.floor((agora.getTime() - new Date(ultima.em).getTime()) / 60_000);
+
+      /* a IA devia ter respondido e nada saiu (servidor reiniciou no meio, falha da OpenAI...): tenta de novo.
+         Só mensagem recente (até 6 h), para não responder conversa antiga esquecida. */
+      const iaDeveResponder = cv.modo !== "humano" || !aberta;
+      if (iaDeveResponder && esperaUltimaMin <= 360) {
+        const [t] = await db
+          .select({ n: sql<number>`count(*)::int`, ultimaEm: sql<Date | null>`max(${M.criadoEm})` })
+          .from(M)
+          .where(
+            and(
+              eq(M.conversaId, cv.id),
+              eq(M.direcao, "system"),
+              sql`(${M.metadados}->>'mensagemId')::bigint = ${ultima.id}`,
+              sql`(${M.metadados}->>'vigiaTentativa' = 'true' or ${M.metadados}->>'vigiaFechada' = 'true' or ${M.metadados}->>'vigiaAssumiu' = 'true')`,
+            ),
+          );
+        const tentativas = t?.n ?? 0;
+        const minDesdeTentativa = t?.ultimaEm ? Math.floor((agora.getTime() - new Date(t.ultimaEm).getTime()) / 60_000) : null;
+        /* 1ª vez de conversa com vendedor e loja fechada: segue a regra de sempre (aviso "Loja fechada") */
+        if (tentativas > 0 || cv.modo !== "humano") {
+          if (decidirNovaTentativa({ iaPodeResponder, esperaMin: esperaUltimaMin, tentativas, minDesdeTentativa })) {
+            await mensagemSistema(db, cv.id, `O cliente ficou sem resposta: a IA respondeu de novo (tentativa ${tentativas + 1} de ${MAX_TENTATIVAS}).`, { vigiaTentativa: true, mensagemId: ultima.id });
+            void rodarWorkflowAtendimento({ conversaId: cv.id, mensagemId: ultima.id, gatilho: "whatsapp", simulado: cv.demo }).catch(() => {});
+            resultado.novasTentativas++;
+          }
+          continue;
+        }
+      }
+      if (cv.modo !== "humano") continue;
 
       const decisao = decidirVigia({
         esperaMin,
