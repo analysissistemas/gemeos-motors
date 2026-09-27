@@ -94,7 +94,7 @@ const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "auton
    (27/09/2026): só moto ELÉTRICA (nunca combustão nem carro) e acessório; a IA mostra opções, ficha,
    cores e preço, e só diz "tem"/"pronta entrega" para modelo com unidade disponível no estoque.
    `incluirTeste`: conversa simulada enxerga os veículos de teste. */
-export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
+export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?: number | null } = {}) {
   const m = schema.modelos;
   const v = schema.veiculos;
   const [linhas, cores, unidades, base] = await Promise.all([
@@ -129,13 +129,13 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
       ? `EM ESTOQUE: ${minhas.length} unidade(s)${coresEstoque.length ? ` (${coresEstoque.join(", ")})` : ""} — pode dizer que tem a pronta entrega`
       : `sem unidade no estoque agora — ${l.disponibilidade === "sob_encomenda" ? "sob encomenda" : "a equipe confirma o prazo"}`;
     const autonomia = autonomiaMinima(f.autonomia);
-    const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia)}` : "";
+    const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia, opcoes.kmSemana)}` : "";
     return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}${conta}`;
   });
   const texto = `# CATÁLOGO DA LOJA (o mesmo do site) E ESTOQUE AGORA
 Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
 Pode apresentar nome, preço de tabela, ficha e cores. "Tem", "disponível" e "pronta entrega" SÓ para modelo marcado EM ESTOQUE; para os outros, diga que a equipe confirma o prazo.
-${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta; escolha o cenário de km/dia mais perto do uso do cliente.
+${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta: ${opcoes.kmSemana ? `o cliente roda uns ${opcoes.kmSemana} km por semana, use a CONTA DO CLIENTE (semana e mês)` : "o cliente ainda não disse quanto roda: pergunte, ou use o cenário de km por semana mais perto do que ele contou"}.
 ` : ""}${itens.join("\n")}`;
   return { texto, nomes: Array.from(new Set(linhas.flatMap((l) => [l.nome, l.marca]).filter((x): x is string => !!x))), comEstoque: Array.from(new Set(comEstoque)) };
 }

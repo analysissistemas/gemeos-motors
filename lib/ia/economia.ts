@@ -1,7 +1,8 @@
 /* ============================================================
    CONTA DE ECONOMIA: moto elétrica × moto a gasolina (pedido do dono, 27/09/2026)
-   A IA não faz conta: o sistema calcula aqui, pela autonomia de cada moto, e entrega os
-   valores prontos no catálogo (que é fonte autorizada, então a trava de fatos aceita).
+   A IA não faz conta: o sistema calcula aqui, pela autonomia de cada moto e pelo quanto o
+   cliente roda (se ele disse), e entrega os valores prontos, NA SEMANA e NO MÊS, no catálogo
+   (que é fonte autorizada, então a trava de fatos aceita).
    Os números vêm da Base de conhecimento, editáveis na tela da IA:
    - "Comparação com gasolina": preço do litro e km por litro da moto a gasolina de referência;
    - "Gasto de energia e autonomia": quanto custa uma carga completa (de R$ X a R$ Y).
@@ -29,22 +30,44 @@ export function autonomiaMinima(texto: string | null | undefined) {
   return n ? Number(n[0]) : null;
 }
 
+/** Quanto o cliente roda por SEMANA, pelo que ele escreveu ("20 km por dia", "150 km na semana",
+    "600 km por mês"). Vale a última menção. Dia conta 7 por semana; mês, 30 dias. */
+export function kmPorSemana(texto: string): number | null {
+  const rx = /(\d{1,4})\s*(?:km|quil[oô]metros?)\s*(?:rodados?\s*)?(?:por|ao|a|p\/|\/|na|no|todo|toda|de)?\s*(dia|di[áa]rios?|semana|semanais|m[eê]s|mensais)/giu;
+  let ultimo: number | null = null;
+  for (const m of texto.matchAll(rx)) {
+    const km = Number(m[1]);
+    const p = m[2].toLowerCase();
+    if (!km) continue;
+    ultimo = /^di/u.test(p) ? km * 7 : /^sem/u.test(p) ? km : Math.round((km * 7) / 30);
+  }
+  return ultimo && ultimo <= 5000 ? ultimo : null;
+}
+
 const reais = (x: number) => `R$ ${Math.round(x).toLocaleString("pt-BR")}`;
 const reaisCentavos = (x: number) => `R$ ${x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Por dia de uso típico, 30 dias por mês. */
-export const CENARIOS_KM_DIA = [20, 40, 60];
+/** Cenários de uso quando o cliente ainda não disse quanto roda (km por semana). */
+export const CENARIOS_KM_SEMANA = [100, 200, 300];
+const SEMANAS_NO_MES = 30 / 7;
 
-/** Texto pronto da economia de um modelo, para o catálogo que a IA recebe. */
-export function textoEconomia(autonomia: number, p: ParametrosEconomia) {
+function periodo(km: number, autonomia: number, p: ParametrosEconomia) {
+  const cargas = km / autonomia;
+  const luzMin = cargas * p.cargaMin;
+  const luzMax = cargas * p.cargaMax;
+  const gas = (km / p.kmPorLitro) * p.gasolina;
+  return `luz ${reais(luzMin)} a ${reais(luzMax)} × gasolina ${reais(gas)} (economiza de ${reais(Math.max(0, gas - luzMax))} a ${reais(gas - luzMin)})`;
+}
+
+function cenario(kmSemana: number, autonomia: number, p: ParametrosEconomia) {
+  return `${kmSemana} km por semana → na semana: ${periodo(kmSemana, autonomia, p)}; no mês: ${periodo(kmSemana * SEMANAS_NO_MES, autonomia, p)}`;
+}
+
+/** Texto pronto da economia de um modelo, para o catálogo que a IA recebe.
+    Com `kmSemanaCliente`, a conta é a do uso dele; sem, vão os cenários de 100, 200 e 300 km por semana. */
+export function textoEconomia(autonomia: number, p: ParametrosEconomia, kmSemanaCliente?: number | null) {
   const gasolinaNaAutonomia = (autonomia / p.kmPorLitro) * p.gasolina;
-  const cenarios = CENARIOS_KM_DIA.map((d) => {
-    const km = d * 30;
-    const cargas = km / autonomia;
-    const luzMin = cargas * p.cargaMin;
-    const luzMax = cargas * p.cargaMax;
-    const gas = (km / p.kmPorLitro) * p.gasolina;
-    return `${d} km/dia: luz ${reais(luzMin)} a ${reais(luzMax)} por mês × gasolina ${reais(gas)} por mês (economia de ${reais(Math.max(0, gas - luzMax))} a ${reais(gas - luzMin)} por mês)`;
-  });
-  return `economia: 1 carga (${reais(p.cargaMin)} a ${reais(p.cargaMax)}) roda ${autonomia} km; os mesmos ${autonomia} km numa moto a gasolina custam ${reaisCentavos(gasolinaNaAutonomia)} | ${cenarios.join(" | ")}`;
+  const base = `economia: 1 carga (${reais(p.cargaMin)} a ${reais(p.cargaMax)}) anda ${autonomia} km; os mesmos ${autonomia} km numa moto a gasolina custam ${reaisCentavos(gasolinaNaAutonomia)}`;
+  if (kmSemanaCliente) return `${base} | CONTA DO CLIENTE: ${cenario(kmSemanaCliente, autonomia, p)}`;
+  return `${base} | ${CENARIOS_KM_SEMANA.map((k) => cenario(k, autonomia, p)).join(" | ")}`;
 }

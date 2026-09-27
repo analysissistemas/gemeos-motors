@@ -9,6 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
+import { kmPorSemana } from "@/lib/ia/economia";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
@@ -42,6 +43,8 @@ import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
+/* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
+const TEXTO_CONFIRMAR = "Quero te responder isso certinho, então vou confirmar com a equipe e te retorno assim que a loja abrir 🙏 Enquanto isso, posso te ajudar com mais alguma coisa sobre as motos?";
 const TEXTO_FORA_HORARIO = "Aqui é o assistente virtual da Gêmeos Motors 😊 Um vendedor te responde assim que a loja abrir, e enquanto isso eu te ajudo por aqui: pode me perguntar o que quiser sobre as motos.";
 /* ============================================================
    OS NÓS DO WORKFLOW (o que cada caixinha da tela faz de verdade)
@@ -331,6 +334,12 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
   return { gerar, chamadas, saudacao, erro: () => ultimoErro, ultimo: () => ultimo as z.infer<typeof esquemaAgente> | null, corrigir: (texto: string) => void (correcao = texto) };
 }
 
+/** Quanto este cliente roda por semana, pelo que ELE escreveu na conversa (a última menção vale). */
+function kmDoCliente(c: CtxWorkflow) {
+  const doCliente = [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n");
+  return kmPorSemana(doCliente);
+}
+
 async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
   const incluirTeste = !!c.conversa?.demo;
   const [controle, promptSistema, modelos, veiculos, conhecimento, catalogo] = await Promise.all([
@@ -339,7 +348,7 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca }).from(schema.modelos),
     db.select({ marca: schema.veiculos.marca, modelo: schema.veiculos.modelo }).from(schema.veiculos).where(incluirTeste ? undefined : eq(schema.veiculos.teste, false)).limit(1000),
     fontesAutorizadas(),
-    catalogoParaIa({ incluirTeste }),
+    catalogoParaIa({ incluirTeste, kmSemana: kmDoCliente(c) }),
   ]);
   return {
     controle,
@@ -348,7 +357,8 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     /* só motos elétricas e acessórios do catálogo podem ser citados; "tem" só com unidade no estoque */
     nomesDoCatalogo: catalogo.nomes,
     modelosComEstoque: catalogo.comEstoque,
-    fontesAutorizadas: conhecimento,
+    /* + a conta de economia do uso deste cliente (semana e mês), que a IA pode citar */
+    fontesAutorizadas: [...conhecimento, ...(catalogo.texto ? [catalogo.texto] : [])],
     gerar,
     consultarEstoque: (q) => consultarEstoque(q, { incluirTeste }),
     consultarCatalogo: (t) => consultarCatalogo(t, { incluirTeste }),
@@ -488,7 +498,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   },
 
   agente: async (c) => {
-    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo })).texto].filter(Boolean).join("\n\n");
+    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c) })).texto].filter(Boolean).join("\n\n");
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -567,7 +577,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     }
     if (!pipe.texto) return { ctx: { saudacao }, saida: { semTexto: true, saudacao, saudacaoReprovada } };
     const r = await validadorDeResposta.rodar(pipe);
-    if (r.encerrar) return { ramo: "reprovada", ctx: { saudacao, pipe: { ...pipe, ...r.ctx, texto: null }, motivoTransferencia: "A resposta foi reprovada pelo validador" }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { violacoes: r.ctx?.violacoes, saudacao, saudacaoReprovada } };
+    if (r.encerrar) return { ramo: "reprovada", ctx: { saudacao, pipe: { ...pipe, ...r.ctx, texto: null }, motivoTransferencia: `A resposta foi reprovada pelo validador${r.ctx?.violacoes ? ` (${String(JSON.stringify(r.ctx.violacoes)).slice(0, 300)})` : ""}` }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { violacoes: r.ctx?.violacoes, saudacao, saudacaoReprovada } };
     return { ctx: { saudacao }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { aprovada: true, saudacao, saudacaoReprovada } };
   },
 
@@ -587,7 +597,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       await db.update(schema.conversas).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
       await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, um vendedor deve assumir. Motivo: ${c.motivoTransferencia ?? "não informado"}. Resumo: ${resumo}`, { triagem: true });
       /* fora do horário ninguém vai continuar agora: nada de "já estou te encaminhando" */
-      const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : TEXTO_FORA_HORARIO;
+      const emAndamento = !!c.memoria.historico?.includes("Agente IA:") || !!c.memoria.historico?.includes("Vendedor:");
+      const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : emAndamento ? TEXTO_CONFIRMAR : TEXTO_FORA_HORARIO;
       return { ctx: { pipe: { ...pipe, texto, humano: false } }, saida: { transferida: false, motivo: "fora do horário: a IA segue e a equipe assume ao abrir", avisoAoCliente: texto } };
     }
     /* trava de segurança sempre passa para humano; pedido da IA só com a permissão marcada */
@@ -686,7 +697,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
     /* a loja já falou hoje e a IA só cumprimentou de novo ("Olá! Tudo bem?"): o cumprimento repetido saiu e
        não sobrou nada. O cliente NUNCA fica sem resposta (pedido do dono, 27/09/2026). */
-    if (!saudacao && !resposta.length) resposta = [nomeConhecido ? "Tudo certo por aqui 😊 Como posso te ajudar?" : "Tudo certo por aqui 😊 Com quem eu falo?"];
+    const textoPronto = !!c.pipe?.texto && [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
+    if (!saudacao && !resposta.length && textoPronto) resposta = [TEXTO_CONFIRMAR];
+    if (!saudacao && !resposta.length && c.pipe?.texto && !textoPronto) resposta = [nomeConhecido ? "Tudo certo por aqui 😊 Como posso te ajudar?" : "Tudo certo por aqui 😊 Com quem eu falo?"];
     /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
        (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
     const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
