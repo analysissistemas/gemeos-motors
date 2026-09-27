@@ -35,6 +35,8 @@ import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
 import { formatarHistorico, mesclarFatos, pausaDoBloco, quebrarEmBlocos, textoDaMensagem, type FatosLead } from "./util";
 
+/* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
+const TEXTO_FORA_HORARIO = "Anotei tudo por aqui! Nossa equipe te responde assim que a loja abrir. Enquanto isso, pode me perguntar o que quiser.";
 /* ============================================================
    OS NÓS DO WORKFLOW (o que cada caixinha da tela faz de verdade)
    Cada função recebe o contexto, faz uma coisa e devolve o ramo, a entrada e a
@@ -227,8 +229,10 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   verifica_modo: async (c) => {
     const controle = await lerControle();
     if (!controle.ligada) return { fim: "parou", detalhe: "A IA está desligada (aba Controle)", saida: { iaLigada: false } };
-    const humano = c.conversa!.modo === "humano";
-    return { ramo: humano ? "humano" : "ia", saida: { status: humano ? "HUMANO" : "I.A", responsavel: c.conversa!.responsavelId } };
+    /* regra do dono (27/09/2026): fora do horário a IA SEMPRE responde, mesmo em conversa com humano */
+    const aberta = lojaAberta(await lerHorario());
+    const humano = c.conversa!.modo === "humano" && aberta;
+    return { ramo: humano ? "humano" : "ia", saida: { status: humano ? "HUMANO" : "I.A", responsavel: c.conversa!.responsavelId, lojaAberta: aberta, ...(!aberta && c.conversa!.modo === "humano" ? { foraDoHorario: "IA responde até a loja abrir" } : {}) } };
   },
 
   ia_off: () => ({ fim: "parou", detalhe: "Atendimento HUMANO: a IA não responde. A mensagem fica na memória.", saida: { respondeu: false } }),
@@ -287,7 +291,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 
   reconfere_modo: async (c) => {
     const conversa = await carregarConversa(c.conversaId);
-    const humano = conversa.modo === "humano";
+    const humano = conversa.modo === "humano" && lojaAberta(await lerHorario());
     return { ramo: humano ? "humano" : "ia", ctx: { conversa }, saida: { status: humano ? "HUMANO" : "I.A" } };
   },
 
@@ -379,6 +383,14 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const pipe = c.pipe!;
     const pedidoDaIa = pipe.motivo === "modelo_pediu_transferencia";
     const resumo = c.aprendido.resumo ?? c.memoria.resumo ?? c.textoBuffer.slice(0, 200);
+    /* regra do dono (27/09/2026): fora do horário NUNCA passa para humano. A IA continua atendendo,
+       a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
+    if (!lojaAberta(await lerHorario())) {
+      await db.update(schema.conversas).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
+      await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, um vendedor deve assumir. Motivo: ${c.motivoTransferencia ?? "não informado"}. Resumo: ${resumo}`, { triagem: true });
+      const texto = pipe.texto ?? TEXTO_FORA_HORARIO;
+      return { ctx: { pipe: { ...pipe, texto, humano: false } }, saida: { transferida: false, motivo: "fora do horário: a IA segue e a equipe assume ao abrir", avisoAoCliente: texto } };
+    }
     /* trava de segurança sempre passa para humano; pedido da IA só com a permissão marcada */
     if (pedidoDaIa && !controle.permissoes.transferirHumano) {
       await mensagemSistema(db, c.conversaId, `A IA sugere passar para um vendedor: ${c.motivoTransferencia ?? "sinal de fechamento"}. (Permissão "Transferir para um vendedor" desligada.)`);
