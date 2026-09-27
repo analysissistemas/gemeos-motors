@@ -358,6 +358,43 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
 
 const PERGUNTA_ECONOMIA = /gasolin|econom|vale a pena|compensa|gast[oa]r?\b|gasto/iu;
 
+const PERGUNTAS_USO = [
+  "Você procura moto para trabalhar, para o dia a dia ou para passear? 😊",
+  "Me conta: a moto seria mais para o trabalho ou para o dia a dia? 🙂",
+  "Qual vai ser o uso principal: trabalho, dia a dia ou passeio? 😊",
+];
+
+/** Resumo do que a loja vende, com os números do catálogo (quantos modelos, menor preço, maior autonomia). */
+async function resumoDaLoja() {
+  const m = schema.modelos;
+  const motos = await db.select({ preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica")));
+  if (!motos.length) return null;
+  const precos = motos.map((x) => Number(x.preco)).filter((x) => x > 0);
+  const autonomias = motos.map((x) => Number(((x.ficha as Record<string, string> | null)?.autonomia ?? "").match(/\d{2,3}(?!.*\d)/u)?.[0] ?? 0)).filter((x) => x > 0);
+  const desde = precos.length ? ` a partir de *R$ ${Math.min(...precos).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}*` : "";
+  const alcance = autonomias.length ? `, que andam até ${Math.max(...autonomias)} km com uma carga` : "";
+  return variar([
+    `Aqui na Gêmeos Motors a gente trabalha com ${motos.length} modelos de motos elétricas${desde}${alcance} 🛵 Nenhuma precisa de CNH, emplacamento nem IPVA, e ainda temos acessórios, assistência técnica própria e entrega em Goiana e região.`,
+    `Pra você conhecer: temos ${motos.length} modelos de motos elétricas${desde}${alcance} ⚡ Todas sem CNH, sem emplacamento e sem IPVA, com assistência técnica própria e entrega em Goiana e região.`,
+  ]);
+}
+
+async function apresentarLoja(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
+  const t = c.textoBuffer.trim();
+  /* só nome/cumprimento curto, sem pergunta nem assunto (moto, preço, cor...) */
+  const soSeApresentou = t.length <= 40 && !/\?/.test(t) && t.split(/\s+/).length <= 4 && !/moto|pre[çc]o|valor|cor|km|autonomia|bateria|entrega|pix|cart[aã]o|parcel|financ|troca|modelo|\d/iu.test(t);
+  const nomeAgora = !c.memoria.fatos.nome && !!c.aprendido.fatos.nome;
+  if (!soSeApresentou || !nomeAgora || !resposta.length) return resposta;
+  if (resposta.some((b) => /R\$|modelos|motos el[ée]tricas/iu.test(b)) || /R\$ \d/u.test(c.memoria.historico ?? "")) return resposta;
+  const resumo = await resumoDaLoja();
+  if (!resumo) return resposta;
+  /* o que não é pergunta fica no começo ("Prazer, Joelson!"), o resumo no meio, UMA pergunta no fim */
+  const frases = resposta.join(" ").match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [];
+  const perguntas = frases.filter((f) => /\?/.test(f)).map((f) => f.trim());
+  const resto = frases.filter((f) => !/\?/.test(f)).join("").trim();
+  return [...(resto ? [resto] : []), resumo, perguntas[perguntas.length - 1] ?? variar(PERGUNTAS_USO)];
+}
+
 async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
   const kmSemana = kmDoCliente(c);
   if (!kmSemana || !resposta.length || !PERGUNTA_ECONOMIA.test(c.textoBuffer) || resposta.some((b) => /R\$/u.test(b))) return resposta;
@@ -780,6 +817,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     /* o cliente disse quanto roda e perguntou se compensa, mas a resposta veio sem conta: o sistema põe a
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
+    /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
+    resposta = await apresentarLoja(c, resposta);
     /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
        (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
     const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
