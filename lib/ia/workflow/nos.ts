@@ -29,6 +29,9 @@ import {
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { criarNegocio } from "@/lib/servicos/negocios";
+import { registrarLog } from "@/lib/logs";
+import { variantesTelefone } from "@/lib/mensageria/servico";
+import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead, triagemDosFatos } from "@/lib/ia/qualificacao";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
@@ -140,6 +143,81 @@ Devolva também:
 - resumo: 1 a 3 frases sobre o atendimento até aqui (interesse e situação), para o vendedor.
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
+
+/* Qualificação automática do lead (pedido do dono, 27/09/2026: converter venda). Com o que a IA
+   aprendeu: cadastra o cliente (quando já sabe o nome), abre o negócio no funil, preenche o que estiver
+   vazio e marca a temperatura (quente/morno/frio) na triagem da conversa. Só anota no chat quando algo
+   importante muda. Nunca apaga o que a equipe preencheu. */
+async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string | null) {
+  const cv = await carregarConversa(c.conversaId);
+  const feito: string[] = [];
+  let clienteId = cv.clienteId;
+  const nome = fatos.nome?.trim();
+  if (!clienteId && nome) {
+    const tels = variantesTelefone(cv.contatoTelefone);
+    const [achado] = await db
+      .select({ id: schema.clientes.id })
+      .from(schema.clientes)
+      .where(sql`${schema.clientes.whatsapp} in (${sql.join(tels.map((v) => sql`${v}`), sql`, `)}) or ${schema.clientes.telefone} in (${sql.join(tels.map((v) => sql`${v}`), sql`, `)})`)
+      .orderBy(schema.clientes.id)
+      .limit(1);
+    if (achado) clienteId = achado.id;
+    else {
+      const [novo] = await db
+        .insert(schema.clientes)
+        .values({ nome: nome.slice(0, 120), whatsapp: cv.contatoTelefone, origem: "whatsapp", cidade: fatos.cidade?.trim().slice(0, 80) || null, demo: cv.demo })
+        .returning({ id: schema.clientes.id });
+      clienteId = novo.id;
+      await registrarLog(null, { acao: "cliente.criado", entidade: "cliente", entidadeId: novo.id, descricao: `A IA cadastrou o cliente ${nome} pelo WhatsApp` });
+      feito.push(`cadastrou o cliente ${nome}`);
+    }
+    await db.update(schema.conversas).set({ clienteId, atualizadoEm: new Date() }).where(eq(schema.conversas.id, cv.id));
+  }
+
+  let negocioId = cv.negocioId;
+  if (clienteId) {
+    if (!negocioId) {
+      const [aberto] = await db
+        .select({ id: schema.negocios.id })
+        .from(schema.negocios)
+        .where(and(eq(schema.negocios.clienteId, clienteId), sql`${schema.negocios.etapa} in ('whatsapp','proposta','negociando')`))
+        .orderBy(desc(schema.negocios.criadoEm))
+        .limit(1);
+      negocioId = aberto?.id ?? null;
+    }
+    const troca = temTroca(fatos.troca);
+    if (!negocioId) {
+      negocioId = await criarNegocio(
+        null,
+        { clienteId, veiculoInteresse: fatos.interesse?.trim() || null, origem: "whatsapp", temTroca: !!troca, trocaDescricao: troca ? fatos.troca : null, responsavelId: null },
+        { demo: cv.demo, triagemIa: resumo },
+      );
+      if (negocioId) feito.push("abriu o negócio no funil");
+    } else {
+      /* só completa o que está vazio: o que a equipe preencheu fica */
+      const [n] = await db.select({ veiculoInteresse: schema.negocios.veiculoInteresse, trocaDescricao: schema.negocios.trocaDescricao }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
+      const patch: Partial<typeof schema.negocios.$inferInsert> = {};
+      if (n && !n.veiculoInteresse && fatos.interesse?.trim()) patch.veiculoInteresse = fatos.interesse.trim().slice(0, 160);
+      if (n && !n.trocaDescricao && troca) Object.assign(patch, { temTroca: true, trocaDescricao: fatos.troca!.trim().slice(0, 300) });
+      if (Object.keys(patch).length) await db.update(schema.negocios).set(patch).where(eq(schema.negocios.id, negocioId));
+    }
+    if (negocioId && negocioId !== cv.negocioId) await db.update(schema.conversas).set({ negocioId }).where(eq(schema.conversas.id, cv.id));
+  }
+
+  /* temperatura na triagem da conversa (a tela já mostra a "intenção de compra") */
+  const pediuProposta = /proposta\s+g[eê]meos/i.test(c.pipe?.texto ?? "") || c.pipe?.motivo === "modelo_pediu_transferencia";
+  const antes = temperaturaDaIntencao(cv.triagemIa?.intencaoCompra);
+  const triagem = triagemDosFatos(fatos, resumo, cv.triagemIa ?? null, { pediuProposta });
+  const temperatura = temperaturaDoLead(fatos, { pediuProposta });
+  await db
+    .update(schema.conversas)
+    .set({ triagemIa: triagem, triagemEm: new Date(), atualizadoEm: new Date(), ...(temperatura === "quente" ? { prioridade: "alta" } : {}) })
+    .where(eq(schema.conversas.id, cv.id));
+  const virouQuente = temperatura === "quente" && antes !== "quente";
+  if (virouQuente) feito.push("marcou o lead como quente");
+  if (feito.length) await mensagemSistema(db, cv.id, `A IA ${feito.join(", ")}${virouQuente ? "" : ` (lead ${ROTULO_TEMPERATURA[temperatura].toLowerCase()})`}.`, { triagem: true });
+  return { clienteId, negocioId, temperatura, feito };
+}
 
 /* Roda a trava de fatos e o validador sobre a resposta; se barrariam, devolve a instrução de correção. */
 async function motivoDoBloqueio(ctx: CtxPipeline): Promise<string | null> {
@@ -457,7 +535,14 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const fatos = mesclarFatos(c.memoria.fatos, c.aprendido.fatos);
     const resumo = c.aprendido.resumo ?? c.memoria.resumo;
     await gravarMemoria(c.conversaId, { fatos, resumo });
-    return { saida: { fatos, resumo } };
+    /* qualificação automática: nunca pode impedir a resposta ao cliente */
+    let qualificacao: unknown = null;
+    try {
+      qualificacao = await qualificarLead(c, fatos, resumo);
+    } catch (e) {
+      qualificacao = { erro: e instanceof Error ? e.message : String(e) };
+    }
+    return { saida: { fatos, resumo, qualificacao } };
   },
 
   blocos: async (c) => {
