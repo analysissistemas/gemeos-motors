@@ -171,7 +171,7 @@ export function ContextoCliente({
           <p className="text-[13.5px] leading-relaxed">{t.resumo}</p>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
             <ItemInfo rotulo="Interesse">{t.veiculo ?? t.interesse}</ItemInfo>
-            <ItemInfo rotulo="Intenção de compra">{t.intencaoCompra === "indefinida" ? "Indefinida" : t.intencaoCompra === "media" ? "Média" : t.intencaoCompra === "alta" ? "Alta" : "Baixa"}</ItemInfo>
+            <ItemInfo rotulo="Temperatura do lead">{t.intencaoCompra === "indefinida" ? "Indefinida" : t.intencaoCompra === "media" ? "Morno" : t.intencaoCompra === "alta" ? "Quente" : "Frio"}</ItemInfo>
             <ItemInfo rotulo="Troca" className="col-span-2">
               {t.temTroca == null ? "Não informado" : t.temTroca ? (t.trocaDescricao ?? "Sim") : "Não"}
             </ItemInfo>

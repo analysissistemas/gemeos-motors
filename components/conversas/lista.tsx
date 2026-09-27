@@ -144,7 +144,9 @@ export function ListaConversas({
                           <CalendarClock className="size-3" /> {horaLista(c.proximoFollowUp)}
                         </span>
                       )}
-                      {c.prioridade === "alta" && <span className="rounded-full bg-serio/15 px-1.5 font-semibold text-ink">Prioridade</span>}
+                      {c.intencaoCompra === "alta" && <span className="rounded-full bg-critico/15 px-1.5 font-semibold text-critico" title="Lead quente: sabe a moto e o pagamento, ou pediu proposta">Quente</span>}
+                      {c.intencaoCompra === "media" && <span className="rounded-full bg-atencao/15 px-1.5 text-ink-2" title="Lead morno: já disse o interesse ou o uso">Morno</span>}
+                      {c.prioridade === "alta" && c.intencaoCompra !== "alta" && <span className="rounded-full bg-serio/15 px-1.5 font-semibold text-ink">Prioridade</span>}
                       {c.demo && <span className="rounded-full bg-atencao/15 px-1.5 text-ink-2">Simulado</span>}
                     </span>
                   </span>

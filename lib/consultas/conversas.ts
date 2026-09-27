@@ -39,6 +39,8 @@ function camposLista() {
       naoLidas: c.naoLidas,
       demo: c.demo,
       triagemPronta: sql<boolean>`coalesce((${c.triagemIa}->>'prontoParaHumano')::boolean, false)`,
+      /* temperatura do lead (qualificação automática da IA): alta = quente, media = morno */
+      intencaoCompra: sql<string | null>`${c.triagemIa}->>'intencaoCompra'`,
       atualizadoEm: c.atualizadoEm,
       proximoFollowUp: sql<Date | null>`(select min(f.agendado_para) from follow_ups f where f.conversa_id = ${c.id} and f.status = 'pendente')`,
     },
