@@ -87,3 +87,11 @@ test("proposta: a cor concorda com moto", async () => {
   assert.equal(corDaMoto("Azul marinho"), "azul marinho");
   assert.equal(corDaMoto("Cinza"), "cinza");
 });
+
+test("nome do cliente: só o primeiro nome, bem escrito", async () => {
+  const { primeiroNome } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(primeiroNome("carla souza"), "Carla");
+  assert.equal(primeiroNome("JOÃO"), "João");
+  assert.equal(primeiroNome("😊"), null);
+  assert.equal(primeiroNome(null), null);
+});

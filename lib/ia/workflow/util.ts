@@ -77,6 +77,13 @@ export function pausaDoBloco(bloco: string, intervaloSegundos: number) {
   return Math.round(Math.min(base * 2, base * (0.6 + bloco.length / 250)));
 }
 
+/** Primeiro nome para chamar o cliente ("carla souza" → "Carla"); nada de número, emoji ou apelido estranho. */
+export function primeiroNome(nome: string | null | undefined) {
+  const p = (nome ?? "").trim().split(/\s+/)[0] ?? "";
+  if (!/^\p{L}{2,20}$/u.test(p)) return null;
+  return p[0].toUpperCase() + p.slice(1).toLowerCase();
+}
+
 /** "Preto" também casa com "preta"; "Branco perolado" com "branca perolada". */
 export function corNoTexto(cor: string, texto: string) {
   const padrao = cor
