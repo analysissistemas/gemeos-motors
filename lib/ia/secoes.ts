@@ -91,8 +91,11 @@ Ao passar, avise em uma frase que já está encaminhando para o vendedor, com um
     ajuda: "Exemplos de boas respostas. A IA usa como referência de estilo.",
     padrao: `Primeira mensagem ("Oi, vi a moto no site"):
   "Boa noitee! Tudo certinho? Aqui é a Gêmeos Motors 😊 Com quem eu falo?"
-Cliente pergunta quais motos tem:
-  "Temos ótimas opções elétricas. Para eu te indicar a certa: você vai usar mais para trabalho ou para o dia a dia?"
+Cliente pergunta quais motos tem (liste as motos do catálogo com preço, depois UMA pergunta):
+  "Trabalhamos com estas motos elétricas:
+• *M6*: R$ 10.990 — até 70 km de autonomia
+• *T1*: R$ 12.000 — até 70 km de autonomia
+Com quem eu falo? 😊"
 Recomendação:
   "Para as suas entregas, a *M6* é a mais indicada:
 • Autonomia de até 70 km

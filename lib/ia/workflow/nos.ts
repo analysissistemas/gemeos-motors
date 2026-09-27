@@ -145,6 +145,17 @@ Devolva também:
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
 
+/* A loja ainda não falou nesta conversa (ou faz mais de 6 h): é o começo do atendimento. */
+async function primeiroContato(conversaId: number) {
+  const [u] = await db
+    .select({ em: schema.mensagens.criadoEm })
+    .from(schema.mensagens)
+    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.direcao, "outgoing")))
+    .orderBy(desc(schema.mensagens.id))
+    .limit(1);
+  return !u || Date.now() - new Date(u.em).getTime() >= 6 * 60 * 60 * 1000;
+}
+
 /* Quais trechos da resposta a trava barraria (para a reescrita acertar e a equipe entender o aviso). */
 function trechosBarrados(ctx: CtxPipeline): string[] {
   const t = ctx.texto ?? "";
@@ -446,7 +457,14 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     let r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
     /* pedido do dono (27/09/2026): a IA precisa sempre responder. Se a trava ou o validador barrarem,
        ela reescreve uma vez com o motivo nas instruções; só se barrar de novo sai o texto padrão. */
-    const correcao = r.ctx.texto && !r.ctx.humano ? await motivoDoBloqueio(r.ctx) : null;
+    let correcao = r.ctx.texto && !r.ctx.humano ? await motivoDoBloqueio(r.ctx) : null;
+    /* 1º contato e a IA não sabe o nome: a resposta tem que terminar pedindo o nome (e só isso de pergunta) */
+    if (!correcao && r.ctx.texto && !r.ctx.humano && !(c.memoria.fatos.nome || g.ultimo()?.fatos?.nome) && (await primeiroContato(c.conversaId))) {
+      const perguntas = (r.ctx.texto.match(/\?/g) ?? []).length;
+      const pedeNome = /com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu.test(r.ctx.texto);
+      if (!pedeNome || perguntas > 1)
+        correcao = 'É o primeiro contato e você ainda não sabe o nome do cliente. Responda de verdade o que ele perguntou (com os dados do catálogo e da base) e termine com UMA pergunta só: "Com quem eu falo?". Tire qualquer outra pergunta.';
+    }
     let reescreveu = false;
     if (correcao) {
       g.corrigir(correcao);
@@ -585,7 +603,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
        "Com quem eu falo?" (uma pergunta só); a informação que o cliente pediu continua. */
     if (!nomeConhecido && !jaConversou && resposta.length && !/com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu.test(resposta.join(" "))) {
       const ultimo = resposta[resposta.length - 1];
-      const semPergunta = ultimo.replace(/[^.!?\n]*\?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*$/u, "").trim();
+      const frases = ultimo.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [ultimo];
+      const semPergunta = frases.filter((f) => !/\?/.test(f)).join("").trim();
       resposta = [...resposta.slice(0, -1), ...(semPergunta ? [semPergunta] : []), "Com quem eu falo? 😊"];
     }
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];

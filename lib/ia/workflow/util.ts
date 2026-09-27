@@ -33,8 +33,10 @@ export function tirarCumprimentoRepetido(texto: string) {
     /^tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?\n]*[?!.]+\s*/iu,
     /^(?:aqui\s+(?:é|e)\s+|(?:eu\s+)?sou\s+(?:a|o)\s+(?:assistente|atendente))[^.!?\n]*[.!?]+\s*/iu,
   ];
+  inicio.push(/^aqui\s+na\s+g[êe]meos\s+motors\s*,\s*/iu);
   for (let volta = 0; volta < 3; volta++) for (const rx of inicio) t = t.replace(rx, "");
-  return t.trim();
+  t = t.trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : t;
 }
 
 /** Emoji solto no começo de uma mensagem ("😊 Para te ajudar...") parece robô: sai. */

@@ -141,6 +141,13 @@
       "when": 1790513622132,
       "tag": "0019_ia_resolve_sozinha",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790514020842,
+      "tag": "0020_ia_exemplo_lista",
+      "breakpoints": true
     }
   ]
 }
