@@ -169,6 +169,13 @@
       "when": 1790550000000,
       "tag": "0023_cores_modelos",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790560000000,
+      "tag": "0024_fotos_cores",
+      "breakpoints": true
     }
   ]
 }
