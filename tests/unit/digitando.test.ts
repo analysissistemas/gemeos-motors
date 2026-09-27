@@ -54,3 +54,12 @@ test("cumprimento com letra a mais ('Boa tardea') também é corrigido para o ho
   const manha = new Date("2026-09-27T11:45:00Z"); // 08:45 em Recife
   assert.equal(corrigirCumprimento("Boa tardea! Tudo certinho?", manha), "Bom dia! Tudo certinho?");
 });
+
+import { quebrarEmBlocos } from "../../lib/ia/workflow/util.ts";
+test("mensagem longa: preço com milhar nunca é partido e a lista fica inteira", () => {
+  const t = "Perfeito, Tati! Para 20 km por dia, estas são ótimas opções:\n• *AG08*: R$ 8.990 — autonomia de 40 a 45 km, pronta entrega\n• *MM3*: R$ 10.500 — autonomia de 45 a 55 km\nA AG08 tem a pronta entrega e é ideal para o seu trajeto. Ela é econômica e não precisa de CNH. Qual cor você prefere?";
+  const b = quebrarEmBlocos(t, 3);
+  assert.ok(b.every((x) => !/^\d/.test(x)), JSON.stringify(b));
+  assert.ok(b.some((x) => x.includes("R$ 8.990") && x.includes("R$ 10.500")), JSON.stringify(b));
+  assert.equal(b.join(" ").includes("Perfeito, Tati!"), true);
+});

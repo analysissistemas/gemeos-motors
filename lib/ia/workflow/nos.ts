@@ -613,7 +613,17 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       resposta = resposta
         .map((b) => {
           const frases = b.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [b];
-          return frases.filter((f) => !/\?/.test(f) || NOME.test(f)).join("").trim();
+          /* a pergunta que sai leva junto a frase que dependia dela ("Assim indico a ideal para você.") */
+          let tirouPergunta = false;
+          return frases
+            .filter((f) => {
+              if (/\?/.test(f) && !NOME.test(f)) return !(tirouPergunta = true);
+              if (tirouPergunta && /^\s*(?:assim|dessa forma|desse jeito|com isso|a[ií]\s)/iu.test(f)) return false;
+              tirouPergunta = false;
+              return true;
+            })
+            .join("")
+            .trim();
         })
         .filter(Boolean);
     }

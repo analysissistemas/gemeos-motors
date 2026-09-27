@@ -7,7 +7,14 @@ export function quebrarEmBlocos(texto: string, max: number): string[] {
   if (!limpo) return [];
   let partes = limpo.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
   if (partes.length === 1 && limpo.length > 280 && max > 1) {
-    const frases = limpo.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [limpo];
+    /* unidades: linhas; item de lista ("•") fica junto da linha que o apresenta; linha comum longa vira
+       frases, cortando só em pontuação seguida de espaço (assim "R$ 8.990" nunca é partido) */
+    const unidades: string[] = [];
+    for (const linha of limpo.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      if (/^•/.test(linha) && unidades.length) unidades[unidades.length - 1] += `\n${linha}`;
+      else unidades.push(linha);
+    }
+    const frases = unidades.flatMap((u) => (u.includes("\n•") ? [u] : u.split(/(?<=[.!?])\s+(?=\S)/u))).map((s) => s.trim()).filter(Boolean);
     const alvo = Math.ceil(limpo.length / Math.min(max, Math.ceil(limpo.length / 160)));
     partes = [];
     let atual = "";
