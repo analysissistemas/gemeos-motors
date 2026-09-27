@@ -1,5 +1,6 @@
 import "server-only";
-import { autonomiaMinima, lerParametrosEconomia, textoEconomia } from "./economia";
+import { autonomiaMinima, comGasolinaDaRegiao, lerParametrosEconomia, textoEconomia } from "./economia";
+import { gasolinaPara, type GasolinaDoCliente } from "./gasolina";
 import { and, asc, desc, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
@@ -94,7 +95,7 @@ const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "auton
    (27/09/2026): só moto ELÉTRICA (nunca combustão nem carro) e acessório; a IA mostra opções, ficha,
    cores e preço, e só diz "tem"/"pronta entrega" para modelo com unidade disponível no estoque.
    `incluirTeste`: conversa simulada enxerga os veículos de teste. */
-export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?: number | null } = {}) {
+export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?: number | null; /** preço da ANP para a região do cliente; sem, a média do estado da loja */ gasolina?: GasolinaDoCliente | null } = {}) {
   const m = schema.modelos;
   const v = schema.veiculos;
   const [linhas, cores, unidades, base] = await Promise.all([
@@ -111,7 +112,8 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   /* conta de economia × gasolina com os números da base (preço da gasolina, km/l, custo da carga) */
-  const economia = lerParametrosEconomia(base.map((b) => b.conteudo));
+  const baseEconomia = lerParametrosEconomia(base.map((b) => b.conteudo));
+  const economia = baseEconomia && comGasolinaDaRegiao(baseEconomia, opcoes.gasolina !== undefined ? opcoes.gasolina : await gasolinaPara().catch(() => null));
   if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[] };
   const brl = (x: number | null) => (x ? `R$ ${Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "preço sob consulta");
   const comEstoque: string[] = [];
@@ -135,7 +137,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   const texto = `# CATÁLOGO DA LOJA (o mesmo do site) E ESTOQUE AGORA
 Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
 Pode apresentar nome, preço de tabela, ficha e cores. "Tem", "disponível" e "pronta entrega" SÓ para modelo marcado EM ESTOQUE; para os outros, diga que a equipe confirma o prazo.
-${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta: ${opcoes.kmSemana ? `o cliente roda uns ${opcoes.kmSemana} km por semana, use a CONTA DO CLIENTE (semana e mês)` : "o cliente ainda não disse quanto roda: pergunte, ou use o cenário de km por semana mais perto do que ele contou"}.
+${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro${economia.origemGasolina ? ` (${economia.origemGasolina}, pesquisa semanal da ANP; diga isso ao cliente)` : ""} e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta: ${opcoes.kmSemana ? `o cliente roda uns ${opcoes.kmSemana} km por semana, use a CONTA DO CLIENTE (semana e mês)` : "o cliente ainda não disse quanto roda: pergunte, ou use o cenário de km por semana mais perto do que ele contou"}.
 ` : ""}${itens.join("\n")}`;
   return { texto, nomes: Array.from(new Set(linhas.flatMap((l) => [l.nome, l.marca]).filter((x): x is string => !!x))), comEstoque: Array.from(new Set(comEstoque)) };
 }

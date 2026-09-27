@@ -9,7 +9,8 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
-import { autonomiaMinima, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
+import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
+import { gasolinaPara } from "@/lib/ia/gasolina";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
@@ -120,7 +121,7 @@ async function enviar(c: CtxWorkflow, texto: string, citar = false, gravarFalha 
   const respostaA = citar && c.mensagem ? { id: c.mensagem.id, externoId: c.mensagem.externoId } : undefined;
   /* a conta de economia do uso deste cliente (feita pelo sistema) também é fonte para a trava de valores */
   const kmSemana = kmDoCliente(c);
-  const fontesExtras = kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana })).texto] : [];
+  const fontesExtras = kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : [];
   return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha, fontesExtras });
 }
 
@@ -349,8 +350,9 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
     db.select({ modeloId: v.modeloId }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
-  const p = lerParametrosEconomia(base.map((b) => b.conteudo));
-  if (!p) return resposta;
+  const pBase = lerParametrosEconomia(base.map((b) => b.conteudo));
+  if (!pBase) return resposta;
+  const p = comGasolinaDaRegiao(pBase, await gasolinaDoCliente(c));
   const lista = modelos
     .map((x) => ({ ...x, autonomia: autonomiaMinima((x.ficha as Record<string, string> | null)?.autonomia), temEstoque: unidades.some((u) => u.modeloId === x.id) }))
     .filter((x): x is typeof x & { autonomia: number } => !!x.autonomia);
@@ -376,9 +378,16 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
 }
 
 /** Quanto este cliente roda por semana, pelo que ELE escreveu na conversa (a última menção vale). */
+function textoDoCliente(c: CtxWorkflow) {
+  return [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n");
+}
 function kmDoCliente(c: CtxWorkflow) {
-  const doCliente = [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n");
-  return kmPorSemana(doCliente);
+  return kmPorSemana(textoDoCliente(c));
+}
+/** Preço da gasolina (ANP) para a região do cliente: a cidade que ele citou ou que a IA anotou; senão a média do estado da loja. */
+function gasolinaDoCliente(c: CtxWorkflow) {
+  const cidade = c.aprendido?.fatos?.cidade || c.memoria.fatos.cidade;
+  return gasolinaPara({ cidade, textoDoCliente: textoDoCliente(c) }).catch(() => null);
 }
 
 async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
@@ -389,7 +398,7 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca }).from(schema.modelos),
     db.select({ marca: schema.veiculos.marca, modelo: schema.veiculos.modelo }).from(schema.veiculos).where(incluirTeste ? undefined : eq(schema.veiculos.teste, false)).limit(1000),
     fontesAutorizadas(),
-    catalogoParaIa({ incluirTeste, kmSemana: kmDoCliente(c) }),
+    catalogoParaIa({ incluirTeste, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) }),
   ]);
   return {
     controle,
@@ -539,7 +548,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   },
 
   agente: async (c) => {
-    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c) })).texto].filter(Boolean).join("\n\n");
+    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);

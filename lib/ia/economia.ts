@@ -9,7 +9,18 @@
    Puro, sem banco: testado em tests/unit/economia.test.ts.
    ============================================================ */
 
-export type ParametrosEconomia = { gasolina: number; kmPorLitro: number; cargaMin: number; cargaMax: number };
+export type ParametrosEconomia = {
+  gasolina: number;
+  kmPorLitro: number;
+  cargaMin: number;
+  cargaMax: number;
+  /** de onde veio o preço da gasolina ("média de Pernambuco", "Recife"), quando é o da ANP */
+  origemGasolina?: string;
+};
+
+/** Troca o preço da gasolina da base pelo da ANP para a região do cliente. */
+export const comGasolinaDaRegiao = (p: ParametrosEconomia, g: { preco: number; onde: string } | null | undefined): ParametrosEconomia =>
+  g ? { ...p, gasolina: g.preco, origemGasolina: g.onde } : p;
 
 const numero = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
 
@@ -73,7 +84,8 @@ export function fraseEconomia(nome: string, autonomia: number, kmSemana: number,
   };
   const s = conta(kmSemana);
   const m = conta(mes);
-  return `Fazendo a conta para o seu uso (uns ${kmSemana} km por semana) com a *${nome}*: na gasolina você gastaria ${reais(m.gas)} por mês. Com a elétrica, a luz fica de ${reais(m.luzMin)} a ${reais(m.luzMax)}. Ou seja, você economizaria de ${reais(Math.max(0, m.gas - m.luzMax))} a ${reais(m.gas - m.luzMin)} por mês (de ${reais(Math.max(0, s.gas - s.luzMax))} a ${reais(s.gas - s.luzMin)} por semana).`;
+  const litro = p.origemGasolina ? ` (${reaisCentavos(p.gasolina)} o litro, ${p.origemGasolina})` : "";
+  return `Fazendo a conta para o seu uso (uns ${kmSemana} km por semana) com a *${nome}*: na gasolina${litro} você gastaria ${reais(m.gas)} por mês. Com a elétrica, a luz fica de ${reais(m.luzMin)} a ${reais(m.luzMax)}. Ou seja, você economizaria de ${reais(Math.max(0, m.gas - m.luzMax))} a ${reais(m.gas - m.luzMin)} por mês (de ${reais(Math.max(0, s.gas - s.luzMax))} a ${reais(s.gas - s.luzMin)} por semana).`;
 }
 
 /** Texto pronto da economia de um modelo, para o catálogo que a IA recebe.

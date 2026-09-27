@@ -155,6 +155,13 @@
       "when": 1790530000000,
       "tag": "0021_ia_economia_gasolina",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790540000000,
+      "tag": "0022_ia_gasolina_anp",
+      "breakpoints": true
     }
   ]
 }
