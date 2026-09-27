@@ -1,4 +1,5 @@
 import "server-only";
+import { autonomiaMinima, lerParametrosEconomia, textoEconomia } from "./economia";
 import { and, asc, desc, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
@@ -96,7 +97,7 @@ const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "auton
 export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
   const m = schema.modelos;
   const v = schema.veiculos;
-  const [linhas, cores, unidades] = await Promise.all([
+  const [linhas, cores, unidades, base] = await Promise.all([
     db
       .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade })
       .from(m)
@@ -107,7 +108,10 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
       .select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor })
       .from(v)
       .where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
+    db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
+  /* conta de economia × gasolina com os números da base (preço da gasolina, km/l, custo da carga) */
+  const economia = lerParametrosEconomia(base.map((b) => b.conteudo));
   if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[] };
   const brl = (x: number | null) => (x ? `R$ ${Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "preço sob consulta");
   const comEstoque: string[] = [];
@@ -124,12 +128,15 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
     const estoque = minhas.length
       ? `EM ESTOQUE: ${minhas.length} unidade(s)${coresEstoque.length ? ` (${coresEstoque.join(", ")})` : ""} — pode dizer que tem a pronta entrega`
       : `sem unidade no estoque agora — ${l.disponibilidade === "sob_encomenda" ? "sob encomenda" : "a equipe confirma o prazo"}`;
-    return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}`;
+    const autonomia = autonomiaMinima(f.autonomia);
+    const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia)}` : "";
+    return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}${conta}`;
   });
   const texto = `# CATÁLOGO DA LOJA (o mesmo do site) E ESTOQUE AGORA
 Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
 Pode apresentar nome, preço de tabela, ficha e cores. "Tem", "disponível" e "pronta entrega" SÓ para modelo marcado EM ESTOQUE; para os outros, diga que a equipe confirma o prazo.
-${itens.join("\n")}`;
+${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta; escolha o cenário de km/dia mais perto do uso do cliente.
+` : ""}${itens.join("\n")}`;
   return { texto, nomes: Array.from(new Set(linhas.flatMap((l) => [l.nome, l.marca]).filter((x): x is string => !!x))), comEstoque: Array.from(new Set(comEstoque)) };
 }
 

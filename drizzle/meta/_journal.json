@@ -148,6 +148,13 @@
       "when": 1790514020842,
       "tag": "0020_ia_exemplo_lista",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790530000000,
+      "tag": "0021_ia_economia_gasolina",
+      "breakpoints": true
     }
   ]
 }
