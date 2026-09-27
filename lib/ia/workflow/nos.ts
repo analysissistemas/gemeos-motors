@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
 import { fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
-import { agoraNaLoja, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
+import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
 import {
@@ -138,7 +138,7 @@ Devolva também:
 - fatos: o que você sabe do cliente AGORA (nome, interesse, uso, pagamento, troca, cidade, observacoes). Só o que o cliente disse; o que não se sabe fica null.
 - resumo: 1 a 3 frases sobre o atendimento até aqui (interesse e situação), para o vendedor.
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
-- saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário e se apresentando pelo nome. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
+- saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
 
 function criarGerador(p: { promptSistema: string; memoria: CtxWorkflow["memoria"]; agora: string }) {
   const chamadas: { etapa: string; saida: unknown; ms: number }[] = [];
@@ -429,8 +429,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
   },
 
   blocos: (c) => {
-    const resposta = quebrarEmBlocos(c.pipe?.texto ?? "", c.config.maxBlocos);
-    const blocos = [...(c.saudacao ? [c.saudacao.trim()] : []), ...resposta];
+    /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
+    const resposta = quebrarEmBlocos(c.pipe?.texto ?? "", c.config.maxBlocos).map((b) => corrigirCumprimento(b));
+    const blocos = [...(c.saudacao ? [corrigirCumprimento(c.saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (c.saudacao ? 1 : 0) : -1;
     return blocos.length ? { ctx: { blocos, indice: 0, citar }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null } } : { ramo: "vazio", saida: { blocos: [] } };

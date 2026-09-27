@@ -253,3 +253,17 @@ test("classifica o motivo da falha em linguagem simples", () => {
   assert.equal(classificarFalha("O WhatsApp recusou o envio: (#131047) Re-engagement message"), "whatsapp");
   assert.equal(classificarFalha("algo estranho"), "outro");
 });
+
+/* ---------------- cumprimento sempre certo para o horário ---------------- */
+import { corrigirCumprimento } from "../../lib/ia/horario.ts";
+
+test("o cumprimento sai certo para o horário de Recife, mantendo o jeito escrito", () => {
+  const manha = new Date("2026-09-29T12:00:00Z"); // 9h
+  const tarde = new Date("2026-09-29T18:00:00Z"); // 15h
+  const noite = new Date("2026-09-29T23:00:00Z"); // 20h
+  assert.equal(corrigirCumprimento("Booa tardee! Tudo certinho?", manha), "Bom diaa! Tudo certinho?");
+  assert.equal(corrigirCumprimento("Bom dia! Aqui na Gêmeos Motors temos sim a T1.", noite), "Boa noite! Aqui na Gêmeos Motors temos sim a T1.");
+  assert.equal(corrigirCumprimento("BOA NOITE!", tarde), "BOA TARDE!");
+  assert.equal(corrigirCumprimento("Boa tarde!", tarde), "Boa tarde!");
+  assert.equal(corrigirCumprimento("Um bom diagnóstico", noite), "Um bom diagnóstico", "não mexe em outras palavras");
+});

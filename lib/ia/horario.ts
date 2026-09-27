@@ -84,3 +84,16 @@ export function saudacaoDoHorario(agora = new Date()) {
   const h = Number(agoraNaLoja(agora).hora.slice(0, 2));
   return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite";
 }
+
+/** Troca "bom dia / boa tarde / boa noite" pelo cumprimento certo do horário de Recife,
+ *  mantendo o jeito escrito (maiúscula e letra esticada: "Booa tardee!" vira "Boa noitee!"). */
+export function corrigirCumprimento(texto: string, agora = new Date()) {
+  const certo = saudacaoDoHorario(agora);
+  return texto.replace(/(?<![\p{L}])(b+o+m+\s+d+i+a+|b+o+a+\s+t+a+r+d+e+|b+o+a+\s+n+o+i+t+e+)(?![\p{L}])/giu, (achado) => {
+    const esticado = /(\p{L})\1/iu.test(achado);
+    let novo = esticado ? certo + certo.slice(-1) : certo;
+    if (achado === achado.toUpperCase()) novo = novo.toUpperCase();
+    else if (achado[0] === achado[0].toUpperCase()) novo = novo[0].toUpperCase() + novo.slice(1);
+    return novo;
+  });
+}
