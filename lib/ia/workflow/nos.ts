@@ -591,7 +591,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     /* primeiro contato: sempre com cumprimento (só o cumprimento; a pergunta vai na resposta) */
     const cumprimento = c.saudacao ? soCumprimento(c.saudacao) : "";
     const padrao = saudacaoDoHorario();
-    const arrumar = (s: string) => { const x = s.trim(); return x ? `${x[0].toUpperCase()}${x.slice(1)}${/[.!?]$/.test(x) ? "" : "!"}` : x; };
+    const arrumar = (s: string) => { const x = s.trim(); return x ? `${x[0].toUpperCase()}${x.slice(1)}${/[.!?]$|\p{Extended_Pictographic}\uFE0F?$/u.test(x) ? "" : "!"}` : x; };
     const saudacao = jaConversou ? null : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! Tudo certinho?`;
     const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome);
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
@@ -627,6 +627,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
         })
         .filter(Boolean);
     }
+    /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
+    if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;

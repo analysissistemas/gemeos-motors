@@ -63,3 +63,8 @@ test("mensagem longa: preço com milhar nunca é partido e a lista fica inteira"
   assert.ok(b.some((x) => x.includes("R$ 8.990") && x.includes("R$ 10.500")), JSON.stringify(b));
   assert.equal(b.join(" ").includes("Perfeito, Tati!"), true);
 });
+
+test("saudação que trouxe conteúdo fica só com o cumprimento", () => {
+  assert.equal(soCumprimento("Bom dia! Aqui na Gêmeos Motors, pagar à vista no Pix não tem taxa. 🙂!"), "Bom dia!");
+  assert.equal(soCumprimento("Oii, boa tardee! Tudo certinho? 😊"), "Oii, boa tardee! Tudo certinho? 😊");
+});

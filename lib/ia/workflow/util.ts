@@ -54,7 +54,12 @@ export function tirarEmojiDoInicio(texto: string) {
 /** Saudação é só o cumprimento: frases com pergunta ou apresentação saem (vão na resposta). */
 export function soCumprimento(saudacao: string) {
   const frases = saudacao.match(/[^.!?]+[.!?]*/g) ?? [saudacao];
-  const ficam = frases.filter((f) => !/\?\s*$/.test(f.trim()) || /tudo\s+(?:bem|certinho|certo|joia|tranquilo)/iu.test(f)).filter((f) => !/(?:aqui\s+(?:é|e)|sou\s+(?:a|o)|bem[- ]vind)/iu.test(f));
+  const CUMPRIMENTO = /^\s*(?:(?:ol[aá]+|oi+|e\s+a[ií])[\s,!]*)?(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])?[\s,!]*(?:tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?]*)?[.!?\s]*(?:\p{Extended_Pictographic}\uFE0F?\s*)*$/iu;
+  const ficam: string[] = [];
+  for (const f of frases) {
+    const soEmoji = !/\p{L}/u.test(f) && /\p{Extended_Pictographic}/u.test(f);
+    if (f.trim() && CUMPRIMENTO.test(f) && (/\p{L}/u.test(f) || (soEmoji && ficam.length))) ficam.push(f);
+  }
   return ficam.join("").trim();
 }
 
