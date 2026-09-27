@@ -145,6 +145,8 @@ Devolva também:
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
 
+const CORES_COMUNS = ["Preto", "Branco", "Cinza", "Prata", "Vermelho", "Azul", "Verde", "Amarelo", "Rosa", "Marrom", "Bege", "Laranja", "Roxo"];
+
 /* Proposta montada pelo sistema com o que a conversa já tem: modelo do catálogo, cor e pagamento.
    Preço sempre o de tabela do catálogo. Falta algo (ex.: cor com mais de uma opção)? Não monta. */
 async function montarProposta(c: CtxWorkflow): Promise<string | null> {
@@ -164,7 +166,14 @@ async function montarProposta(c: CtxWorkflow): Promise<string | null> {
     })
     .sort((a, b) => b.nome.length - a.nome.length)[0];
   if (!achado || !achado.preco) return null;
-  const cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
+  let cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
+  /* modelo sem cor no catálogo: valem as cores das unidades disponíveis e, sem unidade, a cor que o cliente pediu */
+  if (!cores.length) {
+    const v = schema.veiculos;
+    const soReal = c.conversa?.demo ? undefined : eq(v.teste, false);
+    cores = [...new Set((await db.select({ cor: v.cor }).from(v).where(and(eq(v.modeloId, achado.id), eq(v.status, "disponivel"), soReal))).map((x) => x.cor?.trim()).filter((x): x is string => !!x))];
+    if (!cores.length) cores = CORES_COMUNS.filter((n) => corNoTexto(n, c.textoBuffer));
+  }
   const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 ? cores[0] : null);
   if (!cor) return null;
   const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
