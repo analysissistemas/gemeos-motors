@@ -733,7 +733,12 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     if (nomeNovo && resposta.length && !new RegExp(`(?<![\\p{L}])${nomeNovo}(?![\\p{L}])`, "iu").test(resposta.join(" "))) {
       /* a IA já disse "Prazer em falar com você": essa frase sai, fica só o "Prazer, Sandra!" */
       const [primeiro0, ...resto] = resposta;
-      const primeiro = primeiro0.replace(/^prazer[^.!?\n]*[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "").trim() || primeiro0;
+      /* e o "Boa tarde 😊" solto que vinha depois dela (só o cumprimento; o resto da frase fica) */
+      const primeiro =
+        primeiro0
+          .replace(/^prazer[^.!?\n]*[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "")
+          .replace(/^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+)[!.,]*\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "")
+          .trim() || primeiro0;
       resposta = [/\n/.test(primeiro) ? `Prazer, ${nomeNovo}!` : `Prazer, ${nomeNovo}! ${primeiro[0].toUpperCase()}${primeiro.slice(1)}`, ...(/\n/.test(primeiro) ? [primeiro] : []), ...resto];
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
