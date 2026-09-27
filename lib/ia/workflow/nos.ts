@@ -663,7 +663,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
           let tirouPergunta = false;
           return frases
             .filter((f) => {
-              if (/\?/.test(f) && !NOME.test(f)) return !(tirouPergunta = true);
+              /* só fica a pergunta do nome PURA ("Com quem eu falo?"); junto com outra pergunta, sai */
+              const nomePuro = NOME.test(f) && !/\s+e\s+(?:com quem|qual (?:é\s+)?o seu nome|como (?:você|vc) se chama)/iu.test(f);
+              if (/\?/.test(f) && !nomePuro) return !(tirouPergunta = true);
               if (tirouPergunta && /^\s*(?:assim|dessa forma|desse jeito|com isso|a[ií]\s)/iu.test(f)) return false;
               tirouPergunta = false;
               return true;
@@ -672,6 +674,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
             .trim();
         })
         .filter(Boolean);
+      if (resposta.length && !resposta.some((b) => NOME.test(b))) resposta.push("Com quem eu falo? 😊");
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
     if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
