@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Gêmeos Motors — Sistema", template: "%s · Gêmeos Motors" },
   description: "Sistema de gestão da Gêmeos Motors: atendimento, funil, vendas, estoque e assistência.",
-  icons: { icon: "/favicon.ico", apple: "/social/icone-180.png" },
+  icons: { icon: [{ url: "/favicon.ico?v=2", sizes: "16x16 32x32 48x48" }, { url: "/social/icone-32.png?v=2", type: "image/png", sizes: "32x32" }], apple: "/social/icone-180.png" },
   robots: { index: false, follow: false },
 };
 

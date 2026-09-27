@@ -6,7 +6,8 @@
 <title>Gêmeos Motors — Motos elétricas em Goiana, Pernambuco</title>
 <meta name="description" content="Moto elétrica sem CNH, sem emplacamento e sem IPVA, carregada na tomada de casa. Acessórios e assistência técnica própria. Loja em Goiana, Pernambuco, com entrega em toda a região.">
 <!-- Ícone da aba e da tela inicial do celular -->
-<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.ico?v=2" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="social/icone-32.png?v=2" sizes="32x32">
 <link rel="icon" type="image/png" href="social/icone-180.png" sizes="180x180">
 <link rel="apple-touch-icon" href="social/icone-180.png">
 <meta name="theme-color" content="#0b0b0a">
@@ -272,7 +273,39 @@ a{color:inherit;text-decoration:none}
 .lancamentos .secao-cab h2{color:#fff}
 .lancamentos .secao-cab p{color:#c9cbc2}
 .lancamentos .etiqueta{background:var(--marca);border-color:var(--marca);color:var(--tinta)}
-.grade-lanc{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px;margin-top:30px;color:var(--tinta)}
+/* um lançamento por vez, grande, ocupando a faixa; com mais de um vira carrossel que gira
+   sozinho (5 s), para no mouse/toque e desliza com o dedo (scroll-snap) */
+.grade-lanc{margin-top:30px;color:var(--tinta)}
+.lanc-trilho{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;
+  border-radius:26px;outline-offset:4px}
+.lanc-trilho::-webkit-scrollbar{display:none}
+.lanc-slide{flex:0 0 100%;scroll-snap-align:start;display:grid;grid-template-columns:1.3fr 1fr;
+  border-radius:26px;border:0}
+.lanc-slide:hover{transform:none;box-shadow:none}
+.lanc-slide .prod-foto{aspect-ratio:auto;min-height:460px;padding:36px}
+.lanc-slide .prod-foto img{max-height:520px}
+.lanc-slide .selo{font-size:12px;padding:7px 14px}
+.lanc-corpo{padding:40px 40px 36px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.lanc-nome{font-size:clamp(30px,4vw,46px);font-weight:800;letter-spacing:-.02em;line-height:1.05;margin:0}
+.lanc-nome a{color:inherit;text-decoration:none}
+.lanc-frase{font-size:18px;font-weight:700;color:#6b5200;margin:0}
+.lanc-desc{font-size:15px;line-height:1.55;color:var(--tinta-2);margin:0}
+.lanc-preco{margin-top:6px}
+.lanc-preco .preco{font-size:34px}
+.lanc-preco .btn-reservar{width:100%;justify-content:center;font-size:16px;padding:16px 26px;margin-top:12px}
+.lanc-ctrl{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:20px}
+.lanc-seta{width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:transparent;
+  color:#fff;font-size:26px;line-height:1;cursor:pointer;transition:background .2s,color .2s}
+.lanc-seta:hover{background:var(--marca);border-color:var(--marca);color:var(--tinta)}
+.lanc-pontos{display:flex;gap:8px}
+.lanc-ponto{width:10px;height:10px;border-radius:10px;border:0;padding:0;background:rgba(255,255,255,.35);
+  cursor:pointer;transition:width .3s,background .3s}
+.lanc-ponto.on{width:28px;background:var(--marca)}
+@media(max-width:860px){
+  .lanc-slide{grid-template-columns:1fr}
+  .lanc-slide .prod-foto{min-height:0;aspect-ratio:4/3;padding:22px}
+  .lanc-corpo{padding:22px 20px 24px}
+}
 
 /* ---------- JANELA DE RESERVA ---------- */
 .dlg-reserva{margin:auto;border:none;border-radius:22px;padding:0;width:min(440px,calc(100vw - 32px));
@@ -1123,10 +1156,92 @@ fetch("/api/promocoes", {cache:"no-store"})
   .catch(()=>{});
 
 /* lançamentos: a faixa escura logo depois do topo; sem lançamento, some */
+/* um slide grande por lançamento: foto, nome, frase, ficha, preço e "Quero reservar".
+   Usa a classe .prod para o clique cair no mesmo tratamento da reserva do card. */
+function slideLanc(a){
+  const promo = promoDe(a), p = precoEscolhido(a), pedacos = fichaEmPedacos(a.ficha);
+  const eletrico = a.eletrico !== false;
+  return `<article class="prod lanc-slide" data-id="${a.id}" role="group" aria-roledescription="slide" aria-label="${a.modelo}">
+    <div class="prod-foto" data-reservar="${a.id}">
+      <span class="selo lanc">Lançamento</span>
+      ${fotoDupla(a)}
+    </div>
+    <div class="lanc-corpo">
+      <h3 class="lanc-nome"><a href="#" data-reservar="${a.id}">${a.modelo}</a></h3>
+      ${a.lancamentoTexto ? `<p class="lanc-frase">${a.lancamentoTexto}</p>` : ""}
+      ${a.descricao ? `<p class="lanc-desc">${a.descricao}</p>` : ""}
+      ${pedacos.length ? `<div class="ficha" data-reservar="${a.id}">
+        ${pedacos.map(f=>`<span class="ficha-i">${f.antes ? f.antes + " " : ""}${
+          f.destaque ? `<b>${f.valor}</b>` : f.valor}${f.depois ? " " + f.depois : ""}</span>`).join("")}
+      </div>` : ""}
+      <div class="checks">
+        ${eletrico && pedacos.length ? `<span class="check">${CHECK} Sem CNH</span>
+               <span class="check">${CHECK} Sem IPVA</span>` : ""}
+        <span class="check">${CHECK} Garantia</span>
+      </div>
+      <div class="lanc-preco">
+        ${promo ? `<div class="preco-de">${brl(promo.de)}</div>` : ""}
+        <div class="preco">${promo ? brl(promo.preco) : p == null ? "Consultar preço" : brl(p)}</div>
+        ${a.reservas >= 3 ? `<div class="lanc-reservas">${a.reservas} pessoas já reservaram</div>` : ""}
+        <button class="btn-consultar btn-reservar" data-reservar="${a.id}">Quero reservar</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+const carrossel = { timer:null, obs:null, visivel:false, pausado:false };
 function pintaLancamentos(){
   const l = typeof lancamentosDoSite === "function" ? lancamentosDoSite() : [];
   $("#lancamentos").hidden = !l.length;
-  $("#gradeLanc").innerHTML = l.map(card).join("");
+  const varios = l.length > 1;
+  $("#gradeLanc").innerHTML = `<div class="lanc-trilho" id="lancTrilho" tabindex="0" aria-roledescription="carrossel" aria-label="Lançamentos">${l.map(slideLanc).join("")}</div>` +
+    (varios ? `<div class="lanc-ctrl">
+      <button class="lanc-seta" data-lanc="-1" aria-label="Lançamento anterior">&lsaquo;</button>
+      <div class="lanc-pontos">${l.map((x,i)=>`<button class="lanc-ponto${i?"":" on"}" data-lanc-ir="${i}" aria-label="Ver ${x.modelo}"></button>`).join("")}</div>
+      <button class="lanc-seta" data-lanc="1" aria-label="Próximo lançamento">&rsaquo;</button>
+    </div>` : "");
+  iniciaCarrossel(varios);
+}
+
+function iniciaCarrossel(varios){
+  clearInterval(carrossel.timer); carrossel.timer = null;
+  if(carrossel.obs){ carrossel.obs.disconnect(); carrossel.obs = null; }
+  const trilho = $("#lancTrilho");
+  if(!trilho || !varios) return;
+  const n = trilho.children.length;
+  const pontos = [...document.querySelectorAll(".lanc-ponto")];
+  const calmo = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const atual = () => Math.round(trilho.scrollLeft / Math.max(1, trilho.clientWidth));
+  const ir = i => trilho.scrollTo({ left: ((i % n + n) % n) * trilho.clientWidth, behavior: calmo ? "auto" : "smooth" });
+  let quadro = 0;
+  trilho.addEventListener("scroll", () => {
+    cancelAnimationFrame(quadro);
+    quadro = requestAnimationFrame(() => { const i = atual(); pontos.forEach((b,k) => b.classList.toggle("on", k === i)); });
+  }, { passive:true });
+  const caixa = $("#gradeLanc");
+  caixa.onclick = e => {
+    const seta = e.target.closest("[data-lanc]"), ponto = e.target.closest("[data-lanc-ir]");
+    if(seta) ir(atual() + Number(seta.dataset.lanc));
+    else if(ponto) ir(Number(ponto.dataset.lancIr));
+  };
+  /* para enquanto a pessoa olha ou mexe; o toque volta a girar depois de 8 s */
+  let volta = 0;
+  const pausa = () => { carrossel.pausado = true; clearTimeout(volta); };
+  const segue = ms => { clearTimeout(volta); volta = setTimeout(() => { carrossel.pausado = false; }, ms); };
+  caixa.onmouseenter = pausa; caixa.onmouseleave = () => segue(0);
+  caixa.onfocusin = pausa; caixa.onfocusout = () => segue(0);
+  caixa.ontouchstart = pausa; caixa.ontouchend = () => segue(8000);
+  trilho.onkeydown = e => {
+    if(e.key === "ArrowRight"){ e.preventDefault(); ir(atual() + 1); }
+    if(e.key === "ArrowLeft"){ e.preventDefault(); ir(atual() - 1); }
+  };
+  /* quem pediu menos animação no sistema não vê a troca automática */
+  if(calmo) return;
+  carrossel.obs = new IntersectionObserver(([en]) => { carrossel.visivel = en.isIntersecting; }, { threshold:.35 });
+  carrossel.obs.observe(trilho);
+  carrossel.timer = setInterval(() => {
+    if(carrossel.visivel && !carrossel.pausado && !document.hidden) ir(atual() + 1);
+  }, 5000);
 }
 
 /* catálogo, cores e fotos cadastrados no sistema da equipe: a página já abriu com o

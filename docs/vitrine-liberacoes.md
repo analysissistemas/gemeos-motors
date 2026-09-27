@@ -28,3 +28,6 @@ voltou a valer depois de cada uma:
   via `public/catalogo-sistema.js`): modelo sem estoque aparece, selo de
   disponibilidade, faixa "Lançamentos" logo depois do topo e janela de reserva
   (`/api/vitrine/reserva`); `v=19`. Se o sistema não responder, fica o estoque.js.
+- 26/09/2026 (lançamentos) — faixa "Chegando na Gêmeos Motors" vira um lançamento grande por vez
+  (foto grande, frase, ficha, preço, "Quero reservar") e carrossel automático de 5 s com setas,
+  bolinhas e arrastar; favicon com 16/32/48 px e `?v=2` para o navegador trocar o ícone guardado.
