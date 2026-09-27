@@ -502,6 +502,8 @@ export const conversas = pgTable(
     ultimaMensagemEm: quando(),
     ultimaMensagemTexto: text(),
     ultimaMensagemDirecao: text(),
+    /* a IA está "digitando" até este instante (balão na tela da equipe; no WhatsApp vai o sinal da Meta) */
+    iaDigitandoAte: quando(),
     naoLidas: integer().notNull().default(0),
     externoId: text(),
     demo: boolean().notNull().default(false),

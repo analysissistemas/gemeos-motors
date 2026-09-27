@@ -33,7 +33,8 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { formatarHistorico, mesclarFatos, pausaDoBloco, quebrarEmBlocos, textoDaMensagem, type FatosLead } from "./util";
+import { formatarHistorico, mesclarFatos, quebrarEmBlocos, tempoDigitando, textoDaMensagem, type FatosLead } from "./util";
+import { obterProvedor } from "@/lib/mensageria/provedores";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 const TEXTO_FORA_HORARIO = "Anotei tudo por aqui! Nossa equipe te responde assim que a loja abrir. Enquanto isso, pode me perguntar o que quiser.";
@@ -74,6 +75,15 @@ export type CtxWorkflow = {
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* humanizado (pedido do dono, 27/09/2026): antes de cada bloco a IA "digita". No WhatsApp de verdade
+   vai o sinal da Meta (três pontinhos + mensagem lida); na tela da equipe aparece o balão. Conversa
+   simulada nunca fala com a Meta. */
+async function mostrarDigitando(c: CtxWorkflow, ms: number) {
+  await db.update(schema.conversas).set({ iaDigitandoAte: new Date(Date.now() + ms + 1500) }).where(eq(schema.conversas.id, c.conversaId));
+  const simulada = c.simulado || !!c.conversa?.demo;
+  if (!simulada && c.mensagem?.externoId && c.mensagem.direcao === "incoming") await (await obterProvedor({ demo: false })).digitando(c.mensagem.externoId);
+}
 const transcricaoDe = (m: Pick<Mensagem, "metadados">) => ((m.metadados ?? {}) as { transcricao?: string }).transcricao ?? null;
 
 async function carregarConversa(id: number) {
@@ -429,14 +439,16 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
   loop: (c) => (c.indice < c.blocos.length ? { ramo: "proximo", saida: { bloco: c.indice + 1, de: c.blocos.length } } : { ramo: "fim", saida: { enviados: c.enviados } }),
 
   intervalo: async (c) => {
-    const ms = c.indice === 0 ? Math.min(1500, pausaDoBloco(c.blocos[0], c.config.intervaloSegundos)) : pausaDoBloco(c.blocos[c.indice], c.config.intervaloSegundos);
+    const ms = tempoDigitando(c.blocos[c.indice]);
+    await mostrarDigitando(c, ms);
     await esperar(ms);
-    return { saida: { pausa: `${(ms / 1000).toFixed(1)} s`, bloco: c.indice + 1 } };
+    return { saida: { digitando: `${(ms / 1000).toFixed(1)} s`, bloco: c.indice + 1 } };
   },
 
   enviar: async (c, info) => {
     const texto = c.blocos[c.indice];
     const r = await enviar(c, texto, c.indice === c.citar, info.ultima);
+    await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
     if (!r.enviada && r.motivo === "falha_envio") throw new Error(`O WhatsApp recusou o envio: ${r.explicacao}`);
     if (!r.enviada) {
       await mensagemSistema(db, c.conversaId, `Resposta da IA não enviada: ${r.explicacao}. Um consultor precisa assumir.`);

@@ -34,6 +34,7 @@ export function Chat({
   aoApagar,
   aoConversarCom,
   aoAssumir,
+  iaDigitando,
 }: {
   contexto: ContextoConversa;
   mensagens: MensagemChat[];
@@ -54,6 +55,8 @@ export function Chat({
   aoApagar: (m: MensagemChat) => void;
   aoConversarCom: (telefone: string, nome: string | null) => void;
   aoAssumir: () => void;
+  /** a IA está preparando a resposta: balão "digitando…" no fim do chat */
+  iaDigitando?: boolean;
 }) {
   const c = contexto.conversa;
   const nome = contexto.cliente?.nome ?? c.contatoNome ?? formatarTelefone(c.contatoTelefone);
@@ -235,6 +238,18 @@ export function Chat({
             ) : (
               <Bolha key={i.chave} m={i.m} nomeCliente={nome} acoes={{ aoResponder, aoReagir, aoApagar, aoConversarCom, aoIrPara }} />
             ),
+          )}
+          {iaDigitando && (
+            <li className="flex justify-end" aria-live="polite">
+              <div className="flex items-center gap-2 rounded-2xl rounded-br-md bg-bolha-saida px-3 py-2 text-[12.5px] text-ink-2 shadow-sm">
+                <Bot className="size-3.5" /> Assistente virtual está digitando
+                <span className="flex gap-0.5" aria-hidden>
+                  <span className="size-1.5 animate-bounce rounded-full bg-ink-3 [animation-delay:-0.3s]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-ink-3 [animation-delay:-0.15s]" />
+                  <span className="size-1.5 animate-bounce rounded-full bg-ink-3" />
+                </span>
+              </div>
+            </li>
           )}
         </ol>
       </div>

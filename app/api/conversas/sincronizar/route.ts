@@ -3,6 +3,8 @@ import { obterUsuario } from "@/lib/auth/dal";
 import { pode } from "@/lib/dominio";
 import { conversasAlteradas, mensagensDaConversa, notasDaConversa, statusRecentes } from "@/lib/consultas/conversas";
 import { marcarLida, simularAndamento } from "@/lib/mensageria/servico";
+import { eq } from "drizzle-orm";
+import { db, schema } from "@/lib/db";
 
 /* ============================================================
    TEMPO REAL — hoje por consulta curta (a tela chama a cada ~3 s).
@@ -31,6 +33,8 @@ export async function GET(req: NextRequest) {
     conversaId ? statusRecentes(conversaId) : Promise.resolve([]),
     conversaId && p.get("notas") ? notasDaConversa(conversaId) : Promise.resolve(null),
   ]);
+  const [dig] = conversaId ? await db.select({ ate: schema.conversas.iaDigitandoAte }).from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1) : [];
+  const iaDigitando = !!dig?.ate && new Date(dig.ate) > agora;
   if (conversaId && mensagens.some((m) => m.direcao === "incoming")) await marcarLida(conversaId);
-  return NextResponse.json({ agora: agora.toISOString(), conversas, mensagens, alteradas, status, notas }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ agora: agora.toISOString(), conversas, mensagens, alteradas, status, notas, iaDigitando }, { headers: { "Cache-Control": "no-store" } });
 }

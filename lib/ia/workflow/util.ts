@@ -24,6 +24,14 @@ export function quebrarEmBlocos(texto: string, max: number): string[] {
 }
 
 /** Pausa antes de um bloco: o intervalo configurado, maior para texto longo (até o dobro). */
+/** Quanto tempo uma pessoa levaria digitando este bloco no celular: ~20 letras por segundo,
+    entre 2 e 9 s, com uma variação pequena para não ficar robótico. `sorte` (0 a 1) é para o teste. */
+export function tempoDigitando(bloco: string, sorte = Math.random()) {
+  const base = 1200 + bloco.trim().length * 50;
+  const variacao = 0.85 + sorte * 0.3;
+  return Math.round(Math.min(9000, Math.max(2000, base * variacao)));
+}
+
 export function pausaDoBloco(bloco: string, intervaloSegundos: number) {
   const base = intervaloSegundos * 1000;
   return Math.round(Math.min(base * 2, base * (0.6 + bloco.length / 250)));

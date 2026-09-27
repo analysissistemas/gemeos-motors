@@ -26,6 +26,7 @@ export class ProvedorSimulado implements ProvedorMensagens {
   async reagir() {
     return { ok: true as const };
   }
+  async digitando() {}
   /* no modo simulado não há conta da Meta: dois modelos de exemplo, só para a tela funcionar */
   async listarModelos() {
     const exemplo = (nome: string, corpo: string): ModeloMensagem => ({
@@ -129,6 +130,21 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     const j = (await r.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string; code?: number } };
     if (!r.ok) return { externoId: null, status: "failed", erro: explicarErroMeta(j.error) ?? `HTTP ${r.status}` };
     return { externoId: j.messages?.[0]?.id ?? null, status: "sent" };
+  }
+
+  /** Três pontinhos "digitando…" para o cliente (some sozinho ao enviar a resposta ou em ~25 s)
+      e a mensagem dele fica lida. Melhor esforço: erro aqui não atrapalha a resposta. */
+  async digitando(externoIdDoCliente: string) {
+    try {
+      await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: externoIdDoCliente, typing_indicator: { type: "text" } }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      /* sem o sinal, a resposta sai do mesmo jeito */
+    }
   }
 
   /** Modelos aprovados da conta do WhatsApp Business (WABA), todas as páginas. */

@@ -72,6 +72,8 @@ export function CentralConversas({
   const [painelAberto, setPainelAberto] = useState(false);
   const [respondendo, setRespondendo] = useState<MensagemChat | null>(null);
   const [simulador, setSimulador] = useState(false);
+  /* a IA está "digitando" na conversa aberta (vem da sincronização a cada ~3 s) */
+  const [iaDigitando, setIaDigitando] = useState(false);
   const [perda, setPerda] = useState<AlvoEtapa | null>(null);
   const [fechar, setFechar] = useState<AlvoEtapa | null>(null);
   const [formNeg, setFormNeg] = useState<NegocioForm | null>(null);
@@ -193,8 +195,9 @@ export function CentralConversas({
     try {
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return;
-      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; alteradas: MensagemChat[]; status: { id: number; status: string; metadados: MensagemChat["metadados"] }[]; notas: NotaChat[] | null };
+      const j = (await r.json()) as { agora: string; conversas: ItemConversa[]; mensagens: MensagemChat[]; alteradas: MensagemChat[]; status: { id: number; status: string; metadados: MensagemChat["metadados"] }[]; notas: NotaChat[] | null; iaDigitando?: boolean };
       desde.current = j.agora;
+      setIaDigitando(!!j.iaDigitando);
 
       if (j.conversas.length) {
         const antes = new Map(itensRef.current.map((x) => [x.id, x]));
@@ -489,6 +492,7 @@ export function CentralConversas({
             aoApagar={apagarParaMim}
             aoConversarCom={conversarCom}
             aoAssumir={() => executarAcao(acaoAssumir(aberta))}
+            iaDigitando={iaDigitando}
           />
         ) : aberta ? (
           <div className="flex h-full flex-col gap-3 p-6">

@@ -61,6 +61,8 @@ export interface ProvedorMensagens {
   enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio>;
   /** Reação a uma mensagem (emoji vazio tira a reação). */
   reagir(telefone: string, externoId: string, emoji: string): Promise<{ ok: true } | { ok: false; erro: string }>;
+  /** "Digitando…" no WhatsApp do cliente (e marca a mensagem dele como lida). Nunca falha o fluxo. */
+  digitando(externoIdDoCliente: string): Promise<void>;
   /** Modelos de mensagem aprovados pela Meta (lib/mensageria/modelos.ts). */
   listarModelos(): Promise<{ ok: true; modelos: ModeloMensagem[] } | { ok: false; erro: string }>;
 }
