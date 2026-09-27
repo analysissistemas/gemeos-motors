@@ -63,6 +63,19 @@ function cenario(kmSemana: number, autonomia: number, p: ParametrosEconomia) {
   return `${kmSemana} km por semana → na semana: ${periodo(kmSemana, autonomia, p)}; no mês: ${periodo(kmSemana * SEMANAS_NO_MES, autonomia, p)}`;
 }
 
+/** Frase pronta para o cliente, em linguagem simples (o sistema põe na resposta quando a IA esquece a conta). */
+export function fraseEconomia(nome: string, autonomia: number, kmSemana: number, p: ParametrosEconomia) {
+  const mes = kmSemana * SEMANAS_NO_MES;
+  const conta = (km: number) => {
+    const cargas = km / autonomia;
+    const gas = (km / p.kmPorLitro) * p.gasolina;
+    return { gas, luzMin: cargas * p.cargaMin, luzMax: cargas * p.cargaMax };
+  };
+  const s = conta(kmSemana);
+  const m = conta(mes);
+  return `Fazendo a conta para o seu uso (uns ${kmSemana} km por semana) com a *${nome}*: na gasolina você gastaria ${reais(m.gas)} por mês. Com a elétrica, a luz fica de ${reais(m.luzMin)} a ${reais(m.luzMax)}. Ou seja, você economizaria de ${reais(Math.max(0, m.gas - m.luzMax))} a ${reais(m.gas - m.luzMin)} por mês (de ${reais(Math.max(0, s.gas - s.luzMax))} a ${reais(s.gas - s.luzMin)} por semana).`;
+}
+
 /** Texto pronto da economia de um modelo, para o catálogo que a IA recebe.
     Com `kmSemanaCliente`, a conta é a do uso dele; sem, vão os cenários de 100, 200 e 300 km por semana. */
 export function textoEconomia(autonomia: number, p: ParametrosEconomia, kmSemanaCliente?: number | null) {

@@ -39,3 +39,10 @@ test("economia: sem saber o uso, vão os cenários de 100, 200 e 300 km por sema
   assert.match(t, /100 km por semana → na semana:/);
   assert.match(t, /300 km por semana → na semana:/);
 });
+
+test("economia: frase pronta para o cliente, semana e mês", async () => {
+  const { fraseEconomia } = await import("../../lib/ia/economia.ts");
+  const f = fraseEconomia("T1", 70, 175, lerParametrosEconomia(BASE)!);
+  /* mês = 750 km: gasolina 18,75 l (R$ 127); luz 10,7 cargas (R$ 21 a R$ 54) */
+  assert.match(f, /com a \*T1\*: na gasolina você gastaria R\$ 127 por mês\. Com a elétrica, a luz fica de R\$ 21 a R\$ 54\. Ou seja, você economizaria de R\$ 73 a R\$ 106 por mês \(de R\$ 17 a R\$ 25 por semana\)\./);
+});

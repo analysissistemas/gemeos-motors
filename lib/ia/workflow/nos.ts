@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
-import { kmPorSemana } from "@/lib/ia/economia";
+import { autonomiaMinima, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
@@ -332,6 +332,44 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
   };
   const saudacao = () => (chamadas.map((c) => (c.saida as { saudacao?: string | null }).saudacao).find((x) => !!x?.trim()) ?? null) as string | null;
   return { gerar, chamadas, saudacao, erro: () => ultimoErro, ultimo: () => ultimo as z.infer<typeof esquemaAgente> | null, corrigir: (texto: string) => void (correcao = texto) };
+}
+
+const PERGUNTA_ECONOMIA = /gasolin|econom|vale a pena|compensa|gast[oa]r?\b|gasto/iu;
+
+async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
+  const kmSemana = kmDoCliente(c);
+  if (!kmSemana || !resposta.length || !PERGUNTA_ECONOMIA.test(c.textoBuffer) || resposta.some((b) => /R\$/u.test(b))) return resposta;
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const [modelos, unidades, base] = await Promise.all([
+    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica"))),
+    db.select({ modeloId: v.modeloId }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
+  ]);
+  const p = lerParametrosEconomia(base.map((b) => b.conteudo));
+  if (!p) return resposta;
+  const lista = modelos
+    .map((x) => ({ ...x, autonomia: autonomiaMinima((x.ficha as Record<string, string> | null)?.autonomia), temEstoque: unidades.some((u) => u.modeloId === x.id) }))
+    .filter((x): x is typeof x & { autonomia: number } => !!x.autonomia);
+  const texto = resposta.join(" ").toLowerCase();
+  const doCliente = [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n").toLowerCase();
+  const citado = (t: string) => lista.filter((x) => corNoTexto(x.nome, t) || t.includes(x.nome.toLowerCase())).sort((a, b) => t.indexOf(a.nome.toLowerCase()) - t.indexOf(b.nome.toLowerCase()))[0];
+  /* a moto da conta: a que a resposta cita, a que o cliente citou, ou a que aguenta o dia dele (com estoque primeiro, depois a mais barata) */
+  const porDia = kmSemana / 7;
+  const escolhida =
+    citado(texto) ??
+    citado(doCliente) ??
+    lista.filter((x) => x.autonomia >= porDia).sort((a, b) => Number(b.temEstoque) - Number(a.temEstoque) || Number(a.preco ?? 1e9) - Number(b.preco ?? 1e9))[0];
+  if (!escolhida) return resposta;
+  const frase = fraseEconomia(escolhida.nome, escolhida.autonomia, kmSemana, p);
+  let r = [...resposta];
+  const ultimo = r[r.length - 1];
+  const clienteEscolheu = !!citado(doCliente);
+  /* pergunta de cor antes da escolha da moto vira convite para conhecer a moto da conta */
+  if (!clienteEscolheu && /\bcor(?:es)?\b[^?]*\?/iu.test(ultimo)) r[r.length - 1] = `Quer conhecer melhor a *${escolhida.nome}*? 😊`;
+  if (/\?/u.test(r[r.length - 1])) r = [...r.slice(0, -1), frase, r[r.length - 1]];
+  else r.push(frase);
+  return r;
 }
 
 /** Quanto este cliente roda por semana, pelo que ELE escreveu na conversa (a última menção vale). */
@@ -700,6 +738,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const textoPronto = !!c.pipe?.texto && [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
     if (!saudacao && !resposta.length && textoPronto) resposta = [TEXTO_CONFIRMAR];
     if (!saudacao && !resposta.length && c.pipe?.texto && !textoPronto) resposta = [nomeConhecido ? "Tudo certo por aqui 😊 Como posso te ajudar?" : "Tudo certo por aqui 😊 Com quem eu falo?"];
+    /* o cliente disse quanto roda e perguntou se compensa, mas a resposta veio sem conta: o sistema põe a
+       economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
+    resposta = await garantirEconomia(c, resposta);
     /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
        (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
     const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
