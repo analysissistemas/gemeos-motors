@@ -38,6 +38,10 @@ export type ConfigWorkflow = {
   intervaloSegundos: number;
   avisoMemoriaApagada: boolean;
   citarMensagem: boolean;
+  /** vigia do atendente: minutos de espera do cliente até avisar a equipe */
+  avisoAtendenteMin: number;
+  /** vigia do atendente: minutos de espera até a IA assumir (0 = nunca) */
+  iaAssumeMin: number;
 };
 
 export const CONFIG_PADRAO: ConfigWorkflow = {
@@ -52,6 +56,8 @@ export const CONFIG_PADRAO: ConfigWorkflow = {
   intervaloSegundos: 3,
   avisoMemoriaApagada: true,
   citarMensagem: true,
+  avisoAtendenteMin: 5,
+  iaAssumeMin: 15,
 };
 
 export const LIMITES_CONFIG = {
@@ -59,6 +65,8 @@ export const LIMITES_CONFIG = {
   janelaMemoria: [4, 60],
   maxBlocos: [1, 5],
   intervaloSegundos: [0, 15],
+  avisoAtendenteMin: [1, 120],
+  iaAssumeMin: [0, 240],
 } as const;
 
 export const ROTULOS_CONFIG: Record<keyof ConfigWorkflow, { rotulo: string; ajuda: string }> = {
@@ -72,6 +80,8 @@ export const ROTULOS_CONFIG: Record<keyof ConfigWorkflow, { rotulo: string; ajud
   maxBlocos: { rotulo: "Máximo de blocos por resposta", ajuda: "A resposta é quebrada em até este número de mensagens curtas." },
   intervaloSegundos: { rotulo: "Intervalo entre mensagens (segundos)", ajuda: "Pausa entre um bloco e outro, para parecer uma pessoa digitando." },
   avisoMemoriaApagada: { rotulo: "Avisar \"Memória apagada\"", ajuda: "Depois de apagar a memória, responde \"Memória apagada!\" na conversa." },
+  avisoAtendenteMin: { rotulo: "Avisar a equipe após (minutos)", ajuda: "Cliente com vendedor e sem resposta há este tempo: aviso no chat, prioridade alta e notificação." },
+  iaAssumeMin: { rotulo: "IA assume após (minutos)", ajuda: "Se continuar sem resposta, a IA assume a conversa e responde (0 = nunca). Fora do horário a IA responde na hora." },
   citarMensagem: { rotulo: "Responder citando a mensagem do cliente", ajuda: "A resposta aparece como resposta à mensagem do cliente (a saudação vai solta, como no WhatsApp da loja)." },
 };
 
@@ -85,7 +95,7 @@ export const NOS: NoWorkflow[] = [
   { id: "palavra_chave", nome: "Identifica palavra-chave", categoria: "logica", x: col(3), y: 300, descricao: "Se a mensagem for a palavra de limpar memória, apaga a memória e para aqui.", config: ["palavraLimpar"] },
   { id: "apagar_memoria", nome: "Apagar memória", categoria: "memoria", x: col(4), y: 90, descricao: "Zera a memória da IA para esta conversa: histórico passa a contar só daqui para frente e os fatos do lead são apagados." },
   { id: "aviso_memoria", nome: "Envia \"Memória apagada\"", categoria: "envio", x: col(5), y: 90, descricao: "Confirma na conversa que a memória foi apagada.", config: ["avisoMemoriaApagada"] },
-  { id: "verifica_modo", nome: "Verifica status IA / HUMANO", categoria: "roteamento", x: col(4), y: 300, descricao: "Roteamento: se um vendedor assumiu a conversa (modo HUMANO), a IA não responde. A mensagem continua na memória." },
+  { id: "verifica_modo", nome: "Verifica status IA / HUMANO", categoria: "roteamento", x: col(4), y: 300, descricao: "Roteamento: se um vendedor assumiu a conversa (modo HUMANO), a IA não responde — só fora do horário. O vigia (a cada minuto) avisa a equipe e, se ninguém responder, a IA assume.", config: ["avisoAtendenteMin", "iaAssumeMin"] },
   { id: "ia_off", nome: "Salva interação com IA OFF", categoria: "memoria", x: col(5), y: 510, descricao: "Com atendimento humano, a IA fica em silêncio. A mensagem já está no histórico e entra na memória quando a IA voltar." },
   { id: "tipo_msg", nome: "Analisa tipo da mensagem", categoria: "logica", x: col(5), y: 300, descricao: "Texto segue direto. Áudio, imagem, documento e vídeo passam antes pela análise de mídia." },
   { id: "midia_audio", nome: "Transcreve áudio", categoria: "midia", x: col(6), y: 60, descricao: "Transcreve o áudio em português (OpenAI). Se falhar, tenta de novo 3 vezes (3 s, 10 s e 30 s); se não der, segue com a mensagem sem análise.", config: ["transcreverAudio"] },

@@ -204,6 +204,14 @@ export function CentralConversas({
         for (const c of j.conversas) {
           const velha = antes.get(c.id);
           const novasMsgs = c.naoLidas - (velha?.naoLidas ?? 0);
+          /* vigia do atendente: a conversa virou prioridade alta com o cliente esperando */
+          if (velha && velha.prioridade !== "alta" && c.prioridade === "alta" && c.ultimaMensagemDirecao === "incoming" && novasMsgs <= 0) {
+            const nome = c.clienteNome ?? c.contatoNome ?? formatarTelefone(c.contatoTelefone);
+            toast.warning(`${nome} está esperando resposta`, { action: { label: "Abrir", onClick: () => abrir(c.id) } });
+            if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+              new Notification(`${nome} está esperando resposta`, { body: "Responda ou a IA assume a conversa.", tag: `espera-${c.id}` });
+            }
+          }
           if (c.id !== id && c.ultimaMensagemDirecao === "incoming" && novasMsgs > 0) {
             const nome = c.clienteNome ?? c.contatoNome ?? formatarTelefone(c.contatoTelefone);
             toast(`${nome}: ${c.ultimaMensagemTexto ?? "nova mensagem"}`, { action: { label: "Abrir", onClick: () => abrir(c.id) } });
