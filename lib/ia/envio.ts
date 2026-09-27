@@ -6,6 +6,7 @@ import { lerControle } from "./controle";
 import { MODELO_IA } from "./cliente";
 import { fontesAutorizadas, montarPromptSistema, versoesEmUso } from "./prompt";
 import { validarResposta, type Violacao } from "./validador";
+import { organizarTexto } from "./organizar";
 
 export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "validador" | "falha_envio" | null; violacoes: Violacao[]; explicacao: string | null };
 
@@ -17,6 +18,8 @@ export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "va
    Nenhum outro código deve chamar o provedor com texto escrito pela IA.
    ============================================================ */
 export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean }): Promise<ResultadoEnvioIa> {
+  /* formato organizado para o WhatsApp (título, **negrito**, lista com hífen, espaços) */
+  p = { ...p, texto: organizarTexto(p.texto) };
   const controle = await lerControle();
   /* conversa do simulador (demo): grava no chat, mas nada sai para o WhatsApp */
   const [cv] = await tx.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);

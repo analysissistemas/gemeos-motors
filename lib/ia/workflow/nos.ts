@@ -35,6 +35,7 @@ import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
 import { formatarHistorico, mesclarFatos, quebrarEmBlocos, tempoDigitando, textoDaMensagem, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
+import { organizarTexto } from "@/lib/ia/organizar";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 const TEXTO_FORA_HORARIO = "Anotei tudo por aqui! Nossa equipe te responde assim que a loja abrir. Enquanto isso, pode me perguntar o que quiser.";
@@ -430,7 +431,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
 
   blocos: (c) => {
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
-    const resposta = quebrarEmBlocos(c.pipe?.texto ?? "", c.config.maxBlocos).map((b) => corrigirCumprimento(b));
+    const resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     const blocos = [...(c.saudacao ? [corrigirCumprimento(c.saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (c.saudacao ? 1 : 0) : -1;
