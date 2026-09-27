@@ -37,7 +37,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corNoTexto, formatarHistorico, mesclarFatos, pagamentoDoTexto, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corDaMoto, corNoTexto, formatarHistorico, mesclarFatos, pagamentoDoTexto, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
@@ -187,7 +187,7 @@ async function montarProposta(c: CtxWorkflow): Promise<string | null> {
   if (!cor) return null;
   const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
   const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
-  return `*Proposta Gêmeos Motors*\n• Moto: ${achado.nome} ${cor.toLowerCase()}\n• Valor: ${valor}\n• Pagamento: ${pag}\n• Entrega: Goiana e região`;
+  return `*Proposta Gêmeos Motors*\n• Moto: ${achado.nome} ${corDaMoto(cor)}\n• Valor: ${valor}\n• Pagamento: ${pag}\n• Entrega: Goiana e região`;
 }
 
 /* A loja ainda não falou nesta conversa (ou faz mais de 6 h): é o começo do atendimento. */

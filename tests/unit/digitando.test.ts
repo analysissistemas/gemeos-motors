@@ -79,3 +79,11 @@ test("proposta: cor no feminino e pagamento escrito pelo cliente", async () => {
   assert.equal(pagamentoDoTexto("vou financiar"), "Financiamento");
   assert.equal(pagamentoDoTexto("quero a preta"), null);
 });
+
+test("proposta: a cor concorda com moto", async () => {
+  const { corDaMoto } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(corDaMoto("Preto"), "preta");
+  assert.equal(corDaMoto("Branco perolado"), "branca perolada");
+  assert.equal(corDaMoto("Azul marinho"), "azul marinho");
+  assert.equal(corDaMoto("Cinza"), "cinza");
+});

@@ -88,6 +88,16 @@ export function corNoTexto(cor: string, texto: string) {
   return new RegExp(`(?<![\\p{L}])${padrao}(?![\\p{L}])`, "iu").test(texto);
 }
 
+/** A cor concorda com "moto": "Preto" vira "preta", "Branco perolado" vira "branca perolada". */
+export function corDaMoto(cor: string) {
+  return cor
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((p) => (/^(?:marinho)$/u.test(p) ? p : p.replace(/o$/u, "a")))
+    .join(" ");
+}
+
 /** Forma de pagamento escrita pelo cliente ("pago no pix", "no cartão"). */
 export function pagamentoDoTexto(texto: string) {
   const t = texto.toLowerCase();
