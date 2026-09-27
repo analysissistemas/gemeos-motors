@@ -19,7 +19,11 @@ export type OpcoesValidacao = {
 };
 
 /* Emojis leves que o dono aprovou para o tom humanizado (27/09/2026). Qualquer outro continua bloqueado. */
-export const EMOJIS_PERMITIDOS = ["🙏", "🙏🏻", "🙏🏼", "🙏🏽", "😊", "🙂", "🤝", "✅", "😉"];
+export const EMOJIS_PERMITIDOS = [
+  "🙏", "🙏🏻", "🙏🏼", "🙏🏽", "😊", "🙂", "🤝", "✅", "😉",
+  /* do assunto, ainda profissionais (pedido do dono, 27/09/2026: "coloque emojis mas não deixe informal demais") */
+  "⚡", "🔋", "🛵", "🏍️", "🏍", "💰", "📍", "🔌", "✨", "🙌", "👍", "😃", "🎉", "📲", "🛠️", "🛠", "💚",
+];
 export const MAX_EMOJIS = 2;
 
 export const MAX_CARACTERES = 1000;

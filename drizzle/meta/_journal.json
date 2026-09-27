@@ -176,6 +176,13 @@
       "when": 1790560000000,
       "tag": "0024_fotos_cores",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790570000000,
+      "tag": "0025_ia_tom_emojis",
+      "breakpoints": true
     }
   ]
 }

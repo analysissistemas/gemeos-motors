@@ -47,7 +47,14 @@ test("reprova promessa de desconto ou aprovação", () => {
 
 test("reprova emoji", () => {
   assert.ok(regras("Claro! 😀").includes("emoji"));
-  assert.ok(regras("Perfeito 👍").includes("emoji"));
+  assert.ok(regras("Bora 🔥").includes("emoji"));
+  assert.ok(regras("Perfeito 🍺").includes("emoji"));
+});
+
+test("aceita os emojis do assunto aprovados pelo dono (até 2)", () => {
+  assert.ok(!regras("Perfeito 👍 Carrega na tomada de casa 🔋").includes("emoji"));
+  assert.ok(!regras("A moto 🏍️ sai pronta 🛵").includes("emoji"));
+  assert.ok(regras("Show 👍 🔋 💰").includes("emoji"));
 });
 
 test("reprova termos internos do sistema", () => {
