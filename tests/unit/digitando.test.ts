@@ -68,3 +68,14 @@ test("saudação que trouxe conteúdo fica só com o cumprimento", () => {
   assert.equal(soCumprimento("Bom dia! Aqui na Gêmeos Motors, pagar à vista no Pix não tem taxa. 🙂!"), "Bom dia!");
   assert.equal(soCumprimento("Oii, boa tardee! Tudo certinho? 😊"), "Oii, boa tardee! Tudo certinho? 😊");
 });
+
+test("proposta: cor no feminino e pagamento escrito pelo cliente", async () => {
+  const { corNoTexto, pagamentoDoTexto } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(corNoTexto("Preto", "quero a ag08 preta"), true);
+  assert.equal(corNoTexto("Branco perolado", "a branca perolada"), true);
+  assert.equal(corNoTexto("Azul", "azul"), true);
+  assert.equal(corNoTexto("Preto", "pretinho"), false);
+  assert.equal(pagamentoDoTexto("pago no pix"), "Pix");
+  assert.equal(pagamentoDoTexto("vou financiar"), "Financiamento");
+  assert.equal(pagamentoDoTexto("quero a preta"), null);
+});

@@ -77,7 +77,32 @@ export function pausaDoBloco(bloco: string, intervaloSegundos: number) {
   return Math.round(Math.min(base * 2, base * (0.6 + bloco.length / 250)));
 }
 
-export type MensagemMemoria = { autor: string; tipo: string; conteudo: string | null; transcricao?: string | null; criadoEm: Date };
+/** "Preto" também casa com "preta"; "Branco perolado" com "branca perolada". */
+export function corNoTexto(cor: string, texto: string) {
+  const padrao = cor
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[oa]$/u, "[oa]"))
+    .join("\\s+");
+  return new RegExp(`(?<![\\p{L}])${padrao}(?![\\p{L}])`, "iu").test(texto);
+}
+
+/** Forma de pagamento escrita pelo cliente ("pago no pix", "no cartão"). */
+export function pagamentoDoTexto(texto: string) {
+  const t = texto.toLowerCase();
+  const formas: [RegExp, string][] = [
+    [/(?<![\p{L}])pix(?![\p{L}])/u, "Pix"],
+    [/financ/u, "Financiamento"],
+    [/cr[eé]dito|cart[aã]o/u, "Cartão de crédito"],
+    [/d[eé]bito/u, "Débito"],
+    [/dinheiro|[àa] vista|esp[eé]cie/u, "Dinheiro"],
+    [/transfer[eê]ncia/u, "Transferência"],
+  ];
+  return formas.find(([rx]) => rx.test(t))?.[1] ?? null;
+}
+
+export type MensagemMemoria ={ autor: string; tipo: string; conteudo: string | null; transcricao?: string | null; criadoEm: Date };
 
 /** Texto que representa a mensagem para a IA (mídia usa a transcrição/descrição). */
 export function textoDaMensagem(m: Pick<MensagemMemoria, "tipo" | "conteudo" | "transcricao">) {

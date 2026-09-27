@@ -37,7 +37,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { formatarHistorico, mesclarFatos, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, formatarHistorico, mesclarFatos, pagamentoDoTexto, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
@@ -149,9 +149,10 @@ Devolva também:
    Preço sempre o de tabela do catálogo. Falta algo (ex.: cor com mais de uma opção)? Não monta. */
 async function montarProposta(c: CtxWorkflow): Promise<string | null> {
   const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
-  const pagamento = fatos.pagamento?.trim();
+  const texto = [fatos.interesse, fatos.observacoes, fatos.pagamento, c.textoBuffer, c.memoria.historico].filter(Boolean).join(" \n ").toLowerCase();
+  /* pagamento: o que a IA anotou ou, se ainda não anotou, o que o cliente escreveu */
+  const pagamento = fatos.pagamento?.trim() || pagamentoDoTexto(c.textoBuffer);
   if (!pagamento) return null;
-  const texto = [fatos.interesse, fatos.observacoes, c.textoBuffer, c.memoria.historico].filter(Boolean).join(" \n ").toLowerCase();
   const m = schema.modelos;
   const modelos = await db.select({ id: m.id, nome: m.nome, preco: m.precoTabela }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica")));
   const achado = modelos
@@ -164,7 +165,7 @@ async function montarProposta(c: CtxWorkflow): Promise<string | null> {
     .sort((a, b) => b.nome.length - a.nome.length)[0];
   if (!achado || !achado.preco) return null;
   const cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
-  const cor = cores.find((n) => texto.includes(n.toLowerCase())) ?? (cores.length === 1 ? cores[0] : null);
+  const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 ? cores[0] : null);
   if (!cor) return null;
   const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
   const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
