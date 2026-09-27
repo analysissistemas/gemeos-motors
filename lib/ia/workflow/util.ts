@@ -37,6 +37,18 @@ export function tirarCumprimentoRepetido(texto: string) {
   return t.trim();
 }
 
+/** Emoji solto no começo de uma mensagem ("😊 Para te ajudar...") parece robô: sai. */
+export function tirarEmojiDoInicio(texto: string) {
+  return texto.replace(/^(?:\p{Extended_Pictographic}\uFE0F?\s*)+/u, "").trim();
+}
+
+/** Saudação é só o cumprimento: frases com pergunta ou apresentação saem (vão na resposta). */
+export function soCumprimento(saudacao: string) {
+  const frases = saudacao.match(/[^.!?]+[.!?]*/g) ?? [saudacao];
+  const ficam = frases.filter((f) => !/\?\s*$/.test(f.trim()) || /tudo\s+(?:bem|certinho|certo|joia|tranquilo)/iu.test(f)).filter((f) => !/(?:aqui\s+(?:é|e)|sou\s+(?:a|o)|bem[- ]vind)/iu.test(f));
+  return ficam.join("").trim();
+}
+
 /** Quanto tempo uma pessoa levaria digitando este bloco no celular: ~20 letras por segundo,
     entre 2 e 9 s, com uma variação pequena para não ficar robótico. `sorte` (0 a 1) é para o teste. */
 export function tempoDigitando(bloco: string, sorte = Math.random()) {

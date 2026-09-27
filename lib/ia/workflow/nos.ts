@@ -22,6 +22,7 @@ import {
   afirmacoesSemFonte,
   TEXTO_TRANSFERENCIA,
   travaDeFatos,
+  produtosNaoConfirmados,
   validadorDeResposta,
   type Ctx as CtxPipeline,
   type Deps,
@@ -33,7 +34,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { formatarHistorico, mesclarFatos, quebrarEmBlocos, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, type FatosLead } from "./util";
+import { formatarHistorico, mesclarFatos, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
@@ -141,13 +142,24 @@ Devolva também:
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
 
+/* Quais trechos da resposta a trava barraria (para a reescrita acertar e a equipe entender o aviso). */
+function trechosBarrados(ctx: CtxPipeline): string[] {
+  const t = ctx.texto ?? "";
+  const doCatalogo = new Set((ctx.deps.nomesDoCatalogo ?? []).map((n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()));
+  const nomes = produtosNaoConfirmados(t, ctx.deps.nomesDeProdutos, ctx.estoque).filter((n) => !doCatalogo.has(n));
+  const disp = afirmaDisponibilidade(t) ? [(t.match(/(?<![\p{L}\p{N}])(?:temos|tenho|tem\s+sim|h[aá]\s+sim|em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))(?![\p{L}\p{N}])/iu) ?? [""])[0]] : [];
+  return [...nomes, ...disp, ...afirmacoesSemFonte(t, ctx.deps.fontesAutorizadas)].filter(Boolean).slice(0, 5);
+}
+
 /* Roda a trava de fatos e o validador sobre a resposta; se barrariam, devolve a instrução de correção. */
 async function motivoDoBloqueio(ctx: CtxPipeline): Promise<string | null> {
   const trava = await travaDeFatos.rodar(ctx);
   if (trava.encerrar) {
-    return trava.detalhe === "sem_fonte_autorizada"
+    const trechos = trechosBarrados(ctx);
+    const quais = trechos.length ? ` Trechos barrados: ${trechos.map((x) => `"${x}"`).join(", ")}.` : "";
+    return (trava.detalhe === "sem_fonte_autorizada"
       ? "Você citou horário ou endereço que não está na base de conhecimento. Reescreva sem citar horário nem endereço."
-      : 'Você afirmou estoque ("temos", "disponível", "pronta entrega") de modelo que NÃO está marcado EM ESTOQUE no catálogo, ou citou marca ou modelo que não está no CATÁLOGO DA LOJA. Reescreva: cite só modelos do catálogo e, para os que não estão EM ESTOQUE, diga que a equipe confirma o prazo. Continue ajudando o cliente e faça UMA pergunta para avançar a venda.';
+      : 'Você afirmou estoque ("temos", "disponível", "pronta entrega") de modelo que NÃO está marcado EM ESTOQUE no catálogo, ou citou marca ou modelo que não está no CATÁLOGO DA LOJA. Reescreva: cite só modelos do catálogo e, para os que não estão EM ESTOQUE, diga que a equipe confirma o prazo. Continue ajudando o cliente e faça UMA pergunta para avançar a venda.') + quais;
   }
   const v = validarResposta(ctx.texto, { promptSistema: ctx.deps.promptSistema, fontesAutorizadas: ctx.deps.fontesAutorizadas });
   if (!v.aprovada) return `O validador reprovou a resposta: ${v.violacoes.map((x) => `${x.rotulo} (${x.detalhe})`).join("; ")}. Reescreva corrigindo isso, curta e organizada.`;
@@ -392,7 +404,10 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
   trava_fatos: async (c) => {
     const pipe = c.pipe!;
     const r = await travaDeFatos.rodar(pipe);
-    if (r.encerrar) return { ramo: "bloqueada", ctx: { pipe: { ...pipe, ...r.ctx, texto: null }, motivoTransferencia: "A resposta citava dado que o sistema não confirmou" }, entrada: { texto: pipe.texto }, saida: { bloqueada: r.detalhe } };
+    if (r.encerrar) {
+      const trechos = trechosBarrados(pipe);
+      return { ramo: "bloqueada", ctx: { pipe: { ...pipe, ...r.ctx, texto: null }, motivoTransferencia: `A resposta citava dado que o sistema não confirmou${trechos.length ? ` (${trechos.join(", ")})` : ""}` }, entrada: { texto: pipe.texto }, saida: { bloqueada: r.detalhe, trechos } };
+    }
     return { entrada: { texto: pipe.texto }, saida: { aprovada: true } };
   },
 
@@ -470,11 +485,15 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       .orderBy(desc(schema.mensagens.id))
       .limit(1);
     const jaConversou = !!ultimaDaLoja && Date.now() - new Date(ultimaDaLoja.em).getTime() < 6 * 60 * 60 * 1000;
-    const saudacao = jaConversou ? null : c.saudacao;
+    /* primeiro contato: sempre com cumprimento (só o cumprimento; a pergunta vai na resposta) */
+    const cumprimento = c.saudacao ? soCumprimento(c.saudacao) : "";
+    const padrao = saudacaoDoHorario();
+    const saudacao = jaConversou ? null : cumprimento || `${padrao[0].toUpperCase()}${padrao.slice(1)}! Tudo certinho?`;
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
     let resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
     if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0]), ...resposta.slice(1)].filter(Boolean);
+    resposta = resposta.map(tirarEmojiDoInicio).filter(Boolean);
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;

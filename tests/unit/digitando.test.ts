@@ -37,3 +37,14 @@ test("apresentação repetida também sai do começo da resposta", () => {
   assert.equal(tirarCumprimentoRepetido("Sou a assistente da loja. Posso te ajudar com a AG08?"), "Posso te ajudar com a AG08?");
   assert.equal(tirarCumprimentoRepetido("Aqui na loja a M6 é a mais procurada."), "Aqui na loja a M6 é a mais procurada.");
 });
+
+import { soCumprimento, tirarEmojiDoInicio } from "../../lib/ia/workflow/util.ts";
+test("saudação fica só com o cumprimento (pergunta de nome e apresentação vão para a resposta)", () => {
+  assert.equal(soCumprimento("Boa noite! Seja bem-vindo(a) à Gêmeos Motors 😊 Com quem eu falo?"), "Boa noite!");
+  assert.equal(soCumprimento("Boa noitee! Tudo certinho?"), "Boa noitee! Tudo certinho?");
+  assert.equal(soCumprimento("Boa tarde! Aqui é a Gêmeos Motors."), "Boa tarde!");
+});
+test("emoji solto no começo da mensagem sai; o do meio fica", () => {
+  assert.equal(tirarEmojiDoInicio("😊 Para te ajudar a escolher, me conta"), "Para te ajudar a escolher, me conta");
+  assert.equal(tirarEmojiDoInicio("A M6 é ótima 😊"), "A M6 é ótima 😊");
+});
