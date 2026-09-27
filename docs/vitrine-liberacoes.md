@@ -31,3 +31,5 @@ voltou a valer depois de cada uma:
 - 26/09/2026 (lançamentos) — faixa "Chegando na Gêmeos Motors" vira um lançamento grande por vez
   (foto grande, frase, ficha, preço, "Quero reservar") e carrossel automático de 5 s com setas,
   bolinhas e arrastar; favicon com 16/32/48 px e `?v=2` para o navegador trocar o ícone guardado.
+- 27/09/2026 (localização) — mapa "Onde estamos" e botões Google Maps, Waze e Mapas (iPhone)
+  usam a coordenada exata da loja (-7.566338250594923, -35.00642739571563), pedida pelo dono.
