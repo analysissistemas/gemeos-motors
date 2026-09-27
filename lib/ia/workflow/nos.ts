@@ -397,7 +397,14 @@ async function apresentarLoja(c: CtxWorkflow, resposta: string[]): Promise<strin
 
 async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
   const kmSemana = kmDoCliente(c);
-  if (!kmSemana || !resposta.length || !PERGUNTA_ECONOMIA.test(c.textoBuffer) || resposta.some((b) => /R\$/u.test(b))) return resposta;
+  if (!kmSemana || !resposta.length || !PERGUNTA_ECONOMIA.test(c.textoBuffer)) return resposta;
+  /* a conta é sempre a do sistema (a IA já trocou "por mês" por "por semana"): as frases de valores dela
+     saem e entra a frase pronta, com a moto, a semana e o mês. A moto escolhida olha a resposta original. */
+  const respostaOriginal = resposta;
+  const ehConta = (f: string) => /R\$/u.test(f) && /luz|gasolin|econom|carga|m[êe]s|semana|gast/iu.test(f);
+  resposta = resposta
+    .map((b) => (/\n/.test(b) ? b : (b.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [b]).filter((f) => !ehConta(f)).join("").trim()))
+    .filter((b) => /\p{L}/u.test(b));
   const m = schema.modelos;
   const v = schema.veiculos;
   const [modelos, unidades, base] = await Promise.all([
@@ -406,12 +413,12 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   const pBase = lerParametrosEconomia(base.map((b) => b.conteudo));
-  if (!pBase) return resposta;
+  if (!pBase) return respostaOriginal;
   const p = comGasolinaDaRegiao(pBase, await gasolinaDoCliente(c));
   const lista = modelos
     .map((x) => ({ ...x, autonomia: autonomiaMinima((x.ficha as Record<string, string> | null)?.autonomia), temEstoque: unidades.some((u) => u.modeloId === x.id) }))
     .filter((x): x is typeof x & { autonomia: number } => !!x.autonomia);
-  const texto = resposta.join(" ").toLowerCase();
+  const texto = respostaOriginal.join(" ").toLowerCase();
   const doCliente = [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n").toLowerCase();
   const citado = (t: string) => lista.filter((x) => corNoTexto(x.nome, t) || t.includes(x.nome.toLowerCase())).sort((a, b) => t.indexOf(a.nome.toLowerCase()) - t.indexOf(b.nome.toLowerCase()))[0];
   /* a moto da conta: a que a resposta cita, a que o cliente citou, ou a que aguenta o dia dele (com estoque primeiro, depois a mais barata) */
@@ -420,8 +427,9 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
     citado(texto) ??
     citado(doCliente) ??
     lista.filter((x) => x.autonomia >= porDia).sort((a, b) => Number(b.temEstoque) - Number(a.temEstoque) || Number(a.preco ?? 1e9) - Number(b.preco ?? 1e9))[0];
-  if (!escolhida) return resposta;
+  if (!escolhida) return respostaOriginal;
   const frase = fraseEconomia(escolhida.nome, escolhida.autonomia, kmSemana, p);
+  if (!resposta.length) return [frase];
   let r = [...resposta];
   const ultimo = r[r.length - 1];
   const clienteEscolheu = !!citado(doCliente);
@@ -760,7 +768,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const textoBase = c.pipe?.texto === TEXTO_FORA_HORARIO ? variar(VARIANTES_FORA_HORARIO) : c.pipe?.texto === TEXTO_CONFIRMAR ? variar(VARIANTES_CONFIRMAR) : (c.pipe?.texto ?? "");
     let resposta = quebrarEmBlocos(organizarTexto(textoBase), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
-    if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0]), ...resposta.slice(1)].filter(Boolean);
+    const perguntouSeERobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|intelig[êe]ncia artificial|(?<![\p{L}])ia(?![\p{L}])|humano|pessoa de verdade/iu.test(c.textoBuffer);
+    if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0], perguntouSeERobo), ...resposta.slice(1)].filter(Boolean);
     resposta = resposta.map(tirarEmojiDoInicio).filter(Boolean);
     /* pedido do dono: pegar o nome logo no começo. Sem nome ainda, a pergunta final da resposta vira
        "Com quem eu falo?" (uma pergunta só); a informação que o cliente pediu continua. */

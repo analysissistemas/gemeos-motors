@@ -105,3 +105,9 @@ test("variar: escolhe uma das frases e nunca sai da lista", async () => {
   assert.equal(variar(l, 1), "c");
   for (const p of ["Com quem eu falo?", "Qual é o seu nome?", "Como posso te chamar?"]) assert.ok(RX_PERGUNTA_NOME.test(p), p);
 });
+
+test("pergunta se é robô: a apresentação fica (é a resposta), só o cumprimento sai", async () => {
+  const { tirarCumprimentoRepetido } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(tirarCumprimentoRepetido("Boa tarde! Sou o assistente virtual da Gêmeos Motors 😊", true), "Sou o assistente virtual da Gêmeos Motors 😊");
+  assert.equal(tirarCumprimentoRepetido("Boa tarde! Sou o assistente virtual da Gêmeos Motors. Posso ajudar?"), "Posso ajudar?");
+});

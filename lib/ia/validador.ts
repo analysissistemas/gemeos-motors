@@ -94,6 +94,17 @@ function autorizado(trecho: string, base: string) {
 
 const palavras = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
 
+/** Só as seções que são instrução interna de verdade (regras e quando transferir). Identidade, tom,
+    roteiro de vendas, produtos, pagamento e respostas-modelo são falas feitas PARA o cliente ouvir
+    ("não precisa de CNH, emplacamento nem IPVA"): repetir essas frases é o certo, não vazamento.
+    Prompt sem os títulos de seção (testes, formato antigo): vale o prompt todo, como antes. */
+export function secoesInternas(prompt: string) {
+  const antesDaBase = prompt.split("# BASE DE CONHECIMENTO")[0];
+  const secoes = antesDaBase.split(/^# /m).slice(1);
+  if (!secoes.length) return antesDaBase;
+  return secoes.filter((s) => /^(REGRAS E PROIBI|QUANDO PASSAR PARA O VENDEDOR)/.test(s)).join("\n");
+}
+
 /** Acha 8 palavras seguidas da resposta que também existam, na mesma ordem, no prompt. */
 export function trechoDoPrompt(resposta: string, prompt: string, tamanho = 8): string | null {
   const r = palavras(resposta);
@@ -140,7 +151,7 @@ export function validarResposta(texto: string | null | undefined, opcoes: Opcoes
   if (opcoes.promptSistema) {
     /* a base de conhecimento existe para ser dita ao cliente, e as falas-exemplo entre aspas existem
        para serem imitadas: só o resto das instruções conta como vazamento */
-    const trecho = trechoDoPrompt(t, opcoes.promptSistema.split("# BASE DE CONHECIMENTO")[0].replace(/"[^"\n]*"/g, " zzcortezz "));
+    const trecho = trechoDoPrompt(t, secoesInternas(opcoes.promptSistema).replace(/"[^"\n]*"/g, " zzcortezz "));
     if (trecho) add("vazamento_prompt", `Trecho igual ao das instruções: "${trecho}"`);
   }
   return { aprovada: violacoes.length === 0, violacoes };

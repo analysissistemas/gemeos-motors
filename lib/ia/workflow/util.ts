@@ -32,8 +32,15 @@ export function quebrarEmBlocos(texto: string, max: number): string[] {
 
 /** Tira do começo da resposta o cumprimento ("Bom dia! Tudo certinho?") quando a saudação já vai
     numa mensagem separada; sem isso o cliente recebia o mesmo cumprimento duas vezes seguidas. */
-export function tirarCumprimentoRepetido(texto: string) {
+export function tirarCumprimentoRepetido(texto: string, manterApresentacao = false) {
   let t = texto.trim();
+  /* o cliente perguntou se é robô: "Sou o assistente virtual da Gêmeos Motors" É a resposta, não repetição */
+  if (manterApresentacao) {
+    for (let volta = 0; volta < 3; volta++)
+      t = t.replace(/^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])(?![\p{L}])[^.!?\n]*[.!?]+\s*/iu, "").replace(/^tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?\n]*[?!.]+\s*/iu, "");
+    t = t.trim();
+    return t ? t[0].toUpperCase() + t.slice(1) : t;
+  }
   /* cumprimento, "tudo bem?" e apresentação ("Aqui é da Gêmeos Motors", "Sou a assistente...") no começo */
   const inicio = [
     /^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])(?![\p{L}])[^.!?\n]*[.!?]+\s*/iu,

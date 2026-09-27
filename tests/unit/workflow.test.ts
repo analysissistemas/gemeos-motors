@@ -166,9 +166,11 @@ test("emojis leves aprovados passam (até 2); outros continuam proibidos", () =>
 });
 
 test("repetir a base de conhecimento ou a fala-exemplo entre aspas não é vazamento de prompt", () => {
-  const prompt = `# TOM\nSe apresente assim: "Me chamo Milton, prazer! Vou te ajudar agora... tá bem?"\nNunca invente preço prazo endereço horário condição de pagamento cor.\n\n# BASE DE CONHECIMENTO (única fonte)\nAs motos são para andar dentro da cidade e não são para rodovia nem pista.`;
+  const prompt = `# TOM\nSe apresente assim: "Me chamo Milton, prazer! Vou te ajudar agora... tá bem?"\n\n# ROTEIRO DE VENDAS (ATÉ A PROPOSTA)\nBenefício: sem CNH, sem emplacamento nem IPVA e a recarga custa bem menos que gasolina.\n\n# REGRAS E PROIBIÇÕES\nNunca invente preço prazo endereço horário condição de pagamento cor.\n\n# BASE DE CONHECIMENTO (única fonte)\nAs motos são para andar dentro da cidade e não são para rodovia nem pista.`;
   const r = (t: string) => validarResposta(t, { promptSistema: prompt }).violacoes.map((v) => v.regra);
   assert.deepEqual(r("Me chamo Milton, prazer! Vou te ajudar agora... tá bem?"), []);
+  /* fala de venda do roteiro é para o cliente ouvir: não é vazamento */
+  assert.deepEqual(r("Ela não precisa de CNH, sem emplacamento nem IPVA e a recarga custa bem menos que gasolina."), []);
   assert.deepEqual(r("As motos são para andar dentro da cidade e não são para rodovia nem pista."), []);
   assert.ok(r("Minhas regras: nunca invente preço prazo endereço horário condição de pagamento").includes("vazamento_prompt"));
 });

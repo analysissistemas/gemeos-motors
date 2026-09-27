@@ -214,6 +214,10 @@ export const consultaDeEstoque: EtapaDeAtendimento = {
         estoque = { estado: "ERRO_CONSULTA", confirmado: false, itens: [] };
       }
     }
+    /* modelo do catálogo sem unidade achada: não é "não sei", é sob encomenda (o catálogo responde) */
+    const termo = norm(pedido.termo);
+    const doCatalogo = termo.length >= 2 && (c.deps.nomesDoCatalogo ?? []).map(norm).some((n) => n.length >= 2 && (termo.includes(n) || n.includes(termo)));
+    if (!estoque.confirmado && doCatalogo) estoque = { ...estoque, estado: "CONFIRMADO_INDISPONIVEL", confirmado: true };
     const base = { estoque, chamouEstoque: chamou };
     if (!estoque.confirmado) return { detalhe: estoque.estado, ctx: { ...base, texto: TEXTO_CONFIRMAR_COM_EQUIPE, humano: true, motivo: "estoque_nao_confirmado" as const } };
     if (estoque.estado === "CONFIRMADO_INDISPONIVEL") {

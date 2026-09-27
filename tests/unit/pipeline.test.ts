@@ -366,3 +366,9 @@ test("ESTOQUE POR FRASE: listar a linha com 'temos' passa; 'pronta entrega' só 
   const r2 = await rodar("Quais motos?", { modelo: [texto("Temos a Voltz EV1 e a Scooter X1. Qual combina mais com você?")], catalogo: ["Voltz", "EV1", "Scooter", "X1"] });
   assert.equal(r2.enviados.length, 1);
 });
+
+test("modelo do catálogo sem unidade no estoque não vira 'vou confirmar com a equipe'", async () => {
+  const { r } = await rodar("a AG11 anda quantos km?", { modelo: [consulta("AG11")], catalogo: ["TANK AG11", "AG08"], estoque: [] });
+  assert.notEqual(r.texto, TEXTO_CONFIRMAR_COM_EQUIPE);
+  assert.notEqual(r.motivo, "estoque_nao_confirmado");
+});
