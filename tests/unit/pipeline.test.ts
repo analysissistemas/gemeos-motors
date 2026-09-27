@@ -345,3 +345,15 @@ test("CATÁLOGO não libera marca que a loja não vende → bloqueado", async ()
   const { r } = await rodar("Quais opções?", { modelo: [texto("Trabalhamos com a Voltz EV1 e a Yamaha NMAX.")], catalogo: ["Voltz", "EV1"] });
   assert.equal(r.motivo, "produto_sem_confirmacao");
 });
+
+test("LINHA DA LOJA: 'temos motos elétricas' (sem citar modelo) passa, mesmo sem unidade no estoque", async () => {
+  const { enviados } = await rodar("Quais motos vocês têm?", { modelo: [texto("Temos motos elétricas para vários usos. Para que você vai usar?")], catalogo: ["Voltz", "EV1"] });
+  assert.equal(enviados.length, 1);
+});
+
+test("SEM ESTOQUE: 'pronta entrega' genérico ou modelo específico 'temos' continuam bloqueados", async () => {
+  for (const t of ["Temos pronta entrega!", "Temos a Voltz EV1 para você."]) {
+    const { r } = await rodar("Tem moto?", { modelo: [texto(t)], catalogo: ["Voltz", "EV1"] });
+    assert.equal(r.motivo, "produto_sem_confirmacao", t);
+  }
+});

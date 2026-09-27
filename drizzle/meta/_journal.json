@@ -134,6 +134,13 @@
       "when": 1790483550627,
       "tag": "0018_ia_especialista_vendas",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790513622132,
+      "tag": "0019_ia_resolve_sozinha",
+      "breakpoints": true
     }
   ]
 }

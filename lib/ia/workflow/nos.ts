@@ -440,7 +440,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       promptSistema,
       memoria: c.memoria,
       agora: `# AGORA
-Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()}".${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}`,
+Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}`,
     });
     const deps = await montarDeps(c, g.gerar);
     let r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
@@ -573,12 +573,21 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     /* primeiro contato: sempre com cumprimento (só o cumprimento; a pergunta vai na resposta) */
     const cumprimento = c.saudacao ? soCumprimento(c.saudacao) : "";
     const padrao = saudacaoDoHorario();
-    const saudacao = jaConversou ? null : cumprimento || `${padrao[0].toUpperCase()}${padrao.slice(1)}! Tudo certinho?`;
+    const arrumar = (s: string) => { const x = s.trim(); return x ? `${x[0].toUpperCase()}${x.slice(1)}${/[.!?]$/.test(x) ? "" : "!"}` : x; };
+    const saudacao = jaConversou ? null : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! Tudo certinho?`;
+    const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome);
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
     let resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
     if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0]), ...resposta.slice(1)].filter(Boolean);
     resposta = resposta.map(tirarEmojiDoInicio).filter(Boolean);
+    /* pedido do dono: pegar o nome logo no começo. Sem nome ainda, a pergunta final da resposta vira
+       "Com quem eu falo?" (uma pergunta só); a informação que o cliente pediu continua. */
+    if (!nomeConhecido && !jaConversou && resposta.length && !/com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu.test(resposta.join(" "))) {
+      const ultimo = resposta[resposta.length - 1];
+      const semPergunta = ultimo.replace(/[^.!?\n]*\?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*$/u, "").trim();
+      resposta = [...resposta.slice(0, -1), ...(semPergunta ? [semPergunta] : []), "Com quem eu falo? 😊"];
+    }
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;

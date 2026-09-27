@@ -48,3 +48,9 @@ test("emoji solto no começo da mensagem sai; o do meio fica", () => {
   assert.equal(tirarEmojiDoInicio("😊 Para te ajudar a escolher, me conta"), "Para te ajudar a escolher, me conta");
   assert.equal(tirarEmojiDoInicio("A M6 é ótima 😊"), "A M6 é ótima 😊");
 });
+
+import { corrigirCumprimento } from "../../lib/ia/horario.ts";
+test("cumprimento com letra a mais ('Boa tardea') também é corrigido para o horário", () => {
+  const manha = new Date("2026-09-27T11:45:00Z"); // 08:45 em Recife
+  assert.equal(corrigirCumprimento("Boa tardea! Tudo certinho?", manha), "Bom dia! Tudo certinho?");
+});

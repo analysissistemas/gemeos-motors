@@ -90,7 +90,7 @@ export function saudacaoDoHorario(agora = new Date()) {
  *  mantendo o jeito escrito (maiúscula e letra esticada: "Booa tardee!" vira "Boa noitee!"). */
 export function corrigirCumprimento(texto: string, agora = new Date()) {
   const certo = saudacaoDoHorario(agora);
-  return texto.replace(/(?<![\p{L}])(b+o+m+\s+d+i+a+|b+o+a+\s+t+a+r+d+e+|b+o+a+\s+n+o+i+t+e+)(?![\p{L}])/giu, (achado) => {
+  return texto.replace(/(?<![\p{L}])(b+o+m+\s+d+i+a+|b+o+a+\s+t+a+r+d+e+a*|b+o+a+\s+n+o+i+t+e+a*)(?![\p{L}])/giu, (achado) => {
     const esticado = /(\p{L})\1/iu.test(achado);
     let novo = esticado ? certo + certo.slice(-1) : certo;
     if (achado === achado.toUpperCase()) novo = novo.toUpperCase();

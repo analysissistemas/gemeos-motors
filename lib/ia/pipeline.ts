@@ -118,11 +118,14 @@ export const afirmaDisponibilidade = (t: string) => AFIRMA_DISPONIBILIDADE.test(
 /* "Tem"/"pronta entrega" sem consultar um modelo específico: vale quando TODO modelo do catálogo citado
    tem unidade no estoque agora (lista entregue à IA), ou, sem citar modelo, quando há alguma unidade. */
 export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesDoCatalogo" | "modelosComEstoque">) {
+  /* sem catálogo nas Deps (fluxo antigo): continua rígido */
+  if (!deps.nomesDoCatalogo) return false;
   const comEstoque = new Set((deps.modelosComEstoque ?? []).map(norm));
-  if (!comEstoque.size) return false;
   const t = ` ${norm(texto)} `;
-  const citados = (deps.nomesDoCatalogo ?? []).map(norm).filter((n) => n.length >= 2 && new RegExp(palavraInteira(n).source, "u").test(t));
-  return citados.every((n) => comEstoque.has(n));
+  const citados = deps.nomesDoCatalogo.map(norm).filter((n) => n.length >= 2 && new RegExp(palavraInteira(n).source, "u").test(t));
+  if (citados.length) return citados.every((n) => comEstoque.has(n));
+  /* sem citar modelo: "temos motos elétricas" fala da linha da loja; estoque/pronta entrega/disponível exigem alguma unidade */
+  return /(?:em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))/iu.test(texto) ? comEstoque.size > 0 : true;
 }
 
 /* Horário e endereço são os fatos que mais se inventam. Só valem se estiverem, iguais, numa fonte autorizada. */
