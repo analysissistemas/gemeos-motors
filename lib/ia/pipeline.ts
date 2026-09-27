@@ -242,7 +242,7 @@ export const travaDeFatos: EtapaDeAtendimento = {
 export const validadorDeResposta: EtapaDeAtendimento = {
   nome: "validador",
   rodar: (c) => {
-    const v = validarResposta(c.texto, { promptSistema: c.deps.promptSistema });
+    const v = validarResposta(c.texto, { promptSistema: c.deps.promptSistema, fontesAutorizadas: c.deps.fontesAutorizadas });
     return v.aprovada ? {} : bloqueia("validador", { violacoes: v.violacoes });
   },
 };

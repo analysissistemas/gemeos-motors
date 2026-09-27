@@ -703,6 +703,40 @@ export const iaExecucoes = pgTable(
   (t) => [index("ia_execucoes_criado_idx").on(t.criadoEm), index("ia_execucoes_conversa_idx").on(t.conversaId)],
 );
 
+/* ---------- workflow de atendimento da IA: cada execução, nó a nó (lib/ia/workflow) ---------- */
+export const iaWorkflowExecucoes = pgTable(
+  "ia_workflow_execucoes",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    conversaId: integer().references(() => conversas.id, { onDelete: "set null" }),
+    mensagemId: bigint({ mode: "number" }),
+    gatilho: text().notNull(), // whatsapp | teste
+    status: text().notNull().default("rodando"), // rodando | sucesso | parou | erro
+    noAtual: text(), // nó rodando agora (null quando terminou)
+    paradoEm: text(), // nó onde parou ou quebrou
+    motivo: text(),
+    passos: jsonb().$type<import("@/lib/ia/workflow/grafo").PassoExecucao[]>().notNull().default([]),
+    /** falhas desta execução: onde, por quê, tentativas e como terminou (aba Falhas) */
+    falhas: jsonb().$type<import("@/lib/ia/workflow/falhas").ResumoFalha[]>().notNull().default([]),
+    iniciadoEm: criadoEm(),
+    finalizadoEm: quando(),
+    duracaoMs: integer(),
+  },
+  (t) => [index("ia_wf_exec_iniciado_idx").on(t.iniciadoEm), index("ia_wf_exec_conversa_idx").on(t.conversaId)],
+);
+
+/* ---------- memória da IA por conversa: fatos do lead, resumo e o marco do "#limpar" ---------- */
+export const iaMemorias = pgTable("ia_memorias", {
+  conversaId: integer()
+    .primaryKey()
+    .references(() => conversas.id, { onDelete: "cascade" }),
+  fatos: jsonb().$type<import("@/lib/ia/workflow/util").FatosLead>().notNull().default({}),
+  resumo: text(),
+  /** mensagens anteriores a este momento não entram mais na memória */
+  limpaEm: quando(),
+  atualizadoEm: criadoEm(),
+});
+
 /* ---------- interesse do cliente num modelo (para avisar quando voltar ao estoque) ---------- */
 export const interessesModelo = pgTable(
   "interesses_modelo",

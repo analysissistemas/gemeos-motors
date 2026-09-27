@@ -10,7 +10,17 @@
 
 export type Violacao = { regra: string; rotulo: string; detalhe: string };
 export type ResultadoValidacao = { aprovada: boolean; violacoes: Violacao[] };
-export type OpcoesValidacao = { maxCaracteres?: number; maxLinhas?: number; promptSistema?: string };
+export type OpcoesValidacao = {
+  maxCaracteres?: number;
+  maxLinhas?: number;
+  promptSistema?: string;
+  /** textos da base de conhecimento ativa: valor, parcela e desconto só passam se estiverem, iguais, aqui */
+  fontesAutorizadas?: string[];
+};
+
+/* Emojis leves que o dono aprovou para o tom humanizado (27/09/2026). Qualquer outro continua bloqueado. */
+export const EMOJIS_PERMITIDOS = ["🙏", "🙏🏻", "🙏🏼", "🙏🏽", "😊", "🙂", "🤝", "✅", "😉"];
+export const MAX_EMOJIS = 2;
 
 export const MAX_CARACTERES = 700;
 export const MAX_LINHAS = 6;
@@ -39,7 +49,7 @@ const palavra = (alternativas: string) => new RegExp(`${I}(?:${alternativas})${F
 const RX = {
   emoji: /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/u,
   preco: new RegExp(
-    String.raw`R\$\s*\d|${I}\d[\d.,]*\s*(?:reais|real)${F}|${I}mil\s+reais${F}|(?<![\p{L}\p{N}.])\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![\p{N}])|${I}\d+\s*mil${F}`,
+    String.raw`R\$\s*\d[\d.,]*\d|R\$\s*\d|${I}\d[\d.,]*\s*(?:reais|real)${F}|${I}mil\s+reais${F}|(?<![\p{L}\p{N}.])\d{1,3}(?:\.\d{3})+(?:,\d{2})?(?![\p{N}])|${I}\d+\s*mil${F}`,
     "iu",
   ),
   link: /https?:\/\/\S+|(?<![\p{L}\p{N}])www\.\S+|(?<![\p{L}\p{N}-])[a-z0-9-]+\.(?:com\.br|com|br|app|net|org|io)(?![\p{L}\p{N}])/iu,
@@ -57,10 +67,26 @@ const RX = {
   finge_humano: palavra("sou (?:uma )?(?:pessoa|humano|humana|atendente humano)|n[aã]o sou (?:um |uma )?(?:rob[ôo]|ia|bot|assistente virtual)"),
 };
 
-const CHECAGENS = (Object.keys(RX) as (keyof typeof RX)[]).map((regra) => ({
-  regra: regra as string,
-  teste: (t: string): string | null => t.match(RX[regra])?.[0] ?? null,
-}));
+const CHECAGENS = (Object.keys(RX) as (keyof typeof RX)[]).map((regra) => ({ regra: regra as string }));
+
+/* sempre bloqueados, mesmo que a base cite: promessa que a loja não faz */
+const NUNCA = /sem juros|carn[êe]|boleto|fiado|garantid[oa]/iu;
+const AUTORIZAVEIS = new Set(["preco", "parcelamento", "desconto"]);
+const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ");
+function todos(t: string, regra: string) {
+  const rx = RX[regra as keyof typeof RX];
+  return Array.from(t.matchAll(new RegExp(rx.source, rx.flags.includes("g") ? rx.flags : rx.flags + "g")), (m) => m[0]);
+}
+function autorizado(trecho: string, base: string) {
+  if (!base || NUNCA.test(trecho)) return false;
+  const n = normalizar(trecho).trim();
+  /* "21x" também vale se a base escrever "21 vezes" */
+  const vezes = n.match(/^(\d{1,2})\s?x$/);
+  if (vezes) return base.includes(`${vezes[1]}x`) || base.includes(`${vezes[1]} x`) || base.includes(`${vezes[1]} vezes`);
+  /* palavra com radical (parcelamos, parcelado): basta a base falar de parcelamento */
+  if (/^parcel/.test(n)) return base.includes("parcel");
+  return base.includes(n);
+}
 
 const palavras = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
 
@@ -91,12 +117,26 @@ export function validarResposta(texto: string | null | undefined, opcoes: Opcoes
   if (t.length > maxC) add("longa", `${t.length} caracteres (máximo ${maxC}).`);
   else if (linhas > maxL) add("longa", `${linhas} linhas (máximo ${maxL}).`);
 
+  /* emojis aprovados saem da conferência (até MAX_EMOJIS); o que sobrar de emoji reprova */
+  let semEmojisOk = t;
+  let emojis = 0;
+  for (const e of [...EMOJIS_PERMITIDOS].sort((a, b) => b.length - a.length)) {
+    emojis += semEmojisOk.split(e).length - 1;
+    semEmojisOk = semEmojisOk.split(e).join(" ");
+  }
+  if (emojis > MAX_EMOJIS) add("emoji", `${emojis} emojis (máximo ${MAX_EMOJIS}).`);
+  const base = normalizar((opcoes.fontesAutorizadas ?? []).join(" \n "));
+
   for (const c of CHECAGENS) {
-    const achou = c.teste(t);
-    if (achou) add(c.regra, `Trecho: "${achou}"`);
+    const achados = c.regra === "emoji" ? [semEmojisOk.match(RX.emoji)?.[0]].filter((x): x is string => !!x) : todos(t, c.regra);
+    /* valor, parcela e desconto só passam quando a base de conhecimento diz exatamente isso */
+    const pendentes = AUTORIZAVEIS.has(c.regra) ? achados.filter((a) => !autorizado(a, base)) : achados;
+    if (pendentes.length) add(c.regra, `Trecho: "${pendentes[0]}"`);
   }
   if (opcoes.promptSistema) {
-    const trecho = trechoDoPrompt(t, opcoes.promptSistema);
+    /* a base de conhecimento existe para ser dita ao cliente, e as falas-exemplo entre aspas existem
+       para serem imitadas: só o resto das instruções conta como vazamento */
+    const trecho = trechoDoPrompt(t, opcoes.promptSistema.split("# BASE DE CONHECIMENTO")[0].replace(/"[^"\n]*"/g, " zzcortezz "));
     if (trecho) add("vazamento_prompt", `Trecho igual ao das instruções: "${trecho}"`);
   }
   return { aprovada: violacoes.length === 0, violacoes };

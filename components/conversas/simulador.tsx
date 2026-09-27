@@ -97,7 +97,7 @@ function CorpoSimulador({ conversaAtual, aoConcluir }: { conversaAtual: { telefo
             iniciar(async () => {
               const r = await acaoSimularCliente({ telefone, nome, texto });
               if (!r.ok) return void toast.error(r.campos ? Object.values(r.campos)[0] : r.erro);
-              toast.success(r.dados.triagem && r.dados.triagem !== "ok" ? `Mensagem recebida. ${r.dados.triagem}` : "Mensagem do cliente recebida");
+              toast.success(r.dados.triagem === "workflow" ? "Mensagem recebida. O workflow da IA está rodando (veja em Inteligência artificial → Execuções)." : r.dados.triagem && r.dados.triagem !== "ok" ? `Mensagem recebida. ${r.dados.triagem}` : "Mensagem do cliente recebida");
               aoConcluir(r.dados.conversaId);
             })
           }

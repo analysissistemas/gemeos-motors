@@ -1,0 +1,1 @@
+ALTER TABLE "ia_workflow_execucoes" ADD COLUMN "falhas" jsonb DEFAULT '[]'::jsonb NOT NULL;

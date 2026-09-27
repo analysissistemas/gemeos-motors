@@ -1,12 +1,21 @@
 "use server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { autorizarConfig } from "@/lib/auth/desbloqueio";
 import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
-import { proximaVersao } from "@/lib/ia/prompt";
+import { fontesAutorizadas, proximaVersao, salvarHorario } from "@/lib/ia/prompt";
+import { gerarObjeto } from "@/lib/ia/cliente";
+import { normalizarHorario, textoHorario } from "@/lib/ia/horario";
+import { salvarConfigWorkflow } from "@/lib/ia/workflow/config";
+import { CONFIG_PADRAO } from "@/lib/ia/workflow/grafo";
+import { rodarWorkflowAtendimento } from "@/lib/ia/workflow/executar";
+import { apagarMemoria } from "@/lib/ia/workflow/nos";
+import { receberMensagem } from "@/lib/mensageria/servico";
+import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { CHAVES_SECOES, secaoPorChave } from "@/lib/ia/secoes";
 import { iaLigada, salvarControle } from "@/lib/ia/controle";
 import { PERMISSOES_IA } from "@/lib/ia/permissoes";
@@ -169,6 +178,144 @@ export async function acaoSalvarControle(dados: unknown, confirmacao?: string) {
 export async function acaoValidarTexto(texto: string) {
   return executar(async () => {
     await autorizarConfig("ia");
-    return validarResposta(z.string().max(4000).parse(texto));
+    return validarResposta(z.string().max(4000).parse(texto), { fontesAutorizadas: await fontesAutorizadas() });
+  });
+}
+
+/* ---------------- workflow de atendimento ---------------- */
+
+const esquemaConfigWorkflow = z.object(
+  Object.fromEntries(Object.entries(CONFIG_PADRAO).map(([k, v]) => [k, typeof v === "boolean" ? z.boolean() : typeof v === "number" ? z.number() : z.string().trim().min(1).max(40)])),
+);
+
+export async function acaoSalvarConfigWorkflow(dados: unknown) {
+  return executar(async () => {
+    const u = await autorizarConfig("ia");
+    const c = esquemaConfigWorkflow.parse(dados) as typeof CONFIG_PADRAO;
+    await salvarConfigWorkflow(c, u.id);
+    await registrarLog(u, { acao: "ia.workflow", entidade: "configuracao", descricao: `${c.ativo ? "Ligou" : "Desligou"} o workflow de atendimento da IA e salvou os ajustes dos nós` });
+    revalidatePath("/sistema/ia");
+    return null;
+  }, "Workflow salvo");
+}
+
+const E = schema.iaWorkflowExecucoes;
+
+/** Lista das últimas execuções (a aba Execuções consulta de novo enquanto alguma está rodando). */
+export async function acaoListarExecucoes() {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    return db
+      .select({ id: E.id, status: E.status, gatilho: E.gatilho, conversaId: E.conversaId, contato: schema.conversas.contatoNome, telefone: schema.conversas.contatoTelefone, noAtual: E.noAtual, paradoEm: E.paradoEm, motivo: E.motivo, iniciadoEm: E.iniciadoEm, duracaoMs: E.duracaoMs })
+      .from(E)
+      .leftJoin(schema.conversas, eq(schema.conversas.id, E.conversaId))
+      .orderBy(desc(E.id))
+      .limit(60);
+  });
+}
+
+/** Uma execução com todos os passos e a memória atual da conversa. */
+export async function acaoCarregarExecucao(id: number) {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    const [ex] = await db.select().from(E).where(eq(E.id, z.number().int().parse(id))).limit(1);
+    if (!ex) throw new ErroRegra("Execução não encontrada (execuções com mais de 30 dias são apagadas).");
+    const [memoria] = ex.conversaId ? await db.select().from(schema.iaMemorias).where(eq(schema.iaMemorias.conversaId, ex.conversaId)).limit(1) : [];
+    return { ...ex, memoria: memoria ?? null };
+  });
+}
+
+export async function acaoApagarMemoria(conversaId: number) {
+  return executar(async () => {
+    const u = await autorizarConfig("ia");
+    const id = z.number().int().parse(conversaId);
+    await apagarMemoria(id);
+    await mensagemSistema(db, id, `Memória da IA apagada por ${u.nome}.`);
+    await registrarLog(u, { acao: "ia.memoria_apagada", entidade: "conversa", entidadeId: id, descricao: "Apagou a memória da IA de uma conversa" });
+    return null;
+  }, "Memória apagada");
+}
+
+/* conversa de teste do painel: sempre simulada (nada sai para o WhatsApp) */
+const TELEFONE_TESTE = "5500900000001";
+
+export async function acaoTestarWorkflow(texto: string) {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    const t = z.string().trim().min(1, "Escreva a mensagem do cliente").max(2000).parse(texto);
+    const r = await receberMensagem({ canal: "whatsapp", provedor: "mock", telefone: TELEFONE_TESTE, nomeContato: "Teste do workflow", tipo: "texto", conteudo: t, externoId: `teste-wf-${crypto.randomUUID()}`, demo: true });
+    if (!r.conversaId || !r.mensagemId) throw new ErroRegra("Não foi possível registrar a mensagem de teste.");
+    const e = { conversaId: r.conversaId, mensagemId: r.mensagemId };
+    after(() => rodarWorkflowAtendimento({ ...e, gatilho: "teste", simulado: true }).then(() => {}));
+    return e;
+  });
+}
+
+/** Devolve a conversa de teste para a IA e apaga a memória dela (recomeça do zero). */
+export async function acaoReiniciarTeste() {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    const [c] = await db.select({ id: schema.conversas.id }).from(schema.conversas).where(and(eq(schema.conversas.contatoTelefone, TELEFONE_TESTE), eq(schema.conversas.demo, true))).limit(1);
+    if (!c) return null;
+    await db.update(schema.conversas).set({ modo: "ia", responsavelId: null, atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.id));
+    await apagarMemoria(c.id);
+    return null;
+  }, "Teste reiniciado: conversa de volta para a IA e memória apagada");
+}
+
+/** Mensagens da conversa de teste, para o chat do painel. */
+export async function acaoConversaDeTeste() {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    const [c] = await db.select({ id: schema.conversas.id, modo: schema.conversas.modo }).from(schema.conversas).where(and(eq(schema.conversas.contatoTelefone, TELEFONE_TESTE), eq(schema.conversas.demo, true))).limit(1);
+    if (!c) return { modo: "ia", mensagens: [] };
+    const m = schema.mensagens;
+    const msgs = await db.select({ id: m.id, autor: m.autor, conteudo: m.conteudo, respostaA: m.respostaA, criadoEm: m.criadoEm }).from(m).where(eq(m.conversaId, c.id)).orderBy(desc(m.id)).limit(40);
+    return { modo: c.modo, mensagens: msgs.reverse() };
+  });
+}
+
+/* ---------------- horário de funcionamento ---------------- */
+export async function acaoSalvarHorario(dados: unknown) {
+  return executar(async () => {
+    const u = await autorizarConfig("ia");
+    const h = normalizarHorario(dados);
+    await salvarHorario(h, u.id);
+    await registrarLog(u, { acao: "ia.horario", entidade: "configuracao", descricao: `Horário de funcionamento: ${textoHorario(h).replace(/\n/g, " ")}` });
+    revalidatePath("/sistema/ia");
+    return null;
+  }, "Horário salvo: a IA já usa o novo horário");
+}
+
+/* ---------------- ajuste do prompt com ajuda da IA ---------------- */
+export async function acaoSugerirAjustePrompt(secao: string, textoAtual: string, pedido: string) {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    const s = secaoValida.parse(secao);
+    const atual = z.string().max(8000).parse(textoAtual);
+    const p = z.string().trim().min(5, "Diga o que quer mudar").max(1000).parse(pedido);
+    return gerarObjeto({
+      schema: z.object({ texto: z.string(), explicacao: z.string() }),
+      maxTokens: 2000,
+      sistema: `Você ajuda o dono de uma loja de motos (Gêmeos Motors) a ajustar o prompt da IA de atendimento no WhatsApp.
+Reescreva SOMENTE o setor "${secaoPorChave(s)?.titulo}" aplicando o pedido do dono. Mantenha o que não foi pedido para mudar.
+Nunca acrescente preço, prazo, horário, endereço ou condição que o dono não escreveu: dados da loja ficam na base de conhecimento.
+Escreva em português do Brasil, frases curtas e diretas. Em "explicacao", diga em 1 ou 2 frases simples o que mudou.`,
+      prompt: `TEXTO ATUAL DO SETOR:\n${atual}\n\nPEDIDO DO DONO:\n${p}`,
+    });
+  });
+}
+
+/* ---------------- falhas da IA (aba Falhas) ---------------- */
+export async function acaoListarFalhas() {
+  return executar(async () => {
+    await autorizarConfig("ia");
+    return db
+      .select({ id: E.id, status: E.status, gatilho: E.gatilho, contato: schema.conversas.contatoNome, telefone: schema.conversas.contatoTelefone, iniciadoEm: E.iniciadoEm, falhas: E.falhas })
+      .from(E)
+      .leftJoin(schema.conversas, eq(schema.conversas.id, E.conversaId))
+      .where(sql`jsonb_array_length(${E.falhas}) > 0`)
+      .orderBy(desc(E.id))
+      .limit(80);
   });
 }

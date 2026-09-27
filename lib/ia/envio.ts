@@ -16,7 +16,7 @@ export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "va
    bloqueada, fica registrada em ia_execucoes para consulta na Central de IA.
    Nenhum outro código deve chamar o provedor com texto escrito pela IA.
    ============================================================ */
-export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean }): Promise<ResultadoEnvioIa> {
+export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean }): Promise<ResultadoEnvioIa> {
   const controle = await lerControle();
   /* conversa do simulador (demo): grava no chat, mas nada sai para o WhatsApp */
   const [cv] = await tx.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
@@ -35,18 +35,21 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
     motivo = "validador";
     explicacao = `o validador reprovou (${validacao.violacoes.map((v) => v.rotulo.toLowerCase()).join("; ")})`;
   } else {
-    const env: { externoId: string | null; status: "sent" | "failed"; erro?: string } = simulado ? { externoId: null, status: "sent" } : await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "texto", conteudo: p.texto });
+    const env: { externoId: string | null; status: "sent" | "failed"; erro?: string } = simulado ? { externoId: null, status: "sent" } : await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "texto", conteudo: p.texto, respostaAExternoId: p.respostaA?.externoId ?? null });
     externoId = env.externoId;
     statusEnvio = env.status;
     if (env.status === "failed") {
       motivo = "falha_envio";
       explicacao = env.erro ?? "o WhatsApp recusou o envio";
     }
-    await tx.insert(schema.mensagens).values({ conversaId: p.conversaId, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: p.texto, status: statusEnvio, externoId, metadados: env.erro ? { erro: env.erro } : undefined });
-    await tx
-      .update(schema.conversas)
-      .set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: p.texto.slice(0, 160), ultimaMensagemDirecao: "outgoing" })
-      .where(eq(schema.conversas.id, p.conversaId));
+    /* tentativa que o workflow ainda vai repetir: a recusa fica só no registro da IA, não vira mensagem na conversa */
+    if (statusEnvio === "sent" || p.gravarFalha !== false) {
+      await tx.insert(schema.mensagens).values({ conversaId: p.conversaId, respostaA: p.respostaA?.id ?? null, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: p.texto, status: statusEnvio, externoId, metadados: env.erro ? { erro: env.erro } : undefined });
+      await tx
+        .update(schema.conversas)
+        .set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: p.texto.slice(0, 160), ultimaMensagemDirecao: "outgoing" })
+        .where(eq(schema.conversas.id, p.conversaId));
+    }
   }
 
   const enviada = motivo === null;

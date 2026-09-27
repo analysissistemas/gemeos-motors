@@ -2,6 +2,7 @@ import "server-only";
 import { asc, desc, eq, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
+import { normalizarHorario, textoHorario, type HorarioLoja } from "./horario";
 
 export type VersaoPrompt = { id: number; versao: number; conteudo: string; status: string; nota: string | null; criadoEm: Date; publicadoEm: Date | null };
 
@@ -51,7 +52,36 @@ export async function montarPromptSistema() {
     .select({ secao: schema.iaPromptVersoes.secao, conteudo: schema.iaPromptVersoes.conteudo })
     .from(schema.iaPromptVersoes)
     .where(eq(schema.iaPromptVersoes.status, "publicada"));
-  const conhecimento = await db.select().from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)).orderBy(asc(schema.iaConhecimento.categoria), asc(schema.iaConhecimento.titulo));
-  return compilarPrompt(publicadas, conhecimento);
+  return compilarPrompt(publicadas, await conhecimentoAtivo());
+}
+
+/* ---------------- horário de funcionamento (ajustável na tela) ---------------- */
+const CHAVE_HORARIO = "loja.horario";
+
+export async function lerHorario(): Promise<HorarioLoja> {
+  const [l] = await db.select({ valor: schema.configuracoes.valor }).from(schema.configuracoes).where(eq(schema.configuracoes.chave, CHAVE_HORARIO)).limit(1);
+  return normalizarHorario(l?.valor);
+}
+
+export async function salvarHorario(h: HorarioLoja, usuarioId: number) {
+  const valor = normalizarHorario(h);
+  await db
+    .insert(schema.configuracoes)
+    .values({ chave: CHAVE_HORARIO, valor, atualizadoPor: usuarioId })
+    .onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor, atualizadoEm: new Date(), atualizadoPor: usuarioId } });
+}
+
+/** Base de conhecimento ativa + o horário de funcionamento, que entra como um item da categoria Loja. */
+export async function conhecimentoAtivo() {
+  const [itens, horario] = await Promise.all([
+    db.select().from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)).orderBy(asc(schema.iaConhecimento.categoria), asc(schema.iaConhecimento.titulo)),
+    lerHorario(),
+  ]);
+  return [{ categoria: "Loja", titulo: "Horário de funcionamento", conteudo: textoHorario(horario) }, ...itens];
+}
+
+/** Textos que autorizam fatos (horário, endereço, valores, parcelas) na trava de fatos e no validador. */
+export async function fontesAutorizadas() {
+  return (await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`);
 }
 

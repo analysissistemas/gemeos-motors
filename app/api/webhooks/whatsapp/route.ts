@@ -6,6 +6,7 @@ import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { medirDuracao } from "@/lib/mensageria/audio-formatos";
+import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
 import type { MensagemEntrante, Midia, TipoMensagem } from "@/lib/mensageria/tipos";
 
 /* ============================================================
@@ -112,9 +113,11 @@ export async function POST(req: NextRequest) {
     }
   }
   const conversas: number[] = [];
+  const entradas: { conversaId: number; mensagemId: number }[] = [];
   const paraAnalisar: { id: number; texto: string }[] = [];
   for (const m of recebidas) {
     const r = await receberMensagem(m);
+    if (r.conversaId && r.mensagemId) entradas.push({ conversaId: r.conversaId, mensagemId: r.mensagemId });
     if (r.conversaId && r.modo === "ia") conversas.push(r.conversaId);
     if (r.conversaId && m.tipo === "texto" && m.conteudo) paraAnalisar.push({ id: r.conversaId, texto: m.conteudo });
   }
@@ -122,7 +125,11 @@ export async function POST(req: NextRequest) {
   after(async () => {
     for (const a of paraAnalisar) await analisarMensagemEntrante(a.id, a.texto);
   });
-  if (conversas.length && (await triagemAutomaticaLigada())) after(async () => {
+  /* workflow ligado (Inteligência artificial → Workflow): cada mensagem abre uma execução; o buffer junta as que chegam em sequência */
+  if (entradas.length && (await workflowAtivo())) after(async () => {
+    await Promise.all(entradas.map((e) => rodarWorkflowAtendimento({ ...e, gatilho: "whatsapp" })));
+  });
+  else if (conversas.length && (await triagemAutomaticaLigada())) after(async () => {
     for (const id of new Set(conversas)) await executarTriagem(id);
   });
   return NextResponse.json({ ok: true });

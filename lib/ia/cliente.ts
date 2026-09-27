@@ -44,8 +44,14 @@ function traduzirErro(e: unknown): IaIndisponivel {
   if (texto.includes("aborted") || texto.includes("timeout")) {
     return new IaIndisponivel("A IA demorou demais para responder. Tente de novo.");
   }
+  if (/\b429\b|rate.?limit|too many requests/i.test(texto)) {
+    return new IaIndisponivel("A OpenAI recusou por limite de chamadas (muitas ao mesmo tempo). Tente de novo em instantes.");
+  }
+  if (/fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket/i.test(texto)) {
+    return new IaIndisponivel("Falha de conexão com a OpenAI.");
+  }
   console.error("[ia]", e);
-  return new IaIndisponivel("A IA não respondeu agora. Tente de novo em instantes.");
+  return new IaIndisponivel(`A IA não respondeu agora (${texto.slice(0, 160)}).`);
 }
 
 export async function gerarObjeto<S extends z.ZodType>(p: { schema: S; sistema: string; prompt: string; maxTokens?: number }): Promise<z.infer<S>> {
@@ -75,4 +81,34 @@ export function transcrever(msgs: { autor: string; conteudo: string | null; tipo
       return `${m.criadoEm.toISOString().slice(0, 16).replace("T", " ")} ${quem}: ${corpo ?? ""}`;
     })
     .join("\n");
+}
+
+/* ---------------- mídia do cliente (workflow de atendimento) ---------------- */
+const PEDIDOS_MIDIA = {
+  imagem: "Descreva esta imagem em português do Brasil, em até 4 frases, com foco no que importa para uma loja de motos e carros (veículo, modelo, estado, documento). Não invente o que não dá para ver.",
+  documento: "Resuma os dados deste documento em português do Brasil, em até 6 linhas. Não invente o que não está escrito.",
+} as const;
+
+/** Áudio vira texto; imagem e PDF viram descrição. Só com a chave da OpenAI no ambiente. */
+export async function analisarMidia(tipo: "audio" | "imagem" | "documento", bytes: Buffer, mime: string): Promise<string> {
+  await exigirIaLigada();
+  if (!COM_OPENAI) throw new IaIndisponivel("Análise de mídia precisa da OPENAI_API_KEY no ambiente.");
+  try {
+    if (tipo === "audio") {
+      const { experimental_transcribe } = await import("ai");
+      const r = await experimental_transcribe({ model: openai.transcription("gpt-4o-mini-transcribe"), audio: bytes, providerOptions: { openai: { language: "pt" } }, abortSignal: AbortSignal.timeout(60_000) });
+      return r.text.trim();
+    }
+    const parte = tipo === "imagem" ? { type: "image" as const, image: bytes, mediaType: mime } : { type: "file" as const, data: bytes, mediaType: mime || "application/pdf", filename: "documento.pdf" };
+    const r = await generateText({
+      model: modelo(),
+      messages: [{ role: "user", content: [{ type: "text", text: PEDIDOS_MIDIA[tipo] }, parte] }],
+      maxOutputTokens: 500,
+      timeout: 60_000,
+      maxRetries: 1,
+    });
+    return r.text.trim();
+  } catch (e) {
+    throw traduzirErro(e);
+  }
 }

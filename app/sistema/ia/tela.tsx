@@ -12,7 +12,12 @@ import { cn } from "@/lib/cn";
 import { CATEGORIAS_CONHECIMENTO } from "@/lib/ia/secoes";
 import type { ControleIa } from "@/lib/ia/permissoes";
 import { AbaControle, type Execucao } from "./controle";
-import { acaoAlternarConhecimento, acaoDescartarRascunho, acaoExcluirConhecimento, acaoPublicar, acaoRestaurarComoRascunho, acaoSalvarConhecimento, acaoSalvarRascunho } from "./acoes";
+import { AbaExecucoes, AbaWorkflow } from "./workflow";
+import { AbaFalhas } from "./falhas";
+import { EditorHorario } from "./horario";
+import type { ConfigWorkflow } from "@/lib/ia/workflow/grafo";
+import type { HorarioLoja } from "@/lib/ia/horario";
+import { acaoAlternarConhecimento, acaoDescartarRascunho, acaoExcluirConhecimento, acaoPublicar, acaoRestaurarComoRascunho, acaoSalvarConhecimento, acaoSalvarRascunho, acaoSugerirAjustePrompt } from "./acoes";
 
 type Versao = { id: number; versao: number; conteudo: string; status: string; nota: string | null; criadoEm: Date; publicadoEm: Date | null };
 type Setor = { chave: string; titulo: string; ajuda: string; padrao: string; publicada: Versao | null; rascunho: Versao | null; historico: Versao[] };
@@ -20,22 +25,55 @@ type Item = { id: number; categoria: string; titulo: string; conteudo: string; a
 
 const data = (d: Date | null) => (d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 
-export function TelaIa({ prompts, conhecimento, controle, execucoes }: { prompts: Setor[]; conhecimento: Item[]; controle: ControleIa; execucoes: Execucao[] }) {
-  const [aba, setAba] = useState<"prompt" | "conhecimento" | "controle">("prompt");
+type Aba = "workflow" | "execucoes" | "falhas" | "prompt" | "conhecimento" | "controle";
+
+export function TelaIa({ prompts, conhecimento, controle, execucoes, workflow, horario }: { prompts: Setor[]; conhecimento: Item[]; controle: ControleIa; execucoes: Execucao[]; workflow: ConfigWorkflow; horario: HorarioLoja }) {
+  const [aba, setAba] = useState<Aba>("workflow");
+  const [execucaoAberta, setExecucaoAberta] = useState<number | null>(null);
   return (
     <>
-      <CabecalhoPagina titulo="Inteligência artificial" subtitulo="Ensine a IA de atendimento: prompt por setor e base de conhecimento. Nada muda para os clientes até você publicar." />
+      <CabecalhoPagina titulo="Inteligência artificial" subtitulo="O workflow de atendimento (como no n8n), as execuções nó a nó, o prompt por setor e a base de conhecimento. Nada muda para os clientes até você salvar ou publicar." />
       <Abas
         className="mb-4"
         atual={aba}
         aoMudar={setAba}
         abas={[
+          { id: "workflow", rotulo: workflow.ativo ? "Workflow (ligado)" : "Workflow" },
+          { id: "execucoes", rotulo: "Execuções" },
+          { id: "falhas", rotulo: "Falhas" },
           { id: "prompt", rotulo: "Prompt por setor" },
           { id: "conhecimento", rotulo: "Base de conhecimento", contador: conhecimento.length },
           { id: "controle", rotulo: controle.ligada ? "Controle (IA ligada)" : "Controle (IA desligada)" },
         ]}
       />
-      {aba === "prompt" ? <AbaPrompt setores={prompts} /> : aba === "conhecimento" ? <AbaConhecimento itens={conhecimento} /> : <AbaControle controle={controle} execucoes={execucoes} />}
+      {aba === "workflow" ? (
+        <AbaWorkflow
+          config={workflow}
+          irParaPrompt={() => setAba("prompt")}
+          irParaExecucoes={(id) => {
+            setExecucaoAberta(id ?? null);
+            setAba("execucoes");
+          }}
+        />
+      ) : aba === "execucoes" ? (
+        <AbaExecucoes key={execucaoAberta ?? "lista"} inicial={execucaoAberta} />
+      ) : aba === "falhas" ? (
+        <AbaFalhas
+          abrirExecucao={(id) => {
+            setExecucaoAberta(id);
+            setAba("execucoes");
+          }}
+        />
+      ) : aba === "prompt" ? (
+        <AbaPrompt setores={prompts} />
+      ) : aba === "conhecimento" ? (
+        <div className="flex flex-col gap-4">
+          <EditorHorario horario={horario} />
+          <AbaConhecimento itens={conhecimento} />
+        </div>
+      ) : (
+        <AbaControle controle={controle} execucoes={execucoes} />
+      )}
     </>
   );
 }
@@ -98,6 +136,10 @@ function EditorSetor({ setor }: { setor: Setor }) {
       <Campo rotulo="Texto do setor" dica={`${texto.length} de 8.000 caracteres`}>
         <AreaTexto value={texto} onChange={(e) => setTexto(e.target.value)} className="min-h-[300px] font-mono text-[13px] leading-relaxed" />
       </Campo>
+      <AjusteComIa secao={setor.chave} texto={texto} aoSugerir={(t, explicacao) => {
+        setTexto(t);
+        if (!nota) setNota(explicacao.slice(0, 200));
+      }} />
       <Campo rotulo="Nota da mudança (opcional)" className="mt-3">
         <Entrada value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ex.: incluí a regra de financiamento" maxLength={200} />
       </Campo>
@@ -251,5 +293,34 @@ function AbaConhecimento({ itens }: { itens: Item[] }) {
         </div>
       </Dialogo>
     </Painel>
+  );
+}
+
+/* Pede à IA uma nova versão do setor a partir de um pedido em linguagem simples.
+   A sugestão só vai para a caixa de texto: nada é salvo nem publicado sem você. */
+function AjusteComIa({ secao, texto, aoSugerir }: { secao: string; texto: string; aoSugerir: (texto: string, explicacao: string) => void }) {
+  const [pedido, setPedido] = useState("");
+  const [pendente, iniciar] = useTransition();
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-dashed border-linha p-3 sm:flex-row sm:items-end">
+      <Campo rotulo="Ajustar com a IA" dica="Diga o que quer mudar; a sugestão aparece no texto acima para você revisar antes de salvar." className="flex-1">
+        <Entrada value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Ex.: deixe mais animado e peça o nome do cliente logo no começo" maxLength={1000} />
+      </Campo>
+      <Botao
+        carregando={pendente}
+        disabled={pedido.trim().length < 5}
+        onClick={() =>
+          iniciar(async () => {
+            const r = await acaoSugerirAjustePrompt(secao, texto, pedido);
+            if (!r.ok) return void toast.error(r.erro);
+            aoSugerir(r.dados.texto, r.dados.explicacao);
+            setPedido("");
+            toast.success(`Sugestão pronta: ${r.dados.explicacao} Revise e salve o rascunho.`);
+          })
+        }
+      >
+        Sugerir
+      </Botao>
+    </div>
   );
 }
