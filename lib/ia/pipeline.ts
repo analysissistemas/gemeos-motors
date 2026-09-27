@@ -140,10 +140,12 @@ const AFIRMACOES = [
   /\b(?:rua|avenida|av\.|travessa|rodovia|estrada|pra[cç]a)\s+[^,.\n]{3,40}/gi,
   /\b(?:segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo)s?\s+a\s+(?:segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo)s?/gi,
 ];
+/* "8 horas", "8 hs" e "8h" são a mesma coisa para a conferência */
+const horasIguais = (s: string) => norm(s).replace(/(\d{1,2})\s?(?:horas|hora|hs|h)(?![\p{L}])/gu, "$1h");
 export function afirmacoesSemFonte(texto: string, fontes: string[]) {
-  const base = norm(fontes.join(" \n "));
+  const base = horasIguais(fontes.join(" \n "));
   const achadas = AFIRMACOES.flatMap((r) => Array.from(texto.matchAll(r), (m) => m[0].trim()));
-  return achadas.filter((a) => !base.includes(norm(a)));
+  return achadas.filter((a) => !base.includes(horasIguais(a)));
 }
 
 /* ---------------- contexto e etapas ---------------- */

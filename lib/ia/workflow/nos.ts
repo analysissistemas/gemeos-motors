@@ -42,7 +42,7 @@ import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
-const TEXTO_FORA_HORARIO = "Anotei tudo por aqui! Nossa equipe te responde assim que a loja abrir. Enquanto isso, pode me perguntar o que quiser.";
+const TEXTO_FORA_HORARIO = "Aqui é o assistente virtual da Gêmeos Motors 😊 Um vendedor te responde assim que a loja abrir, e enquanto isso eu te ajudo por aqui: pode me perguntar o que quiser sobre as motos.";
 /* ============================================================
    OS NÓS DO WORKFLOW (o que cada caixinha da tela faz de verdade)
    Cada função recebe o contexto, faz uma coisa e devolve o ramo, a entrada e a
@@ -144,6 +144,32 @@ Devolva também:
 - resumo: 1 a 3 frases sobre o atendimento até aqui (interesse e situação), para o vendedor.
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
+
+/* Proposta montada pelo sistema com o que a conversa já tem: modelo do catálogo, cor e pagamento.
+   Preço sempre o de tabela do catálogo. Falta algo (ex.: cor com mais de uma opção)? Não monta. */
+async function montarProposta(c: CtxWorkflow): Promise<string | null> {
+  const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
+  const pagamento = fatos.pagamento?.trim();
+  if (!pagamento) return null;
+  const texto = [fatos.interesse, fatos.observacoes, c.textoBuffer, c.memoria.historico].filter(Boolean).join(" \n ").toLowerCase();
+  const m = schema.modelos;
+  const modelos = await db.select({ id: m.id, nome: m.nome, preco: m.precoTabela }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica")));
+  const achado = modelos
+    .filter((x) => {
+      const nome = x.nome.toLowerCase();
+      const i = texto.indexOf(nome);
+      /* nome inteiro (a "AG08" não casa dentro de "AG080") */
+      return i >= 0 && !/[\p{L}\p{N}]/u.test(texto[i - 1] ?? " ") && !/[\p{L}\p{N}]/u.test(texto[i + nome.length] ?? " ");
+    })
+    .sort((a, b) => b.nome.length - a.nome.length)[0];
+  if (!achado || !achado.preco) return null;
+  const cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
+  const cor = cores.find((n) => texto.includes(n.toLowerCase())) ?? (cores.length === 1 ? cores[0] : null);
+  if (!cor) return null;
+  const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+  const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
+  return `*Proposta Gêmeos Motors*\n• Moto: ${achado.nome} ${cor.toLowerCase()}\n• Valor: ${valor}\n• Pagamento: ${pag}\n• Entrega: Goiana e região`;
+}
 
 /* A loja ainda não falou nesta conversa (ou faz mais de 6 h): é o começo do atendimento. */
 async function primeiroContato(conversaId: number) {
@@ -541,7 +567,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     if (!lojaAberta(await lerHorario())) {
       await db.update(schema.conversas).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
       await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, um vendedor deve assumir. Motivo: ${c.motivoTransferencia ?? "não informado"}. Resumo: ${resumo}`, { triagem: true });
-      const texto = pipe.texto ?? TEXTO_FORA_HORARIO;
+      /* fora do horário ninguém vai continuar agora: nada de "já estou te encaminhando" */
+      const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : TEXTO_FORA_HORARIO;
       return { ctx: { pipe: { ...pipe, texto, humano: false } }, saida: { transferida: false, motivo: "fora do horário: a IA segue e a equipe assume ao abrir", avisoAoCliente: texto } };
     }
     /* trava de segurança sempre passa para humano; pedido da IA só com a permissão marcada */
@@ -629,6 +656,14 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
     if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
+    /* a IA ofereceu "preparar a proposta" mas já sabe moto, cor e pagamento: o sistema monta e envia */
+    if (resposta.some((b) => /proposta/iu.test(b) && /\?|posso|quer que/iu.test(b))) {
+      const proposta = await montarProposta(c);
+      if (proposta) {
+        resposta = resposta.map((b) => b.split(/(?<=[.!?])\s+/u).filter((f) => !/proposta/iu.test(f)).join(" ").trim()).filter(Boolean);
+        resposta.push(proposta, "Posso passar para o nosso vendedor finalizar com você? 😊");
+      }
+    }
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;

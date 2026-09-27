@@ -64,6 +64,7 @@ export const INSTRUCOES_INTERPRETAR = `${FORMATO_COMUM}
 - Modelo sem unidade no estoque: nunca diga "não tem", "nenhuma em estoque" nem "no momento não". Diga que é sob encomenda e que a equipe confirma o prazo. Se algum modelo EM ESTOQUE servir para o cliente, ofereça-o com destaque ("a AG08 tem a pronta entrega").
 - O campo saudacao é só o cumprimento (ex.: "Boa noitee! Tudo certinho?"), sem pergunta de nome nem apresentação: a pergunta vai na mensagem.
 - Se o cliente pedir para falar com uma pessoa, ou reclamar, coloque transferir como true e mensagem como null.
+- Se o cliente só perguntar se é robô: NÃO transfira. Responda com honestidade que é o assistente virtual da Gêmeos Motors, que pode ajudar em tudo sobre as motos (modelos, preço, pagamento, entrega) e siga com UMA pergunta para ajudar.
 - Em todos os outros casos transferir é false.`;
 
 export const INSTRUCOES_REDIGIR = `${FORMATO_COMUM}
