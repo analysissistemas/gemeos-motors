@@ -249,6 +249,10 @@ página, ação e rota de API — esconder botão não é segurança.
 - **Veículo de teste** (`veiculos.teste`, só admin marca, selo "Teste · IA"): serve para testar a
   IA. Fica fora do estoque real, do painel, das movimentações, dos avisos a interessados e da venda
   (bloqueada no servidor); no funil, só o admin vê ("[TESTE]"). A IA só o enxerga em conversa simulada.
+- **Simulador do Atendimento** (ícone de frasco na lista): com o WhatsApp real ligado, só admin usa.
+  Conversa simulada (`conversas.demo`) NUNCA sai para o WhatsApp: `obterProvedor({ demo })` devolve o
+  simulado no envio da equipe, na reação e na resposta da IA (`lib/ia/envio.ts`). Número de cliente
+  real é recusado (juntaria a simulação à conversa de verdade).
 - **Desligar a IA** exige digitar `DESLIGAR` (maiúsculas), conferido no servidor (`acaoSalvarControle`).
 - **Cada veículo é peça única** (chassi, quilometragem, avarias, e placa e ano
   quando é emplacado), nunca contagem por modelo. **Acessórios são por

@@ -1,6 +1,7 @@
 "use server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
@@ -25,11 +26,13 @@ import {
   receberMensagem,
   triagemAutomaticaLigada,
   vincularCliente,
+  variantesTelefone,
   enviarModelo,
   listarModelosAprovados,
 } from "@/lib/mensageria/servico";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
+import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
 import type { TipoMensagem } from "@/lib/mensageria/tipos";
 
 const revalidarFunil = () => {
@@ -254,13 +257,25 @@ const esquemaSimulacao = z.object({
 export async function acaoSimularCliente(dados: unknown) {
   return executar(async () => {
     const u = await autorizar("conversas.ver");
-    void u;
-    if (!(await obterProvedor()).simulado) throw new ErroRegra("O simulador só funciona no modo de demonstração.");
+    const real = !(await obterProvedor()).simulado;
+    /* com o WhatsApp real ligado, só o administrador simula (a conversa fica marcada como demo e nada sai) */
+    if (real && u.papel !== "admin") throw new ErroRegra("Com o WhatsApp real ligado, só administradores usam o simulador.");
     const d = esquemaSimulacao.parse(dados);
+    if (real) {
+      /* número de cliente de verdade juntaria a simulação à conversa real, e a resposta sairia para ele */
+      const tels = variantesTelefone(d.telefone);
+      const [conv] = await db.select({ id: schema.conversas.id }).from(schema.conversas).where(and(inArray(schema.conversas.contatoTelefone, tels), eq(schema.conversas.demo, false))).limit(1);
+      const [cli] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(or(inArray(schema.clientes.whatsapp, tels), inArray(schema.clientes.telefone, tels)), eq(schema.clientes.demo, false))).limit(1);
+      if (conv || cli) throw new ErroRegra("Esse número é de um cliente de verdade. No simulador use um número inventado, por exemplo 81 90000-0001.");
+    }
     const r = await receberMensagem({ canal: "whatsapp", provedor: "mock", telefone: d.telefone, nomeContato: d.nome || null, tipo: "texto", conteudo: d.texto, externoId: `mock-in-${crypto.randomUUID()}`, demo: true });
     if (r.conversaId) await analisarMensagemEntrante(r.conversaId, d.texto);
     let triagem: string | null = null;
-    if (r.conversaId && r.modo === "ia" && (await triagemAutomaticaLigada())) {
+    if (r.conversaId && r.mensagemId && (await workflowAtivo())) {
+      const e = { conversaId: r.conversaId, mensagemId: r.mensagemId };
+      after(() => rodarWorkflowAtendimento({ ...e, gatilho: "teste", simulado: true }).then(() => {}));
+      triagem = "workflow";
+    } else if (r.conversaId && r.modo === "ia" && (await triagemAutomaticaLigada())) {
       const t = await executarTriagem(r.conversaId);
       triagem = t.ok ? "ok" : t.motivo;
     }

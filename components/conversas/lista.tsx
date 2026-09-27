@@ -24,6 +24,7 @@ export function ListaConversas({
   aoAbrir,
   aoCarregarMais,
   aoSimular,
+  podeSimular,
 }: {
   itens: ItemConversa[];
   aberta: number | null;
@@ -38,6 +39,8 @@ export function ListaConversas({
   aoAbrir: (id: number) => void;
   aoCarregarMais: () => void;
   aoSimular: () => void;
+  /** modo simulado, ou administrador (simula mesmo com o WhatsApp real: nada sai) */
+  podeSimular?: boolean;
 }) {
   const naoLidas = itens.reduce((s, i) => s + i.naoLidas, 0);
   return (
@@ -48,7 +51,7 @@ export function ListaConversas({
           <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", simulado ? "border-atencao/50 bg-atencao/10" : "border-bom/50 bg-bom/10")} title={simulado ? "Nenhuma mensagem sai para o WhatsApp de verdade" : "Conectado ao WhatsApp Business"}>
             {simulado ? "WhatsApp — Simulado" : "WhatsApp"}
           </span>
-          {simulado && (
+          {(podeSimular ?? simulado) && (
             <Botao tamanho="sm" variante="fantasma" onClick={aoSimular} title="Simular mensagem de cliente" aria-label="Simular mensagem de cliente">
               <FlaskConical className="size-4" />
             </Botao>

@@ -172,9 +172,11 @@ function explicarErroMeta(e?: { message?: string; code?: number }) {
   return e.message ?? null;
 }
 
-export async function obterProvedor(): Promise<ProvedorMensagens> {
+export async function obterProvedor(opcoes: { demo?: boolean } = {}): Promise<ProvedorMensagens> {
   /* Modo de teste: nada sai para fora, mesmo que o banco tenha a API Oficial ativa. */
   if (process.env.MENSAGERIA_PROVEDOR === "teste") return new ProvedorSimulado();
+  /* conversa simulada (simulador do admin): NADA sai para o WhatsApp, com a API Oficial ligada ou não */
+  if (opcoes.demo) return new ProvedorSimulado();
   const cfg = await lerConfigWhatsApp();
   const ativo = cfg.ativo || process.env.MENSAGERIA_PROVEDOR === "whatsapp_cloud";
   const real = new ProvedorWhatsAppCloud(cfg);

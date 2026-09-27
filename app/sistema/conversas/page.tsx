@@ -39,7 +39,7 @@ export default async function PaginaConversas({ searchParams }: { searchParams: 
       conversaInicial={b.c && Number(b.c) > 0 ? Number(b.c) : null}
       equipe={equipe.filter((p) => p.papel !== "tecnico")}
       respostas={respostas}
-      usuario={{ id: u.id, nome: u.nome }}
+      usuario={{ id: u.id, nome: u.nome, admin: u.papel === "admin" }}
       simulado={(await obterProvedor()).simulado}
       permissoes={{ clientes: pode(u.papel, "clientes.editar"), funil: pode(u.papel, "funil.editar"), vendas: pode(u.papel, "vendas.ver") }}
     />

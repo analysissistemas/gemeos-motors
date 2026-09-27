@@ -4,7 +4,7 @@ import { db, schema, type Tx } from "@/lib/db";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { lerControle } from "./controle";
 import { MODELO_IA } from "./cliente";
-import { montarPromptSistema, versoesEmUso } from "./prompt";
+import { fontesAutorizadas, montarPromptSistema, versoesEmUso } from "./prompt";
 import { validarResposta, type Violacao } from "./validador";
 
 export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "validador" | "falha_envio" | null; violacoes: Violacao[]; explicacao: string | null };
@@ -16,9 +16,12 @@ export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "va
    bloqueada, fica registrada em ia_execucoes para consulta na Central de IA.
    Nenhum outro código deve chamar o provedor com texto escrito pela IA.
    ============================================================ */
-export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string }): Promise<ResultadoEnvioIa> {
+export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean }): Promise<ResultadoEnvioIa> {
   const controle = await lerControle();
-  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema() });
+  /* conversa do simulador (demo): grava no chat, mas nada sai para o WhatsApp */
+  const [cv] = await tx.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
+  const simulado = !!p.simulado || !!cv?.demo;
+  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema(), fontesAutorizadas: await fontesAutorizadas() });
 
   let motivo: ResultadoEnvioIa["motivo"] = null;
   let explicacao: string | null = null;
@@ -32,7 +35,7 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
     motivo = "validador";
     explicacao = `o validador reprovou (${validacao.violacoes.map((v) => v.rotulo.toLowerCase()).join("; ")})`;
   } else {
-    const env = await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "texto", conteudo: p.texto });
+    const env: { externoId: string | null; status: "sent" | "failed"; erro?: string } = simulado ? { externoId: null, status: "sent" } : await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "texto", conteudo: p.texto });
     externoId = env.externoId;
     statusEnvio = env.status;
     if (env.status === "failed") {

@@ -55,7 +55,7 @@ export function CentralConversas({
   conversaInicial: number | null;
   equipe: { id: number; nome: string }[];
   respostas: Resposta[];
-  usuario: { id: number; nome: string };
+  usuario: { id: number; nome: string; admin?: boolean };
   simulado: boolean;
   permissoes: { clientes: boolean; funil: boolean; vendas: boolean };
 }) {
@@ -452,6 +452,7 @@ export function CentralConversas({
           aoAbrir={abrir}
           aoCarregarMais={carregarMais}
           aoSimular={() => setSimulador(true)}
+          podeSimular={simulado || !!usuario.admin}
         />
       </aside>
 

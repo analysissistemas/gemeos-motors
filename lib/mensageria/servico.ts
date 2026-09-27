@@ -81,7 +81,7 @@ export async function receberMensagem(m: MensagemEntrante) {
   const resultado = await db.transaction(async (tx) => {
     if (m.externoId) {
       const [dup] = await tx.select({ id: schema.mensagens.id }).from(schema.mensagens).where(eq(schema.mensagens.externoId, m.externoId)).limit(1);
-      if (dup) return { conversaId: null, duplicada: true, nova: false };
+      if (dup) return { conversaId: null, mensagemId: null, duplicada: true, nova: false };
     }
     let [conversa] = await tx
       .select()
@@ -106,7 +106,7 @@ export async function receberMensagem(m: MensagemEntrante) {
       const [orig] = await tx.select({ id: schema.mensagens.id }).from(schema.mensagens).where(and(eq(schema.mensagens.externoId, m.respostaAExternoId), eq(schema.mensagens.conversaId, conversa.id))).limit(1);
       respostaA = orig?.id ?? null;
     }
-    await tx.insert(schema.mensagens).values({
+    const [inserida] = await tx.insert(schema.mensagens).values({
       conversaId: conversa.id,
       respostaA,
       direcao: "incoming",
@@ -120,7 +120,7 @@ export async function receberMensagem(m: MensagemEntrante) {
       status: "received",
       externoId: m.externoId ?? null,
       metadados: m.metadados,
-    });
+    }).returning({ id: schema.mensagens.id });
     const reabrir = conversa.status === "resolvida" || conversa.status === "encerrada";
     await tx
       .update(schema.conversas)
@@ -137,7 +137,7 @@ export async function receberMensagem(m: MensagemEntrante) {
       .where(eq(schema.conversas.id, conversa.id));
     if (reabrir) await mensagemSistema(tx, conversa.id, "Conversa reaberta: o cliente mandou mensagem de novo");
     if (conversa.negocioId) await tx.update(schema.negocios).set({ ultimaInteracaoEm: new Date() }).where(eq(schema.negocios.id, conversa.negocioId));
-    return { conversaId: conversa.id, duplicada: false, nova, modo: reabrir ? "ia" : conversa.modo };
+    return { conversaId: conversa.id, mensagemId: inserida.id, duplicada: false, nova, modo: reabrir ? "ia" : conversa.modo };
   });
   return resultado;
 }
@@ -203,7 +203,7 @@ export async function enviarMensagem(
   if (texto && texto.length > 4096) throw new ErroRegra("Mensagem longa demais (máximo 4.096 caracteres).");
   const [c] = await db.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
   if (!c) throw new ErroRegra("Conversa não encontrada.");
-  const prov = await obterProvedor();
+  const prov = await obterProvedor({ demo: c.demo });
   const midia = await persistirMidia(e.midia);
   let respostaExterno: string | null = null;
   if (e.respostaA) {
@@ -282,7 +282,8 @@ export async function enviarModelo(u: Quem, conversaId: number, d: { nome: strin
 
 /** Andamento simulado das mensagens enviadas: entregue em ~2 s, lida em ~8 s. */
 export async function simularAndamento(conversaId?: number) {
-  if (!(await obterProvedor()).simulado) return;
+  /* só as mensagens enviadas pelo provedor simulado ("mock-...") mudam: vale também para as
+     conversas do simulador com a API Oficial ligada */
   const filtro = conversaId ? eq(schema.mensagens.conversaId, conversaId) : undefined;
   await db
     .update(schema.mensagens)
@@ -338,7 +339,7 @@ export async function aplicarRevogacao(externoIdOriginal: string) {
 
 async function mensagemComConversa(mensagemId: number) {
   const [m] = await db
-    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, direcao: schema.mensagens.direcao, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo, externoId: schema.mensagens.externoId, metadados: schema.mensagens.metadados, telefone: schema.conversas.contatoTelefone })
+    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, direcao: schema.mensagens.direcao, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo, externoId: schema.mensagens.externoId, metadados: schema.mensagens.metadados, telefone: schema.conversas.contatoTelefone, demo: schema.conversas.demo })
     .from(schema.mensagens)
     .innerJoin(schema.conversas, eq(schema.conversas.id, schema.mensagens.conversaId))
     .where(eq(schema.mensagens.id, mensagemId))
@@ -352,7 +353,7 @@ export async function reagirMensagem(u: Quem, mensagemId: number, emoji: string)
   const m = await mensagemComConversa(mensagemId);
   if ((m.metadados as { apagada?: unknown } | null)?.apagada) throw new ErroRegra("Essa mensagem foi apagada.");
   if (!m.externoId) throw new ErroRegra("Essa mensagem não chegou ao WhatsApp, então não dá para reagir.");
-  const prov = await obterProvedor();
+  const prov = await obterProvedor({ demo: m.demo });
   const r = await prov.reagir(m.telefone, m.externoId, emoji);
   if (!r.ok) throw new ErroRegra(`A reação não foi enviada: ${r.erro}`);
   await trocarReacao(m.id, m.metadados, "equipe", emoji);
