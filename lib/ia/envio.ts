@@ -4,7 +4,7 @@ import { db, schema, type Tx } from "@/lib/db";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { lerControle } from "./controle";
 import { MODELO_IA } from "./cliente";
-import { montarPromptSistema, versoesEmUso } from "./prompt";
+import { fontesAutorizadas, montarPromptSistema, versoesEmUso } from "./prompt";
 import { validarResposta, type Violacao } from "./validador";
 
 export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "validador" | "falha_envio" | null; violacoes: Violacao[]; explicacao: string | null };
@@ -21,7 +21,7 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
   /* conversa do simulador (demo): grava no chat, mas nada sai para o WhatsApp */
   const [cv] = await tx.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
   const simulado = !!p.simulado || !!cv?.demo;
-  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema() });
+  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema(), fontesAutorizadas: await fontesAutorizadas() });
 
   let motivo: ResultadoEnvioIa["motivo"] = null;
   let explicacao: string | null = null;
