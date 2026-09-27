@@ -183,6 +183,13 @@
       "when": 1790570000000,
       "tag": "0025_ia_tom_emojis",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790580000000,
+      "tag": "0026_fichas_conferidas",
+      "breakpoints": true
     }
   ]
 }

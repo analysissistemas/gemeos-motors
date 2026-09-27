@@ -95,3 +95,13 @@ test("nome do cliente: só o primeiro nome, bem escrito", async () => {
   assert.equal(primeiroNome("😊"), null);
   assert.equal(primeiroNome(null), null);
 });
+
+test("variar: escolhe uma das frases e nunca sai da lista", async () => {
+  const { variar, RX_PERGUNTA_NOME } = await import("../../lib/ia/workflow/util.ts");
+  const l = ["a", "b", "c"];
+  assert.equal(variar(l, 0), "a");
+  assert.equal(variar(l, 0.5), "b");
+  assert.equal(variar(l, 0.9999), "c");
+  assert.equal(variar(l, 1), "c");
+  for (const p of ["Com quem eu falo?", "Qual é o seu nome?", "Como posso te chamar?"]) assert.ok(RX_PERGUNTA_NOME.test(p), p);
+});

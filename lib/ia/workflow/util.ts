@@ -77,6 +77,14 @@ export function pausaDoBloco(bloco: string, intervaloSegundos: number) {
   return Math.round(Math.min(base * 2, base * (0.6 + bloco.length / 250)));
 }
 
+/** Uma frase entre várias do mesmo sentido, para o atendimento não soar repetido (pedido do dono). `sorte` (0 a 1) é para o teste. */
+export function variar<T>(lista: readonly T[], sorte = Math.random()): T {
+  return lista[Math.min(lista.length - 1, Math.floor(sorte * lista.length))];
+}
+
+/** Pergunta do nome em qualquer das formas que o atendimento usa. */
+export const RX_PERGUNTA_NOME = /com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama|como posso te chamar/iu;
+
 /** Primeiro nome para chamar o cliente ("carla souza" → "Carla"); nada de número, emoji ou apelido estranho. */
 export function primeiroNome(nome: string | null | undefined) {
   const p = (nome ?? "").trim().split(/\s+/)[0] ?? "";

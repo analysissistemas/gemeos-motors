@@ -39,13 +39,31 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corDaMoto, corNoTexto, formatarHistorico, mesclarFatos, pagamentoDoTexto, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corDaMoto, corNoTexto, formatarHistorico, RX_PERGUNTA_NOME, variar, mesclarFatos, pagamentoDoTexto, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 /* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
 const TEXTO_CONFIRMAR = "Quero te responder isso certinho, então vou confirmar com a equipe e te retorno assim que a loja abrir 🙏 Enquanto isso, posso te ajudar com mais alguma coisa sobre as motos?";
+/* Variações das frases prontas (pedido do dono, 27/09/2026: "não deixar tanto na cara que é IA, variando as mensagens") */
+const PERGUNTAS_NOME = ["Com quem eu falo? 😊", "Qual é o seu nome? 😊", "Como posso te chamar? 🙂"];
+const SO_CUMPRIMENTO_SEM_NOME = ["Aqui é da Gêmeos Motors 😊 Com quem eu falo?", "Que bom te ver por aqui! Aqui é da Gêmeos Motors 🛵 Qual é o seu nome?", "Seja bem-vindo à Gêmeos Motors 😊 Como posso te chamar?"];
+const SO_CUMPRIMENTO_COM_NOME = ["Aqui é da Gêmeos Motors 😊 Como posso te ajudar?", "Que bom te ver por aqui! Em que posso te ajudar hoje? 🛵", "Me conta, o que você está procurando? 😊"];
+const TUDO_CERTO_SEM_NOME = ["Tudo certo por aqui 😊 Com quem eu falo?", "Tudo ótimo por aqui! Qual é o seu nome? 😊", "Por aqui tudo bem 🙂 Como posso te chamar?"];
+const TUDO_CERTO_COM_NOME = ["Tudo certo por aqui 😊 Como posso te ajudar?", "Tudo ótimo por aqui! Em que posso te ajudar? 🙂", "Por aqui tudo bem 😊 Me conta, o que você precisa?"];
+const PRAZER: ((nome: string) => string)[] = [(n) => `Prazer, ${n}!`, (n) => `Prazer em te conhecer, ${n}!`, (n) => `Que bom falar com você, ${n}!`, (n) => `Muito prazer, ${n}!`];
+const FECHAMENTO_PROPOSTA = ["Posso passar para o nosso vendedor finalizar com você? 😊", "Quer que eu já chame o nosso vendedor para fechar com você? 🤝", "Posso pedir para o nosso vendedor finalizar agora? ✅"];
+const VARIANTES_FORA_HORARIO = [
+  "Nossa equipe de vendas volta assim que a loja abrir, mas eu já te ajudo por aqui 😊 Pode me perguntar o que quiser sobre as motos.",
+  "A loja está fechada agora, mas o atendimento continua por aqui 😊 Me conta o que você procura que eu te ajudo, e um vendedor te chama quando a loja abrir.",
+  "Já anotei tudo! Um vendedor te responde assim que a loja abrir, e enquanto isso eu sigo te ajudando por aqui 🛵",
+];
+const VARIANTES_CONFIRMAR = [
+  "Quero te passar essa informação certinha, então vou confirmar com a equipe e te retorno assim que a loja abrir 🙏 Enquanto isso, posso te ajudar com mais alguma coisa sobre as motos?",
+  "Essa eu prefiro confirmar com a equipe para não te passar nada errado 🙏 Te retorno assim que a loja abrir. Quer saber mais alguma coisa enquanto isso?",
+  "Vou checar esse detalhe com a equipe e te respondo certinho quando a loja abrir 🙏 Posso te ajudar em mais alguma coisa agora?",
+];
 const TEXTO_FORA_HORARIO = "Aqui é o assistente virtual da Gêmeos Motors 😊 Um vendedor te responde assim que a loja abrir, e enquanto isso eu te ajudo por aqui: pode me perguntar o que quiser sobre as motos.";
 /* ============================================================
    OS NÓS DO WORKFLOW (o que cada caixinha da tela faz de verdade)
@@ -566,7 +584,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     /* 1º contato e a IA não sabe o nome: a resposta tem que terminar pedindo o nome (e só isso de pergunta) */
     if (!correcao && r.ctx.texto && !r.ctx.humano && !(c.memoria.fatos.nome || g.ultimo()?.fatos?.nome) && (await primeiroContato(c.conversaId))) {
       const perguntas = (r.ctx.texto.match(/\?/g) ?? []).length;
-      const pedeNome = /com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu.test(r.ctx.texto);
+      const pedeNome = RX_PERGUNTA_NOME.test(r.ctx.texto);
       if (!pedeNome || perguntas > 1)
         correcao = 'É o primeiro contato e você ainda não sabe o nome do cliente. Responda de verdade o que ele perguntou (com os dados do catálogo e da base) e termine com UMA pergunta só: "Com quem eu falo?". Tire qualquer outra pergunta.';
     }
@@ -699,24 +717,25 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const cumprimento = c.saudacao ? soCumprimento(c.saudacao) : "";
     const padrao = saudacaoDoHorario();
     const arrumar = (s: string) => { const x = s.trim(); return x ? `${x[0].toUpperCase()}${x.slice(1)}${/[.!?]$|\p{Extended_Pictographic}\uFE0F?$/u.test(x) ? "" : "!"}` : x; };
-    const saudacao = jaConversou ? null : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! Tudo certinho?`;
+    const saudacao = jaConversou ? null : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! ${variar(["Tudo certinho?", "Tudo bem?", "Tudo bem por aí?", "Como vai?"])}`;
     const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome);
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
-    let resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
+    const textoBase = c.pipe?.texto === TEXTO_FORA_HORARIO ? variar(VARIANTES_FORA_HORARIO) : c.pipe?.texto === TEXTO_CONFIRMAR ? variar(VARIANTES_CONFIRMAR) : (c.pipe?.texto ?? "");
+    let resposta = quebrarEmBlocos(organizarTexto(textoBase), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
     if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0]), ...resposta.slice(1)].filter(Boolean);
     resposta = resposta.map(tirarEmojiDoInicio).filter(Boolean);
     /* pedido do dono: pegar o nome logo no começo. Sem nome ainda, a pergunta final da resposta vira
        "Com quem eu falo?" (uma pergunta só); a informação que o cliente pediu continua. */
-    if (!nomeConhecido && !jaConversou && resposta.length && !/com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu.test(resposta.join(" "))) {
+    if (!nomeConhecido && !jaConversou && resposta.length && !RX_PERGUNTA_NOME.test(resposta.join(" "))) {
       const ultimo = resposta[resposta.length - 1];
       const frases = ultimo.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [ultimo];
       const semPergunta = frases.filter((f) => !/\?/.test(f)).join("").trim();
-      resposta = [...resposta.slice(0, -1), ...(semPergunta ? [semPergunta] : []), "Com quem eu falo? 😊"];
+      resposta = [...resposta.slice(0, -1), ...(semPergunta ? [semPergunta] : []), variar(PERGUNTAS_NOME)];
     }
     /* 1º contato sem nome: só a pergunta do nome fica (as outras perguntas saem, a informação fica) */
     if (!nomeConhecido && !jaConversou && resposta.length) {
-      const NOME = /com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu;
+      const NOME = RX_PERGUNTA_NOME;
       resposta = resposta
         .map((b) => {
           const frases = b.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [b];
@@ -735,7 +754,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
             .trim();
         })
         .filter(Boolean);
-      if (resposta.length && !resposta.some((b) => NOME.test(b))) resposta.push("Com quem eu falo? 😊");
+      if (resposta.length && !resposta.some((b) => NOME.test(b))) resposta.push(variar(PERGUNTAS_NOME));
     }
     /* o cliente acabou de dizer o nome: a resposta o chama pelo nome ("Prazer, Carla!") — pedido do dono */
     const nomeNovo = !c.memoria.fatos.nome ? primeiroNome(c.aprendido.fatos.nome) : null;
@@ -748,15 +767,16 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
           .replace(/^prazer[^.!?\n]*[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "")
           .replace(/^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+)[!.,]*\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "")
           .trim() || primeiro0;
-      resposta = [/\n/.test(primeiro) ? `Prazer, ${nomeNovo}!` : `Prazer, ${nomeNovo}! ${primeiro[0].toUpperCase()}${primeiro.slice(1)}`, ...(/\n/.test(primeiro) ? [primeiro] : []), ...resto];
+      const prazer = variar(PRAZER)(nomeNovo);
+      resposta = [/\n/.test(primeiro) ? prazer : `${prazer} ${primeiro[0].toUpperCase()}${primeiro.slice(1)}`, ...(/\n/.test(primeiro) ? [primeiro] : []), ...resto];
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
-    if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
+    if (saudacao && !resposta.length) resposta = [variar(nomeConhecido ? SO_CUMPRIMENTO_COM_NOME : SO_CUMPRIMENTO_SEM_NOME)];
     /* a loja já falou hoje e a IA só cumprimentou de novo ("Olá! Tudo bem?"): o cumprimento repetido saiu e
        não sobrou nada. O cliente NUNCA fica sem resposta (pedido do dono, 27/09/2026). */
     const textoPronto = !!c.pipe?.texto && [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
-    if (!saudacao && !resposta.length && textoPronto) resposta = [TEXTO_CONFIRMAR];
-    if (!saudacao && !resposta.length && c.pipe?.texto && !textoPronto) resposta = [nomeConhecido ? "Tudo certo por aqui 😊 Como posso te ajudar?" : "Tudo certo por aqui 😊 Com quem eu falo?"];
+    if (!saudacao && !resposta.length && textoPronto) resposta = [variar(VARIANTES_CONFIRMAR)];
+    if (!saudacao && !resposta.length && c.pipe?.texto && !textoPronto) resposta = [variar(nomeConhecido ? TUDO_CERTO_COM_NOME : TUDO_CERTO_SEM_NOME)];
     /* o cliente disse quanto roda e perguntou se compensa, mas a resposta veio sem conta: o sistema põe a
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
@@ -770,7 +790,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       if (proposta) {
         /* saem as perguntas (confirmar, cor, pagamento) e a oferta de proposta: a proposta responde tudo */
         resposta = resposta.map((b) => b.split(/(?<=[.!?])\s+/u).filter((f) => !/proposta/iu.test(f) && !/\?\s*(?:\p{Extended_Pictographic}️?\s*)*$/u.test(f)).join(" ").trim()).filter((b) => /\p{L}/u.test(b));
-        resposta.push(proposta, "Posso passar para o nosso vendedor finalizar com você? 😊");
+        resposta.push(proposta, variar(FECHAMENTO_PROPOSTA));
       }
     }
     /* UMA pergunta por resposta: bloco que é só mais uma pergunta, depois de outra, sai */

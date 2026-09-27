@@ -75,7 +75,10 @@ function cenario(kmSemana: number, autonomia: number, p: ParametrosEconomia) {
 }
 
 /** Frase pronta para o cliente, em linguagem simples (o sistema põe na resposta quando a IA esquece a conta). */
-export function fraseEconomia(nome: string, autonomia: number, kmSemana: number, p: ParametrosEconomia) {
+const ABERTURAS_ECONOMIA = ["Fazendo a conta para o seu uso", "Colocando na ponta do lápis o seu uso", "Fiz a conta para o seu uso"];
+
+export function fraseEconomia(nome: string, autonomia: number, kmSemana: number, p: ParametrosEconomia, sorte = Math.random()) {
+  const abertura = ABERTURAS_ECONOMIA[Math.min(ABERTURAS_ECONOMIA.length - 1, Math.floor(sorte * ABERTURAS_ECONOMIA.length))];
   const mes = kmSemana * SEMANAS_NO_MES;
   const conta = (km: number) => {
     const cargas = km / autonomia;
@@ -85,7 +88,7 @@ export function fraseEconomia(nome: string, autonomia: number, kmSemana: number,
   const s = conta(kmSemana);
   const m = conta(mes);
   const litro = p.origemGasolina ? ` (${reaisCentavos(p.gasolina)} o litro, ${p.origemGasolina})` : "";
-  return `Fazendo a conta para o seu uso (uns ${kmSemana} km por semana) com a *${nome}*: na gasolina${litro} você gastaria ${reais(m.gas)} por mês. Com a elétrica, a luz fica de ${reais(m.luzMin)} a ${reais(m.luzMax)}. Ou seja, você economizaria de ${reais(Math.max(0, m.gas - m.luzMax))} a ${reais(m.gas - m.luzMin)} por mês (de ${reais(Math.max(0, s.gas - s.luzMax))} a ${reais(s.gas - s.luzMin)} por semana).`;
+  return `${abertura} (uns ${kmSemana} km por semana) com a *${nome}*: na gasolina${litro} você gastaria ${reais(m.gas)} por mês. Com a elétrica, a luz fica de ${reais(m.luzMin)} a ${reais(m.luzMax)}. Ou seja, você economizaria de ${reais(Math.max(0, m.gas - m.luzMax))} a ${reais(m.gas - m.luzMin)} por mês (de ${reais(Math.max(0, s.gas - s.luzMax))} a ${reais(s.gas - s.luzMin)} por semana).`;
 }
 
 /** Texto pronto da economia de um modelo, para o catálogo que a IA recebe.

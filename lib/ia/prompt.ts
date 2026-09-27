@@ -89,7 +89,7 @@ export async function fontesAutorizadas() {
   return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo.texto ? [catalogo.texto] : [])];
 }
 
-const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", peso: "peso", recarga: "recarga" };
+const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", /* o campo "peso" guarda quanto a moto AGUENTA (carga máxima), não o peso dela */ peso: "aguenta até (carga máxima)", recarga: "recarga" };
 
 /* Catálogo oficial (Estoque → Catálogo, o mesmo do site) + o que há no estoque agora. Regras do dono
    (27/09/2026): só moto ELÉTRICA (nunca combustão nem carro) e acessório; a IA mostra opções, ficha,
@@ -100,7 +100,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   const v = schema.veiculos;
   const [linhas, cores, unidades, base] = await Promise.all([
     db
-      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade })
+      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao })
       .from(m)
       .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, ["moto_eletrica", "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
@@ -132,7 +132,8 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
       : `sem unidade no estoque agora — ${l.disponibilidade === "sob_encomenda" ? "sob encomenda" : "a equipe confirma o prazo"}`;
     const autonomia = autonomiaMinima(f.autonomia);
     const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia, opcoes.kmSemana)}` : "";
-    return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}${conta}`;
+    const detalhes = l.descricao?.trim() ? ` | detalhes: ${l.descricao.trim()}` : "";
+    return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}${conta}`;
   });
   const texto = `# CATÁLOGO DA LOJA (o mesmo do site) E ESTOQUE AGORA
 Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
