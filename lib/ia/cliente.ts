@@ -1,18 +1,24 @@
 import "server-only";
 import { generateText, Output } from "ai";
+import { openai } from "@ai-sdk/openai";
 import type { z } from "zod";
 import { iaLigada } from "./controle";
 
 /* ============================================================
    PORTA ÚNICA PARA A IA
    Toda chamada passa por aqui: modelo, limites e tradução de erro ficam
-   num lugar só. Hoje o provedor é o AI Gateway da Vercel (autenticado
-   pelo OIDC do próprio projeto); trocar de modelo é mudar IA_MODELO.
+   num lugar só. Com OPENAI_API_KEY no ambiente (EasyPanel → Ambiente), fala
+   direto com a OpenAI (modelo IA_MODELO, padrão gpt-4.1-mini). Sem a chave,
+   cai no AI Gateway da Vercel (que não é mais usado desde a saída da Vercel).
 
    Regra de ouro dos prompts deste sistema: a IA SÓ usa os dados que
    recebe. Quando falta informação, ela diz que falta — nunca completa.
    ============================================================ */
-export const MODELO_IA = process.env.IA_MODELO || "anthropic/claude-sonnet-5";
+const COM_OPENAI = !!process.env.OPENAI_API_KEY;
+const NOME_OPENAI = process.env.IA_MODELO || "gpt-4.1-mini";
+/** Nome do modelo em uso (aparece nos registros e em Configurações). */
+export const MODELO_IA = COM_OPENAI ? `openai/${NOME_OPENAI}` : process.env.IA_MODELO || "anthropic/claude-sonnet-5";
+const modelo = () => (COM_OPENAI ? openai(NOME_OPENAI) : MODELO_IA);
 
 export class IaIndisponivel extends Error {}
 
@@ -23,6 +29,12 @@ async function exigirIaLigada() {
 
 function traduzirErro(e: unknown): IaIndisponivel {
   const texto = String((e as { message?: string })?.message ?? e);
+  if (texto.includes("insufficient_quota") || texto.includes("exceeded your current quota")) {
+    return new IaIndisponivel("A conta da OpenAI está sem crédito. Coloque crédito em platform.openai.com → Billing.");
+  }
+  if (texto.includes("Incorrect API key") || texto.includes("invalid_api_key")) {
+    return new IaIndisponivel("A chave da OpenAI (OPENAI_API_KEY) foi recusada. Confira a chave no EasyPanel → Ambiente.");
+  }
   if (texto.includes("credit card") || texto.includes("customer_verification_required")) {
     return new IaIndisponivel("A IA ainda não está ativada: falta cadastrar o cartão no AI Gateway da Vercel para liberar os créditos.");
   }
@@ -40,7 +52,7 @@ export async function gerarObjeto<S extends z.ZodType>(p: { schema: S; sistema: 
   await exigirIaLigada();
   try {
     const r = await generateText({
-      model: MODELO_IA,
+      model: modelo(),
       system: p.sistema,
       prompt: p.prompt,
       output: Output.object({ schema: p.schema }),

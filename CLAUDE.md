@@ -108,10 +108,9 @@ Callback cadastrado na Meta: `https://gemeosmotors.com.br/api/webhooks/whatsapp`
 **Saída da Vercel — cópia única dos dados: JÁ FEITA em 26/09/2026** (32 tabelas e
 10 arquivos do chat, com `scripts/copiar-banco.mjs` e `scripts/copiar-midia.mjs`). **Não repetir.**
 
-> **Exceção que ainda existe:** a IA (`lib/ia/cliente.ts`) chama o modelo
-> `anthropic/claude-sonnet-5` pelo AI Gateway da Vercel. Ela está desligada; antes
-> de ligar, trocar esse provedor (o atendimento já tem `lib/ia/modelo-openai.ts`,
-> que fala direto com a OpenAI).
+> **IA:** `lib/ia/cliente.ts` fala direto com a OpenAI quando `OPENAI_API_KEY` está no
+> Ambiente do EasyPanel (modelo `IA_MODELO`, padrão `gpt-4.1-mini`). Sem a chave, cairia no AI
+> Gateway da Vercel, que não é mais usado. Depois da chave: ligar em Inteligência artificial → Controle.
 
 O site antigo do celular, `gemeos-do-iphone.vercel.app`, **continua no ar** numa
 conta da Vercel que não abre neste computador. Para tirá-lo do ar precisa de
@@ -358,8 +357,7 @@ testes. Rodados em 26/09/2026: 20/20 em banco descartável. A limpeza dos testes
 - **Só o `.webp` vai para o GitHub.** Depois de acrescentar foto em
   `public/fotos/`, rodar `python otimizar_fotos.py` **e**
   `python gerar_lista_fotos.py`.
-- **IA pelo AI Gateway da Vercel** (`lib/ia/cliente.ts`) é o último pedaço
-  ligado à Vercel: exige cartão na conta. Trocar o provedor antes de ligar a IA.
+- **IA sem chave da OpenAI** cai no AI Gateway da Vercel (sem conta ativa): a tela diz "sem credencial". Pôr `OPENAI_API_KEY` no EasyPanel.
 
 ## Como mexer
 
@@ -375,8 +373,7 @@ python gerar_lista_fotos.py      # atualiza public/fotos-disponiveis.js (obrigat
 ## O que falta (em ordem de impacto)
 
 1. **Desligar Vercel, Neon e Blob** — as cópias já foram feitas (26/09/2026).
-2. **IA sem Vercel** — trocar o provedor de `lib/ia/cliente.ts` (hoje AI Gateway)
-   antes de ligar diagnóstico de perda, triagem e apoio da OS.
+2. **Ligar a IA** — já fala com a OpenAI; falta a `OPENAI_API_KEY` no EasyPanel e ligar no Controle.
 3. **WhatsApp real** — credenciais da Meta em Configurações e o webhook
    `https://<SITE_URL>/api/webhooks/whatsapp` cadastrado no app da Meta.
 4. **Vitrine lendo a quantidade em estoque do banco** — o catálogo já vem do
