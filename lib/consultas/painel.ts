@@ -48,7 +48,7 @@ export async function carregarPainel(inicio: Date, fim: Date, verLucro: boolean)
         (select count(*) from negocios where demo = false and criado_em >= ${ini} and criado_em < ${fi})::int as leads,
         (select count(distinct e.negocio_id) from negocio_eventos e join negocios n on n.id = e.negocio_id where n.demo = false and e.criado_em >= ${ini} and e.criado_em < ${fi} and (e.tipo = 'proposta' or (e.tipo = 'etapa' and e.dados->>'para' = 'proposta')))::int as propostas,
         (select count(*) from negocios where demo = false and etapa = 'perdida' and perdido_em >= ${ini} and perdido_em < ${fi})::int as perdidas,
-        (select count(*) from veiculos where status = 'disponivel')::int as disponiveis,
+        (select count(*) from veiculos where status = 'disponivel' and not teste)::int as disponiveis,
         (select count(*) from vendas where status in ('aguardando_assinatura','assinada'))::int as "aguardandoAssinatura"
     `),
     q<{ qtd: number; valor: number }>(sql`

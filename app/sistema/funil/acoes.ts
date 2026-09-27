@@ -82,6 +82,7 @@ export async function acaoDetalheNegocio(id: number) {
 }
 
 export async function acaoVeiculosVendaveis() {
-  await autorizar("funil.ver");
-  return listarVeiculosVendaveis();
+  const u = await autorizar("funil.ver");
+  /* o admin vê também os veículos de teste ("[TESTE]"), para montar um negócio de teste da IA */
+  return listarVeiculosVendaveis({ incluirTeste: u.papel === "admin" });
 }

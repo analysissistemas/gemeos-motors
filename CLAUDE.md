@@ -246,6 +246,10 @@ página, ação e rota de API — esconder botão não é segurança.
   gerado anula documento e assinatura.
 - **Venda só é finalizada** com pagamentos batendo, documento gerado e assinado.
 - **"Sincronizar Kommo" foi removido** — não existe integração com o Kommo.
+- **Veículo de teste** (`veiculos.teste`, só admin marca, selo "Teste · IA"): serve para testar a
+  IA. Fica fora do estoque real, do painel, das movimentações, dos avisos a interessados e da venda
+  (bloqueada no servidor); no funil, só o admin vê ("[TESTE]"). A IA só o enxerga em conversa simulada.
+- **Desligar a IA** exige digitar `DESLIGAR` (maiúsculas), conferido no servidor (`acaoSalvarControle`).
 - **Cada veículo é peça única** (chassi, quilometragem, avarias, e placa e ano
   quando é emplacado), nunca contagem por modelo. **Acessórios são por
   quantidade.**

@@ -13,7 +13,7 @@ export default async function PaginaEstoque({ searchParams }: { searchParams: Pr
   const b = await searchParams;
   const verCusto = pode(u.papel, "custo.ver");
   const [veiculos, resumo, modelos, unidades, movimentacoes, cores, catalogo] = await Promise.all([
-    listarVeiculos({ ...b, verCusto }),
+    listarVeiculos({ ...b, verCusto, verTeste: u.papel === "admin" }),
     resumoEstoque(verCusto),
     listarModelos(),
     listarUnidades(),
@@ -32,7 +32,7 @@ export default async function PaginaEstoque({ searchParams }: { searchParams: Pr
         cores={cores}
         catalogo={catalogo}
         filtros={b}
-        permissoes={{ editar: pode(u.papel, "estoque.editar"), custo: verCusto }}
+        permissoes={{ editar: pode(u.papel, "estoque.editar"), custo: verCusto, admin: u.papel === "admin" }}
       />
     </Pagina>
   );

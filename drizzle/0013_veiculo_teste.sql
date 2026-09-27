@@ -1,0 +1,1 @@
+ALTER TABLE "veiculos" ADD COLUMN "teste" boolean DEFAULT false NOT NULL;

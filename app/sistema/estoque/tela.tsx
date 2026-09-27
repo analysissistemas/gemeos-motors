@@ -9,7 +9,7 @@ import { brl, data, formatarPlaca, km } from "@/lib/formato";
 import { Abas } from "@/components/ui/abas";
 import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
-import { AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
+import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
@@ -42,7 +42,7 @@ export function TelaEstoque({
   cores: CorModelo[];
   catalogo: ItemCatalogo[];
   filtros: { q?: string; status?: string; tipo?: string };
-  permissoes: { editar: boolean; custo: boolean };
+  permissoes: { editar: boolean; custo: boolean; admin: boolean };
 }) {
   const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov">("veiculos");
   const [editando, setEditando] = useState<Partial<VeiculoLinha> | null>(null);
@@ -161,7 +161,9 @@ export function TelaEstoque({
                       return (
                         <tr key={v.id} className="border-b border-linha last:border-0 hover:bg-trilho">
                           <td className="px-4 py-3">
-                            <p className="font-semibold">{[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")}</p>
+                            <p className="font-semibold">
+                              {[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+                            </p>
                             <p className="text-[12px] text-ink-3">
                               {TIPOS_VEICULO[v.tipo as keyof typeof TIPOS_VEICULO]}
                               {v.cor ? ` · ${v.cor}` : ""}
@@ -205,7 +207,9 @@ export function TelaEstoque({
                   return (
                     <li key={v.id} className="flex items-start gap-2 border-b border-linha px-4 py-3 last:border-0">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">{[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")}</p>
+                        <p className="truncate font-semibold">
+                          {[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+                        </p>
                         <p className="truncate text-[12.5px] text-ink-2">
                           {[CONDICOES[v.condicao as keyof typeof CONDICOES], v.cor, v.anoModelo ? `${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : null, v.km ? km(v.km) : null].filter(Boolean).join(" · ")}
                         </p>
@@ -291,7 +295,7 @@ export function TelaEstoque({
         </div>
       )}
 
-      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} />
+      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} admin={permissoes.admin} />
     </>
   );
 }
@@ -314,6 +318,7 @@ function FormularioVeiculo({
   cores,
   unidades,
   custo,
+  admin,
 }: {
   aberto: boolean;
   aoMudar: (v: boolean) => void;
@@ -322,6 +327,7 @@ function FormularioVeiculo({
   cores: CorModelo[];
   unidades: { id: number; nome: string }[];
   custo: boolean;
+  admin: boolean;
 }) {
   return (
     <Dialogo
@@ -331,7 +337,7 @@ function FormularioVeiculo({
       titulo={inicial.id ? "Editar veículo" : "Dar entrada em veículo"}
       descricao="Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
     >
-      {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} aoFechar={() => aoMudar(false)} />}
+      {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />}
     </Dialogo>
   );
 }
@@ -342,6 +348,7 @@ function CorpoVeiculo({
   cores,
   unidades,
   custo,
+  admin,
   aoFechar,
 }: {
   inicial: Partial<VeiculoLinha>;
@@ -349,6 +356,7 @@ function CorpoVeiculo({
   cores: CorModelo[];
   unidades: { id: number; nome: string }[];
   custo: boolean;
+  admin: boolean;
   aoFechar: () => void;
 }) {
   const [f, setF] = useState<Partial<VeiculoLinha>>(() =>
@@ -498,6 +506,16 @@ function CorpoVeiculo({
             <option value="inativo">Fora de venda</option>
           </Selecao>
         </Campo>
+        {admin && (
+          <div className="sm:col-span-6">
+            <Alternar
+              marcado={!!f.teste}
+              aoMudar={(v) => set("teste", v)}
+              rotulo="Veículo de teste (só para testar a IA)"
+              descricao="Não entra no estoque real, nas vendas, no painel nem nos avisos aos clientes. Só administradores veem. A IA só enxerga ele em conversa simulada."
+            />
+          </div>
+        )}
         <Campo rotulo="Observações (avarias, detalhes)" className="sm:col-span-6">
           <AreaTexto value={f.observacoes ?? ""} onChange={(e) => set("observacoes", e.target.value)} placeholder="Risco na carenagem, pneu novo, revisão feita…" />
         </Campo>

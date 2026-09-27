@@ -92,6 +92,13 @@
       "when": 1790461310092,
       "tag": "0012_indices_telefone",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790478280222,
+      "tag": "0013_veiculo_teste",
+      "breakpoints": true
     }
   ]
 }

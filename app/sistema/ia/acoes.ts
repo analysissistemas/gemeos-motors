@@ -8,7 +8,7 @@ import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { proximaVersao } from "@/lib/ia/prompt";
 import { CHAVES_SECOES, secaoPorChave } from "@/lib/ia/secoes";
-import { salvarControle } from "@/lib/ia/controle";
+import { iaLigada, salvarControle } from "@/lib/ia/controle";
 import { PERMISSOES_IA } from "@/lib/ia/permissoes";
 import { validarResposta } from "@/lib/ia/validador";
 
@@ -143,10 +143,16 @@ const esquemaControle = z.object({
   permissoes: z.object(Object.fromEntries(PERMISSOES_IA.map((p) => [p.chave, z.boolean()])) as Record<(typeof PERMISSOES_IA)[number]["chave"], z.ZodBoolean>),
 });
 
-export async function acaoSalvarControle(dados: unknown) {
+/** Palavra que o dono pediu para desligar a IA (pedido de 27/09/2026): evita desligar sem querer. */
+const PALAVRA_DESLIGAR = "DESLIGAR";
+
+export async function acaoSalvarControle(dados: unknown, confirmacao?: string) {
   return executar(async () => {
     const u = await autorizarConfig("ia");
     const c = esquemaControle.parse(dados);
+    /* desligar a IA (que estava ligada) só com a palavra digitada; conferido aqui no servidor */
+    if (!c.ligada && (await iaLigada()) && confirmacao !== PALAVRA_DESLIGAR)
+      throw new ErroRegra(`Para desligar a IA, digite ${PALAVRA_DESLIGAR} na confirmação.`);
     await salvarControle(c, u.id);
     const ativas = PERMISSOES_IA.filter((p) => c.permissoes[p.chave]).map((p) => p.rotulo);
     await registrarLog(u, {

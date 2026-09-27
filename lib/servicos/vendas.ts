@@ -53,9 +53,10 @@ export async function salvarRascunho(u: Quem, vendaId: number, entrada: unknown)
     if (venda.negocioId && venda.clienteId !== d.clienteId) throw new ErroRegra("A venda veio de um negócio: o cliente não muda.");
 
     if (d.veiculoId && d.veiculoId !== venda.veiculoId) {
-      const [v] = await tx.select({ status: schema.veiculos.status }).from(schema.veiculos).where(eq(schema.veiculos.id, d.veiculoId)).limit(1);
+      const [v] = await tx.select({ status: schema.veiculos.status, teste: schema.veiculos.teste }).from(schema.veiculos).where(eq(schema.veiculos.id, d.veiculoId)).limit(1);
       if (!v) throw new ErroRegra("Veículo não encontrado.");
       if (v.status === "vendido") throw new ErroRegra("Este veículo já foi vendido.");
+      if (v.teste) throw new ErroRegra("Veículo de teste não pode ser vendido: ele existe só para testar a IA.");
       if (venda.veiculoId) await tx.update(schema.veiculos).set({ status: "disponivel" }).where(and(eq(schema.veiculos.id, venda.veiculoId), eq(schema.veiculos.status, "reservado")));
       await tx.update(schema.veiculos).set({ status: "reservado" }).where(and(eq(schema.veiculos.id, d.veiculoId), eq(schema.veiculos.status, "disponivel")));
     }

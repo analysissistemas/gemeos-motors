@@ -24,13 +24,16 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
     const u = await autorizar("estoque.editar");
     const d = esquemaVeiculo.parse(entrada);
     const podeCusto = pode(u.papel, "custo.ver");
+    /* só administrador marca ou desmarca "veículo de teste" */
+    const podeTeste = u.papel === "admin";
+    if (!podeTeste) delete d.teste;
     /* elétrica não tem placa, Renavam nem ano-modelo: não guardar o que não existe */
     if (ehEletrico(d.tipo)) {
       d.placa = null;
       d.renavam = null;
     }
     if (d.status === "vendido") throw new ErroRegra("Veículo vira vendido pela finalização da venda, não pelo cadastro.");
-    const nome = [d.marca, d.modelo, d.cor].filter(Boolean).join(" ");
+    const nome = [d.marca, d.modelo, d.cor].filter(Boolean).join(" ") + (d.teste ? " (teste)" : "");
 
     if (entrada.id) {
       const id = Number(entrada.id);
@@ -52,7 +55,8 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
             dados: { campos },
           }, tx);
       });
-      if (d.status === "disponivel") await avisarInteressados(valores.modeloId ?? antes.modeloId);
+      /* veículo de teste nunca avisa cliente de verdade */
+      if (d.status === "disponivel" && !(d.teste ?? antes.teste)) await avisarInteressados(valores.modeloId ?? antes.modeloId);
       revalidatePath("/sistema/estoque");
       return { id };
     }
@@ -60,12 +64,12 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
     const id = await db.transaction(async (tx) => {
       const [novo] = await tx
         .insert(schema.veiculos)
-        .values({ ...d, entradaEm: d.entradaEm ?? undefined, custo: podeCusto ? d.custo : null, criadoPor: u.id })
+        .values({ ...d, teste: podeTeste ? !!d.teste : false, entradaEm: d.entradaEm ?? undefined, custo: podeCusto ? d.custo : null, criadoPor: u.id })
         .returning({ id: schema.veiculos.id });
       await registrarLog(u, { acao: "veiculo.criado", entidade: "veiculo", entidadeId: novo.id, descricao: `Deu entrada no veículo ${nome}${d.valorAnunciado ? ` (${brl(d.valorAnunciado)})` : ""}` }, tx);
       return novo.id;
     });
-    if (d.status === "disponivel") {
+    if (d.status === "disponivel" && !d.teste) {
       const [novo] = await db.select({ modeloId: schema.veiculos.modeloId }).from(schema.veiculos).where(eq(schema.veiculos.id, id)).limit(1);
       await avisarInteressados(novo?.modeloId);
     }
@@ -85,7 +89,7 @@ export async function mudarStatusVeiculo(id: number, status: "disponivel" | "res
       await tx.update(schema.veiculos).set({ status, atualizadoEm: new Date() }).where(eq(schema.veiculos.id, id));
       await registrarLog(u, { acao: "veiculo.status", entidade: "veiculo", entidadeId: id, descricao: `Mudou ${v.modelo} de "${STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}" para "${STATUS_VEICULO[status]}"` }, tx);
     });
-    if (status === "disponivel") await avisarInteressados(v.modeloId);
+    if (status === "disponivel" && !v.teste) await avisarInteressados(v.modeloId);
     revalidatePath("/sistema/estoque");
     return null;
   }, "Situação atualizada");

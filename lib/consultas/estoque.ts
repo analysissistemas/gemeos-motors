@@ -3,13 +3,14 @@ import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, schema } from "@/lib/db";
 
-export async function listarVeiculos(f: { q?: string; status?: string; tipo?: string; verCusto: boolean }) {
+export async function listarVeiculos(f: { q?: string; status?: string; tipo?: string; verCusto: boolean; verTeste?: boolean }) {
   const v = schema.veiculos;
   const un = schema.unidades;
   const termo = f.q?.trim();
   const linhas = await db
     .select({
       id: v.id,
+      teste: v.teste,
       modeloId: v.modeloId,
       tipo: v.tipo,
       marca: v.marca,
@@ -39,6 +40,8 @@ export async function listarVeiculos(f: { q?: string; status?: string; tipo?: st
     .where(
       and(
         f.status ? eq(v.status, f.status) : ne(v.status, "inativo"),
+        /* veículo de teste: só o administrador vê */
+        f.verTeste ? undefined : eq(v.teste, false),
         f.tipo ? eq(v.tipo, f.tipo) : undefined,
         termo
           ? or(
@@ -67,7 +70,8 @@ export async function resumoEstoque(verCusto: boolean) {
       semValor: sql<number>`count(*) filter (where ${v.status} = 'disponivel' and ${v.valorAnunciado} is null)::int`,
       paradosMais60: sql<number>`count(*) filter (where ${v.status} = 'disponivel' and ${v.entradaEm} < current_date - 60)::int`,
     })
-    .from(v);
+    .from(v)
+    .where(eq(v.teste, false));
   return r;
 }
 
@@ -125,7 +129,7 @@ export async function listarCatalogo() {
       lancamentoTexto: m.lancamentoTexto,
       ordem: m.ordem,
       ativo: m.ativo,
-      veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = "modelos"."id")`,
+      veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = "modelos"."id" and not v.teste)`,
       reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status <> 'cancelada')`,
       reservasNovas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status = 'nova')`,
     })
@@ -135,19 +139,21 @@ export async function listarCatalogo() {
 export type ItemCatalogo = Awaited<ReturnType<typeof listarCatalogo>>[number];
 
 /** Veículos que podem entrar num negócio ou venda. */
-export async function listarVeiculosVendaveis() {
+/** Veículos que podem entrar numa venda ou negócio. Os de teste só entram no funil do admin
+    (para testar a IA num negócio simulado), marcados com "[TESTE]"; venda nunca. */
+export async function listarVeiculosVendaveis(opcoes: { incluirTeste?: boolean } = {}) {
   const v = schema.veiculos;
   return db
     .select({
       id: v.id,
-      rotulo: sql<string>`concat_ws(' ', ${v.marca}, ${v.modelo}, ${v.versao}, ${v.cor}, case when ${v.anoModelo} is not null then ${v.anoModelo}::text end, case when ${v.placa} is not null then '· ' || ${v.placa} end)`,
+      rotulo: sql<string>`concat_ws(' ', case when ${v.teste} then '[TESTE]' end, ${v.marca}, ${v.modelo}, ${v.versao}, ${v.cor}, case when ${v.anoModelo} is not null then ${v.anoModelo}::text end, case when ${v.placa} is not null then '· ' || ${v.placa} end)`,
       valorAnunciado: v.valorAnunciado,
       status: v.status,
       condicao: v.condicao,
     })
     .from(v)
-    .where(or(eq(v.status, "disponivel"), eq(v.status, "reservado")))
-    .orderBy(asc(v.modelo));
+    .where(and(or(eq(v.status, "disponivel"), eq(v.status, "reservado")), opcoes.incluirTeste ? undefined : eq(v.teste, false)))
+    .orderBy(asc(v.teste), asc(v.modelo));
 }
 
 /** Cores cadastradas em cada modelo (inclusive as escondidas da vitrine), na ordem de exibição. */

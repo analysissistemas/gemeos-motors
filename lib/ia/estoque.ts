@@ -1,4 +1,5 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { iaPode } from "./controle";
 import { decidirEstoque, termoValido, type ConsultaEstoque, type ItemEstoque, type ResultadoEstoque } from "./estoque-tipos";
@@ -14,7 +15,7 @@ import { decidirEstoque, termoValido, type ConsultaEstoque, type ItemEstoque, ty
    Sem permissão, com termo inválido ou com erro, devolve estado que NÃO
    confirma nada; a IA então não afirma que tem nem que não tem.
    ============================================================ */
-export async function consultarEstoque(consulta: ConsultaEstoque, opcoes: { ignorarPermissao?: boolean } = {}): Promise<ResultadoEstoque> {
+export async function consultarEstoque(consulta: ConsultaEstoque, opcoes: { ignorarPermissao?: boolean; incluirTeste?: boolean } = {}): Promise<ResultadoEstoque> {
   const nao = (estado: ResultadoEstoque["estado"]): ResultadoEstoque => ({ estado, confirmado: false, itens: [] });
   if (!opcoes.ignorarPermissao && !(await iaPode("lerEstoque"))) return nao("SEM_PERMISSAO");
   if (!termoValido(consulta.termo)) return nao("TERMO_INVALIDO");
@@ -23,6 +24,8 @@ export async function consultarEstoque(consulta: ConsultaEstoque, opcoes: { igno
     const linhas: ItemEstoque[] = await db
       .select({ id: v.id, tipo: v.tipo, marca: v.marca, modelo: v.modelo, versao: v.versao, cor: v.cor, condicao: v.condicao, status: v.status })
       .from(v)
+      /* veículo de teste só aparece em conversa simulada (quem monta as Deps decide) */
+      .where(opcoes.incluirTeste ? undefined : eq(v.teste, false))
       .limit(1000);
     return decidirEstoque(linhas, consulta.termo);
   } catch {

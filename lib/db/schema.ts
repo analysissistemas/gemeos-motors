@@ -186,6 +186,9 @@ export const veiculos = pgTable(
     valorAnunciado: dinheiro(),
     custo: dinheiro(), // só administrador vê
     status: text().notNull().default("disponivel"), // disponivel | reservado | vendido | inativo
+    /* veículo de TESTE (só admin marca): serve para testar a IA; fica fora do estoque real,
+       das vendas, do painel, dos avisos a interessados e da IA que fala com cliente de verdade */
+    teste: boolean().notNull().default(false),
     unidadeId: integer().references(() => unidades.id, { onDelete: "set null" }),
     origemEntrada: text(), // fornecedor | troca | compra | consignado
     observacoes: text(),

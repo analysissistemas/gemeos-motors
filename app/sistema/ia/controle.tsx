@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Painel, Selo, TituloSecao } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
-import { Alternar, AreaTexto } from "@/components/ui/campos";
+import { Alternar, AreaTexto, Campo, Entrada } from "@/components/ui/campos";
+import { Dialogo } from "@/components/ui/dialogo";
+import { OctagonAlert, Power } from "lucide-react";
 import { MOTIVOS_BLOQUEIO, PERMISSOES_IA, type ControleIa } from "@/lib/ia/permissoes";
 import type { Violacao } from "@/lib/ia/validador";
 import { acaoSalvarControle, acaoValidarTexto } from "./acoes";
@@ -20,12 +22,30 @@ export function AbaControle({ controle, execucoes }: { controle: ControleIa; exe
   const mudou = JSON.stringify(c) !== JSON.stringify(controle);
 
   const [teste, setTeste] = useState("");
+  /* confirmação para desligar: só aparece o botão com DESLIGAR digitado em maiúsculas */
+  const [desligando, setDesligando] = useState(false);
+  const [palavra, setPalavra] = useState("");
+  const desligar = () =>
+    iniciar(async () => {
+      const r = await acaoSalvarControle({ ...c, ligada: false }, palavra);
+      if (!r.ok) return void toast.error(r.erro);
+      toast.success("IA desligada em todos os atendimentos.");
+      setDesligando(false);
+      setPalavra("");
+      setC({ ...c, ligada: false });
+      router.refresh();
+    });
   const [resultado, setResultado] = useState<{ aprovada: boolean; violacoes: Violacao[] } | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
       <Painel className="p-5">
         <TituloSecao acao={c.ligada ? <Selo tom="bom">IA ligada</Selo> : <Selo tom="neutro">IA desligada</Selo>}>Chave geral e permissões</TituloSecao>
+        {controle.ligada && (
+          <Botao variante="perigo" className="mb-4" onClick={() => setDesligando(true)}>
+            <Power className="size-4" /> Desligar IA
+          </Botao>
+        )}
         <p className="mb-4 text-[13px] text-ink-2">
           Com a chave geral desligada a IA não faz nada: nenhuma análise, nenhuma resposta, nenhuma chamada ao modelo. O sistema continua funcionando normalmente. Toda resposta da IA passa pelo validador antes de poder chegar ao cliente.
         </p>
@@ -48,6 +68,8 @@ export function AbaControle({ controle, execucoes }: { controle: ControleIa; exe
             carregando={pendente}
             disabled={!mudou}
             onClick={() => {
+              /* desmarcar a chave geral também passa pela confirmação com DESLIGAR */
+              if (!c.ligada && controle.ligada) return setDesligando(true);
               if (c.ligada && !controle.ligada && !confirm("Ligar a IA? Ela só envia mensagens se a permissão de envio estiver marcada, e sempre depois do validador.")) return;
               iniciar(async () => {
                 const r = await acaoSalvarControle(c);
@@ -61,6 +83,41 @@ export function AbaControle({ controle, execucoes }: { controle: ControleIa; exe
           </Botao>
         </div>
       </Painel>
+
+      <Dialogo
+        aberto={desligando}
+        aoMudar={(v) => {
+          setDesligando(v);
+          if (!v) setPalavra("");
+        }}
+        titulo="Desligar a IA?"
+        rodape={
+          <>
+            <Botao onClick={() => setDesligando(false)}>Cancelar</Botao>
+            {palavra === "DESLIGAR" && (
+              <Botao variante="perigo" carregando={pendente} onClick={desligar}>
+                Confirmar e desligar
+              </Botao>
+            )}
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div role="alert" className="flex gap-3 rounded-2xl border border-critico/40 bg-critico/10 p-3 text-[13.5px]">
+            <OctagonAlert className="mt-0.5 size-5 shrink-0 text-critico" />
+            <div>
+              <p className="font-semibold text-critico">Atenção: isto para a IA em TODOS os atendimentos.</p>
+              <p className="mt-1 text-ink-2">
+                Nenhuma conversa recebe mais resposta, triagem ou análise da IA até alguém ligar de novo. As conversas em andamento
+                passam a depender só da equipe.
+              </p>
+            </div>
+          </div>
+          <Campo rotulo="Para confirmar, digite DESLIGAR (em letras maiúsculas)">
+            <Entrada value={palavra} onChange={(e) => setPalavra(e.target.value)} autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="DESLIGAR" />
+          </Campo>
+        </div>
+      </Dialogo>
 
       <Painel className="p-5">
         <TituloSecao>Testar o validador</TituloSecao>

@@ -108,6 +108,7 @@ export const esquemaInteracao = z.object({
 
 export const esquemaVeiculo = z.object({
   modeloId: idOpcional,
+  teste: z.boolean().optional(),
   tipo: z.enum(chaves(TIPOS_VEICULO)),
   marca: opcional(60),
   modelo: z.string().trim().min(1, "Informe o modelo").max(80),
