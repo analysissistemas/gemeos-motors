@@ -23,7 +23,20 @@ export function quebrarEmBlocos(texto: string, max: number): string[] {
   return [...partes.slice(0, max - 1), partes.slice(max - 1).join("\n\n")];
 }
 
-/** Pausa antes de um bloco: o intervalo configurado, maior para texto longo (até o dobro). */
+/** Tira do começo da resposta o cumprimento ("Bom dia! Tudo certinho?") quando a saudação já vai
+    numa mensagem separada; sem isso o cliente recebia o mesmo cumprimento duas vezes seguidas. */
+export function tirarCumprimentoRepetido(texto: string) {
+  let t = texto.trim();
+  /* cumprimento, "tudo bem?" e apresentação ("Aqui é da Gêmeos Motors", "Sou a assistente...") no começo */
+  const inicio = [
+    /^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])(?![\p{L}])[^.!?\n]*[.!?]+\s*/iu,
+    /^tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?\n]*[?!.]+\s*/iu,
+    /^(?:aqui\s+(?:é|e)\s+|(?:eu\s+)?sou\s+(?:a|o)\s+(?:assistente|atendente))[^.!?\n]*[.!?]+\s*/iu,
+  ];
+  for (let volta = 0; volta < 3; volta++) for (const rx of inicio) t = t.replace(rx, "");
+  return t.trim();
+}
+
 /** Quanto tempo uma pessoa levaria digitando este bloco no celular: ~20 letras por segundo,
     entre 2 e 9 s, com uma variação pequena para não ficar robótico. `sorte` (0 a 1) é para o teste. */
 export function tempoDigitando(bloco: string, sorte = Math.random()) {
@@ -32,6 +45,7 @@ export function tempoDigitando(bloco: string, sorte = Math.random()) {
   return Math.round(Math.min(9000, Math.max(2000, base * variacao)));
 }
 
+/** Pausa antes de um bloco: o intervalo configurado, maior para texto longo (até o dobro). */
 export function pausaDoBloco(bloco: string, intervaloSegundos: number) {
   const base = intervaloSegundos * 1000;
   return Math.round(Math.min(base * 2, base * (0.6 + bloco.length / 250)));

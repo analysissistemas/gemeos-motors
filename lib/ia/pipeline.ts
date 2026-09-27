@@ -36,6 +36,9 @@ export type Deps = {
   promptSistema: string;
   /** marcas e modelos que existem no catálogo; a IA só pode citar o que o estoque confirmou */
   nomesDeProdutos: string[];
+  /** modelos e marcas do catálogo que a loja vende (ativo e no site): podem ser citados, com preço
+      de tabela e ficha, mas SEM afirmar disponibilidade (isso só com o estoque confirmando) */
+  nomesDoCatalogo?: string[];
   /** textos autorizados (base de conhecimento ativa): horário e endereço só valem se estiverem aqui */
   fontesAutorizadas: string[];
   gerar: (p: { mensagemCliente: string; estoque: ResultadoEstoque | null }) => Promise<SaidaModelo>;
@@ -232,7 +235,8 @@ export const travaDeFatos: EtapaDeAtendimento = {
     const t = c.texto;
     if (!t || ehTextoFixo(t) || t === c.textoCatalogo) return {};
     /* nunca citar produto que o estoque não confirmou nesta execução */
-    if (produtosNaoConfirmados(t, c.deps.nomesDeProdutos, c.estoque).length) return bloqueia("produto_sem_confirmacao");
+    const doCatalogo = new Set((c.deps.nomesDoCatalogo ?? []).map(norm));
+    if (produtosNaoConfirmados(t, c.deps.nomesDeProdutos, c.estoque).filter((n) => !doCatalogo.has(n)).length) return bloqueia("produto_sem_confirmacao");
     if (afirmaDisponibilidade(t) && c.estoque?.estado !== "CONFIRMADO_DISPONIVEL") return bloqueia("produto_sem_confirmacao");
     /* nunca afirmar horário ou endereço que não esteja numa fonte autorizada */
     if (afirmacoesSemFonte(t, c.deps.fontesAutorizadas).length) return bloqueia("sem_fonte_autorizada");

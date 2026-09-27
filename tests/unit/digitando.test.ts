@@ -19,3 +19,21 @@ test("a variação é pequena (±15%) para não ficar robótico", () => {
   const a = tempoDigitando(t, 0), b = tempoDigitando(t, 1);
   assert.ok(b > a && b / a < 1.4, `${a} .. ${b}`);
 });
+
+import { tirarCumprimentoRepetido } from "../../lib/ia/workflow/util.ts";
+test("cumprimento repetido sai do começo da resposta; o resto fica igual", () => {
+  assert.equal(
+    tirarCumprimentoRepetido("Bom diaa! Tudo certinho? Hoje a loja está fechada, mas nossa equipe responde assim que abrirmos."),
+    "Hoje a loja está fechada, mas nossa equipe responde assim que abrirmos.",
+  );
+  assert.equal(tirarCumprimentoRepetido("Boa noite, Mariana! A AG08 custa R$ 10.990."), "A AG08 custa R$ 10.990.");
+  assert.equal(tirarCumprimentoRepetido("A AG08 custa R$ 10.990. Bom dia!"), "A AG08 custa R$ 10.990. Bom dia!");
+  assert.equal(tirarCumprimentoRepetido("Oitenta km de autonomia."), "Oitenta km de autonomia.");
+  assert.equal(tirarCumprimentoRepetido("Bom dia! Tudo bem?"), "");
+});
+
+test("apresentação repetida também sai do começo da resposta", () => {
+  assert.equal(tirarCumprimentoRepetido("Oi! Aqui é a assistente virtual da Gêmeos Motors. A M6 custa R$ 10.990."), "A M6 custa R$ 10.990.");
+  assert.equal(tirarCumprimentoRepetido("Sou a assistente da loja. Posso te ajudar com a AG08?"), "Posso te ajudar com a AG08?");
+  assert.equal(tirarCumprimentoRepetido("Aqui na loja a M6 é a mais procurada."), "Aqui na loja a M6 é a mais procurada.");
+});

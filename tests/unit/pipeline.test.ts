@@ -34,6 +34,7 @@ type Cenario = {
   modelo: (SaidaModelo | Error)[];
   falhaEstoque?: boolean;
   falhaEnvio?: boolean;
+  catalogo?: string[];
 };
 
 async function rodar(mensagem: string, c: Cenario) {
@@ -45,6 +46,7 @@ async function rodar(mensagem: string, c: Cenario) {
     controle: c.controle ?? LIGADO,
     promptSistema: PROMPT,
     nomesDeProdutos: NOMES,
+    nomesDoCatalogo: c.catalogo,
     fontesAutorizadas: c.fontes ?? [],
     gerar: async () => {
       contagem.modelo++;
@@ -324,4 +326,22 @@ test("catálogo: falha na consulta -> texto padrão, sem registrar interesse", a
   const { enviados, interesses } = await comCatalogo("T3", MODELOS, true);
   assert.equal(enviados[0], TEXTO_INDISPONIVEL);
   assert.deepEqual(interesses, []);
+});
+
+test("CATÁLOGO: apresentar modelos do catálogo sem afirmar estoque → enviado", async () => {
+  const t = "Trabalhamos com a Voltz EV1. A disponibilidade eu confirmo com a equipe. Para que você vai usar a moto?";
+  const { r, enviados } = await rodar("Quais opções de moto vocês têm?", { modelo: [texto(t)], catalogo: ["Voltz", "EV1"] });
+  assert.notEqual(r.motivo, "produto_sem_confirmacao");
+  assert.equal(enviados.length, 1);
+});
+
+test("CATÁLOGO não libera afirmar disponibilidade ('temos disponível') sem o estoque → bloqueado", async () => {
+  const { r, enviados } = await rodar("Tem moto?", { modelo: [texto("Temos a Voltz EV1 disponível!")], catalogo: ["Voltz", "EV1"] });
+  assert.equal(r.motivo, "produto_sem_confirmacao");
+  assert.deepEqual(enviados, []);
+});
+
+test("CATÁLOGO não libera marca que a loja não vende → bloqueado", async () => {
+  const { r } = await rodar("Quais opções?", { modelo: [texto("Trabalhamos com a Voltz EV1 e a Yamaha NMAX.")], catalogo: ["Voltz", "EV1"] });
+  assert.equal(r.motivo, "produto_sem_confirmacao");
 });

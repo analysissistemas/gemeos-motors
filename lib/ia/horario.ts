@@ -79,10 +79,11 @@ export function lojaAberta(h: HorarioLoja, agora = new Date()) {
   return d.aberto && hora >= d.abre && hora < d.fecha;
 }
 
-/** Cumprimento pelo horário de Recife (bom dia até 12h, boa tarde até 18h, boa noite depois). */
+/** Cumprimento pelo horário de Recife (boa noite até 5h, bom dia até 12h, boa tarde até 18h, boa noite depois). */
 export function saudacaoDoHorario(agora = new Date()) {
   const h = Number(agoraNaLoja(agora).hora.slice(0, 2));
-  return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite";
+  /* madrugada (0h às 4h59) ainda é "boa noite" */
+  return h < 5 ? "boa noite" : h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite";
 }
 
 /** Troca "bom dia / boa tarde / boa noite" pelo cumprimento certo do horário de Recife,

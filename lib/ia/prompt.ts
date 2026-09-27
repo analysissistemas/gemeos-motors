@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, desc, eq, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
 import { normalizarHorario, textoHorario, type HorarioLoja } from "./horario";
@@ -82,6 +82,29 @@ export async function conhecimentoAtivo() {
 
 /** Textos que autorizam fatos (horário, endereço, valores, parcelas) na trava de fatos e no validador. */
 export async function fontesAutorizadas() {
-  return (await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`);
+  /* o catálogo oficial também é fonte: nome e preço de tabela dele podem ser ditos ao cliente */
+  const catalogo = await catalogoParaIa();
+  return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo ? [catalogo] : [])];
+}
+
+/* catálogo oficial (Estoque → Catálogo, o mesmo do site): a IA apresenta os modelos com preço de
+   tabela e ficha, mas disponibilidade quem confirma é o estoque/equipe */
+export async function catalogoParaIa() {
+  const m = schema.modelos;
+  const linhas = await db
+    .select({ nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha })
+    .from(m)
+    .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true)))
+    .orderBy(asc(m.ordem), asc(m.nome));
+  if (!linhas.length) return "";
+  const brl = (v: number | null) => (v ? `R$ ${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "preço sob consulta");
+  const itens = linhas.map((l) => {
+    const f = l.ficha ?? {};
+    const destaque = [f.motor, f.autonomia && `autonomia ${f.autonomia}`, f.velocidade && `até ${f.velocidade}`].filter(Boolean).join(", ");
+    return `• ${[l.marca, l.nome].filter(Boolean).join(" ")}${l.tipo === "acessorio" ? " (acessório)" : ""}: ${brl(l.preco as number | null)}${destaque ? ` — ${destaque}` : ""}`;
+  });
+  return `# CATÁLOGO DA LOJA (o mesmo do site)
+Estes são os modelos que a loja vende. Pode apresentá-los com nome, preço de tabela e ficha. NÃO diga "temos", "disponível", "em estoque" nem "pronta entrega": a disponibilidade você confirma com a equipe. Se o cliente perguntar quais opções existem ou se chegou moto nova, mostre a lista (só as motos, a não ser que ele pergunte de acessórios) e faça UMA pergunta para entender o que ele precisa (uso, autonomia ou orçamento).
+${itens.join("\n")}`;
 }
 

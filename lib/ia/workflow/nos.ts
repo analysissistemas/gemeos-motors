@@ -8,7 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
-import { fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
+import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
@@ -33,7 +33,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { formatarHistorico, mesclarFatos, quebrarEmBlocos, tempoDigitando, textoDaMensagem, type FatosLead } from "./util";
+import { formatarHistorico, mesclarFatos, quebrarEmBlocos, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
@@ -176,7 +176,7 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
   const [controle, promptSistema, modelos, veiculos, conhecimento] = await Promise.all([
     lerControle(),
     montarPromptSistema(),
-    db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca }).from(schema.modelos),
+    db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca, ativo: schema.modelos.ativo, noSite: schema.modelos.mostrarNoSite }).from(schema.modelos),
     db.select({ marca: schema.veiculos.marca, modelo: schema.veiculos.modelo }).from(schema.veiculos).where(incluirTeste ? undefined : eq(schema.veiculos.teste, false)).limit(1000),
     fontesAutorizadas(),
   ]);
@@ -184,6 +184,7 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     controle,
     promptSistema,
     nomesDeProdutos: Array.from(new Set([...modelos.flatMap((m) => [m.nome, m.marca]), ...veiculos.flatMap((v) => [v.marca, v.modelo])].filter((x): x is string => !!x))),
+    nomesDoCatalogo: Array.from(new Set(modelos.filter((m) => m.ativo && m.noSite).flatMap((m) => [m.nome, m.marca]).filter((x): x is string => !!x))),
     fontesAutorizadas: conhecimento,
     gerar,
     consultarEstoque: (q) => consultarEstoque(q, { incluirTeste }),
@@ -324,7 +325,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   },
 
   agente: async (c) => {
-    const promptSistema = await montarPromptSistema();
+    const promptSistema = [await montarPromptSistema(), await catalogoParaIa()].filter(Boolean).join("\n\n");
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -429,12 +430,24 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     return { saida: { fatos, resumo } };
   },
 
-  blocos: (c) => {
+  blocos: async (c) => {
+    /* regra do dono (27/09/2026): cumprimentar e se apresentar SÓ no começo da conversa. Se a loja
+       (IA ou vendedor) já falou nas últimas 6 h, nada de saudação nem apresentação de novo. */
+    const [ultimaDaLoja] = await db
+      .select({ em: schema.mensagens.criadoEm })
+      .from(schema.mensagens)
+      .where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "outgoing")))
+      .orderBy(desc(schema.mensagens.id))
+      .limit(1);
+    const jaConversou = !!ultimaDaLoja && Date.now() - new Date(ultimaDaLoja.em).getTime() < 6 * 60 * 60 * 1000;
+    const saudacao = jaConversou ? null : c.saudacao;
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
-    const resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
-    const blocos = [...(c.saudacao ? [corrigirCumprimento(c.saudacao.trim())] : []), ...resposta];
+    let resposta = quebrarEmBlocos(organizarTexto(c.pipe?.texto ?? ""), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
+    /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
+    if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0]), ...resposta.slice(1)].filter(Boolean);
+    const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
-    const citar = c.config.citarMensagem && resposta.length ? (c.saudacao ? 1 : 0) : -1;
+    const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;
     return blocos.length ? { ctx: { blocos, indice: 0, citar }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null } } : { ramo: "vazio", saida: { blocos: [] } };
   },
 
