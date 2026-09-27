@@ -49,6 +49,17 @@ um jeito de o botão "Conversar" do contato compartilhado usar isso.
 - Logo do login/sistema abrindo (corrigido em `09e6303`, falta implantar).
 - Pino do mapa "Onde estamos" no lugar certo da loja.
 
+## Feito e implantado em 26/09/2026 (noite)
+
+Senha a cada entrada em Configurações e IA; botão Excluir em Promoções; chat com setinha ao
+lado, dois cliques para responder e citação que leva à original; mídia do chat compactada
+(`lib/mensageria/compactar.ts`); cache no navegador da loja; vídeo do topo 9 → 5,6 MB; índice
+do telefone do cliente; lançamentos em painel grande com carrossel; favicon 16/32/48 (`?v=2`).
+
+**Falta o dono:** rodar no console do serviço sistema `APLICAR=1 node scripts/compactar-midia.mjs`
+(o modo automático bloqueia digitar no console remoto); excluir a promoção de teste em
+Promoções; conferir catálogo/lançamento/reserva no ar. **Próximo comigo:** templates da Meta.
+
 ## Já feito hoje (para não refazer)
 Trava por senha em Configurações e IA; token da Meta protegido; chat com responder,
 reagir, apagar para mim, apagada pelo cliente, cartão de contato, localização,
