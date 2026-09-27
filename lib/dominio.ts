@@ -118,8 +118,10 @@ export const CAMPOS_FICHA = [
   { chave: "velocidade", rotulo: "Velocidade", exemplo: "32 km/h", comoSai: (v: string) => v },
   { chave: "bateria", rotulo: "Bateria", exemplo: "Lítio 60V 32Ah", comoSai: (v: string) => `Bateria ${v}` },
   { chave: "pneu", rotulo: "Pneu", exemplo: "2.75-10", comoSai: (v: string) => `Pneu ${v}` },
-  { chave: "peso", rotulo: "Peso", exemplo: "180 kg", comoSai: (v: string) => `Peso ${v}` },
+  /* "peso" guarda quanto a moto AGUENTA (carga máxima), não quanto ela pesa */
+  { chave: "peso", rotulo: "Carga máxima", exemplo: "180 kg", comoSai: (v: string) => `Aguenta até ${v}` },
   { chave: "recarga", rotulo: "Recarga", exemplo: "4h a 8h", comoSai: (v: string) => `Recarga ${v}` },
+  { chave: "freio", rotulo: "Freio", exemplo: "Disco na frente e atrás", comoSai: (v: string) => `Freio ${v}` },
 ] as const;
 export type ChaveFicha = (typeof CAMPOS_FICHA)[number]["chave"];
 /** "—" e "-" eram o jeito antigo de dizer "sem informação": contam como vazio. */

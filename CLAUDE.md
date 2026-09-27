@@ -340,7 +340,7 @@ testes. Rodados em 26/09/2026: 20/20 em banco descartável. A limpeza dos testes
   processo `node` morreu mesmo.
 - **Cache do navegador na vitrine.** Os scripts são chamados com `?v=N` em
   `public/vitrine.html`. **Suba esse número sempre que mexer em `estoque.js`,
-  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=19`. **Desde 26/09/2026 os scripts
+  `cores-motos.js` ou `fotos-disponiveis.js`.** Hoje está em `v=20`. **Desde 26/09/2026 os scripts
   com `?v=` ficam guardados no navegador por 1 ano (`next.config.ts`): esquecer de subir
   o `v` = cliente preso na versão velha.** Fotos, vídeo e tutoriais: 1 dia de cache.
 - **`public/estoque.js` é público.** Nunca pôr custo, lucro ou margem nele. O

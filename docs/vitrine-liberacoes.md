@@ -33,3 +33,5 @@ voltou a valer depois de cada uma:
   bolinhas e arrastar; favicon com 16/32/48 px e `?v=2` para o navegador trocar o ícone guardado.
 - 27/09/2026 (localização) — mapa "Onde estamos" e botões Google Maps, Waze e Mapas (iPhone)
   usam a coordenada exata da loja (-7.566338250594923, -35.00642739571563), pedida pelo dono.
+- 27/09/2026 (ficha) — chip "Peso" vira "Aguenta até" (o campo guarda a carga máxima, não o peso
+  da moto) em `public/estoque.js`; scripts sobem para `?v=20` no `vitrine.html`. Autorizado pelo dono.

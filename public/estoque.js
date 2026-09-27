@@ -108,7 +108,7 @@ const FICHA_ROTULO = {
   bateria:    {antes:"Bateria"},
   recarga:    {antes:"Recarga"},
   pneu:       {antes:"Pneu"},
-  peso:       {antes:"Peso"},
+  peso:       {antes:"Aguenta até"},   // é a carga máxima que a moto aguenta, não o peso dela
   cambio:     {antes:"Câmbio"},
   combustivel:{antes:"Combustível"},
   partida:    {antes:"Partida"},

@@ -89,7 +89,7 @@ export async function fontesAutorizadas() {
   return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo.texto ? [catalogo.texto] : [])];
 }
 
-const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", /* o campo "peso" guarda quanto a moto AGUENTA (carga máxima), não o peso dela */ peso: "aguenta até (carga máxima)", recarga: "recarga" };
+const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", /* o campo "peso" guarda quanto a moto AGUENTA (carga máxima), não o peso dela */ peso: "aguenta até (carga máxima)", recarga: "recarga", freio: "freio" };
 
 /* Catálogo oficial (Estoque → Catálogo, o mesmo do site) + o que há no estoque agora. Regras do dono
    (27/09/2026): só moto ELÉTRICA (nunca combustão nem carro) e acessório; a IA mostra opções, ficha,
