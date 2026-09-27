@@ -1,8 +1,9 @@
 import "server-only";
-import { and, asc, desc, eq, gt, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerControle } from "@/lib/ia/controle";
+import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { lerConfigWorkflow } from "./config";
@@ -29,7 +30,60 @@ async function temMarca(conversaId: number, marca: "esperaAviso" | "vigiaFechada
   return !!x;
 }
 
+/* Resposta interrompida no meio (o servidor reiniciou numa implantação enquanto os blocos saíam):
+   a execução ficou "rodando" para sempre e o cliente recebeu só o começo ("tenho duas opções:" sem a lista).
+   Execução que começou ANTES deste servidor ligar e está parada há mais de 1 min morreu com o servidor
+   antigo: marca como interrompida e manda os blocos que faltavam (a resposta já tinha passado pelas travas;
+   o envio confere de novo). */
+const E = schema.iaWorkflowExecucoes;
+const LIGOU_EM = Date.now() - process.uptime() * 1000;
+
+async function retomarInterrompidas(agora: Date) {
+  const presas = await db
+    .select({ id: E.id, conversaId: E.conversaId, passos: E.passos, noAtual: E.noAtual, iniciadoEm: E.iniciadoEm })
+    .from(E)
+    .where(and(eq(E.status, "rodando"), lt(E.iniciadoEm, new Date(LIGOU_EM)), gt(E.iniciadoEm, new Date(agora.getTime() - 6 * 3600_000))))
+    .limit(20);
+  let retomadas = 0;
+  for (const x of presas) {
+    const passos = (x.passos ?? []) as { no: string; saida?: unknown; inicio: string; ms: number }[];
+    const ultimoMovimento = Math.max(new Date(x.iniciadoEm).getTime(), ...passos.map((p) => new Date(p.inicio).getTime() + (p.ms ?? 0)));
+    if (agora.getTime() - ultimoMovimento < 60_000) continue;
+    const blocos = ([...passos].reverse().find((p) => p.no === "blocos")?.saida as { blocos?: string[] } | undefined)?.blocos ?? [];
+    const enviados = passos.filter((p) => p.no === "enviar" && (p.saida as { enviada?: boolean } | undefined)?.enviada).length;
+    const faltam = blocos.slice(enviados);
+    const [marcada] = await db
+      .update(E)
+      .set({
+        status: "erro",
+        noAtual: null,
+        paradoEm: x.noAtual ?? "desconhecido",
+        motivo: faltam.length ? `Interrompida (o servidor reiniciou); o vigia enviou ${faltam.length} bloco(s) que faltavam` : "Interrompida (o servidor reiniciou)",
+        finalizadoEm: agora,
+      })
+      .where(and(eq(E.id, x.id), eq(E.status, "rodando")))
+      .returning({ id: E.id });
+    if (!marcada || !faltam.length || !x.conversaId || !enviados) continue;
+    /* uma execução mais nova na mesma conversa já respondeu tudo junto: não repete */
+    const [nova] = await db.select({ id: E.id }).from(E).where(and(eq(E.conversaId, x.conversaId), gt(E.id, x.id))).limit(1);
+    if (nova) continue;
+    const [cv] = await db.select({ telefone: C.contatoTelefone, demo: C.demo }).from(C).where(eq(C.id, x.conversaId)).limit(1);
+    if (!cv) continue;
+    for (const texto of faltam) {
+      const r = await enviarRespostaDaIa(db, { conversaId: x.conversaId, telefone: cv.telefone, texto, origem: "workflow (retomada pelo vigia)", simulado: cv.demo });
+      if (!r.enviada) break;
+      await new Promise((ok) => setTimeout(ok, 1500));
+    }
+    retomadas++;
+  }
+  return retomadas;
+}
+
 export async function vigiarAtendimentos(agora = new Date()) {
+  const retomadas = await retomarInterrompidas(agora).catch((e) => {
+    console.error("[vigia] retomar interrompidas", e);
+    return 0;
+  });
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
   const iaPodeResponder = controle.ligada && config.ativo;
@@ -39,7 +93,7 @@ export async function vigiarAtendimentos(agora = new Date()) {
     .where(and(eq(C.ultimaMensagemDirecao, "incoming"), notInArray(C.status, ["resolvida", "encerrada"])))
     .limit(200);
 
-  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, erros: 0 };
+  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, retomadas, erros: 0 };
   for (const cv of candidatas) {
     try {
       const [ultimaSaida] = await db.select({ id: M.id }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"))).orderBy(desc(M.id)).limit(1);
