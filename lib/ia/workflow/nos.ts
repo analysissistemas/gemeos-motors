@@ -151,21 +151,28 @@ const CORES_COMUNS = ["Preto", "Branco", "Cinza", "Prata", "Vermelho", "Azul", "
    Preço sempre o de tabela do catálogo. Falta algo (ex.: cor com mais de uma opção)? Não monta. */
 async function montarProposta(c: CtxWorkflow): Promise<string | null> {
   const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
-  const texto = [fatos.interesse, fatos.observacoes, fatos.pagamento, c.textoBuffer, c.memoria.historico].filter(Boolean).join(" \n ").toLowerCase();
+  /* só o que o CLIENTE escreveu (a lista de modelos que a IA ofereceu não conta), do mais antigo ao mais novo */
+  const doCliente = [
+    fatos.interesse ?? "",
+    ...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")),
+    c.textoBuffer,
+  ].join(" \n ").toLowerCase();
   /* pagamento: o que a IA anotou ou, se ainda não anotou, o que o cliente escreveu */
-  const pagamento = fatos.pagamento?.trim() || pagamentoDoTexto(c.textoBuffer);
+  const pagamento = fatos.pagamento?.trim() || pagamentoDoTexto(doCliente);
   if (!pagamento) return null;
   const m = schema.modelos;
   const modelos = await db.select({ id: m.id, nome: m.nome, preco: m.precoTabela }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica")));
+  /* o modelo citado por último (nome inteiro: a "AG08" não casa dentro de "AG080") */
+  const ultimaVez = (nome: string) => {
+    const rx = new RegExp(`(?<![\\p{L}\\p{N}])${nome.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "gu");
+    return Math.max(-1, ...Array.from(doCliente.matchAll(rx), (x) => x.index ?? -1));
+  };
   const achado = modelos
-    .filter((x) => {
-      const nome = x.nome.toLowerCase();
-      const i = texto.indexOf(nome);
-      /* nome inteiro (a "AG08" não casa dentro de "AG080") */
-      return i >= 0 && !/[\p{L}\p{N}]/u.test(texto[i - 1] ?? " ") && !/[\p{L}\p{N}]/u.test(texto[i + nome.length] ?? " ");
-    })
-    .sort((a, b) => b.nome.length - a.nome.length)[0];
+    .map((x) => ({ ...x, pos: ultimaVez(x.nome) }))
+    .filter((x) => x.pos >= 0)
+    .sort((a, b) => b.pos - a.pos || b.nome.length - a.nome.length)[0];
   if (!achado || !achado.preco) return null;
+  const texto = doCliente;
   let cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
   /* modelo sem cor no catálogo: valem as cores das unidades disponíveis e, sem unidade, a cor que o cliente pediu */
   if (!cores.length) {
@@ -174,7 +181,9 @@ async function montarProposta(c: CtxWorkflow): Promise<string | null> {
     cores = [...new Set((await db.select({ cor: v.cor }).from(v).where(and(eq(v.modeloId, achado.id), eq(v.status, "disponivel"), soReal))).map((x) => x.cor?.trim()).filter((x): x is string => !!x))];
     if (!cores.length) cores = CORES_COMUNS.filter((n) => corNoTexto(n, c.textoBuffer));
   }
-  const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 ? cores[0] : null);
+  /* cor única só vale se o cliente não pediu outra cor */
+  const pediuCor = CORES_COMUNS.some((n) => corNoTexto(n, texto));
+  const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 && !pediuCor ? cores[0] : null);
   if (!cor) return null;
   const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
   const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
@@ -666,14 +675,27 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
     if (saudacao && !resposta.length) resposta = [nomeConhecido ? "Aqui é a Gêmeos Motors 😊 Como posso te ajudar?" : "Aqui é a Gêmeos Motors 😊 Com quem eu falo?"];
-    /* a IA ofereceu "preparar a proposta" mas já sabe moto, cor e pagamento: o sistema monta e envia */
-    if (resposta.some((b) => /proposta/iu.test(b) && /\?|posso|quer que/iu.test(b))) {
+    /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
+       (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
+    const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
+    const ofereceu = resposta.some((b) => /proposta/iu.test(b) && /\?|posso|quer que/iu.test(b));
+    const decidiuAgora = !!pagamentoDoTexto(c.textoBuffer) || CORES_COMUNS.some((n) => corNoTexto(n, c.textoBuffer));
+    if (!jaTemProposta && (ofereceu || decidiuAgora)) {
       const proposta = await montarProposta(c);
       if (proposta) {
-        resposta = resposta.map((b) => b.split(/(?<=[.!?])\s+/u).filter((f) => !/proposta/iu.test(f)).join(" ").trim()).filter(Boolean);
+        /* saem as perguntas (confirmar, cor, pagamento) e a oferta de proposta: a proposta responde tudo */
+        resposta = resposta.map((b) => b.split(/(?<=[.!?])\s+/u).filter((f) => !/proposta/iu.test(f) && !/\?\s*(?:\p{Extended_Pictographic}️?\s*)*$/u.test(f)).join(" ").trim()).filter((b) => /\p{L}/u.test(b));
         resposta.push(proposta, "Posso passar para o nosso vendedor finalizar com você? 😊");
       }
     }
+    /* UMA pergunta por resposta: bloco que é só mais uma pergunta, depois de outra, sai */
+    let perguntou = false;
+    resposta = resposta.filter((b) => {
+      const soPergunta = /\?\s*(?:\p{Extended_Pictographic}️?\s*)*$/u.test(b) && !/[.!]\s/u.test(b) && !/\n/u.test(b);
+      if (soPergunta && perguntou) return false;
+      if (/\?/u.test(b)) perguntou = true;
+      return true;
+    });
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;
