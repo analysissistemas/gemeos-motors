@@ -1,7 +1,6 @@
 "use server";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
@@ -32,7 +31,6 @@ import {
 } from "@/lib/mensageria/servico";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
-import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
 import type { TipoMensagem } from "@/lib/mensageria/tipos";
 
 const revalidarFunil = () => {
@@ -271,11 +269,7 @@ export async function acaoSimularCliente(dados: unknown) {
     const r = await receberMensagem({ canal: "whatsapp", provedor: "mock", telefone: d.telefone, nomeContato: d.nome || null, tipo: "texto", conteudo: d.texto, externoId: `mock-in-${crypto.randomUUID()}`, demo: true });
     if (r.conversaId) await analisarMensagemEntrante(r.conversaId, d.texto);
     let triagem: string | null = null;
-    if (r.conversaId && r.mensagemId && (await workflowAtivo())) {
-      const e = { conversaId: r.conversaId, mensagemId: r.mensagemId };
-      after(() => rodarWorkflowAtendimento({ ...e, gatilho: "teste", simulado: true }).then(() => {}));
-      triagem = "workflow";
-    } else if (r.conversaId && r.modo === "ia" && (await triagemAutomaticaLigada())) {
+    if (r.conversaId && r.modo === "ia" && (await triagemAutomaticaLigada())) {
       const t = await executarTriagem(r.conversaId);
       triagem = t.ok ? "ok" : t.motivo;
     }
