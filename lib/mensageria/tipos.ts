@@ -13,6 +13,8 @@
    Trocar de provedor = mudar MENSAGERIA_PROVEDOR. Nenhuma tela muda.
    ============================================================ */
 
+import type { ModeloMensagem } from "./modelos";
+
 export type TipoMensagem = "texto" | "imagem" | "video" | "documento" | "audio" | "localizacao" | "contato" | "sistema";
 export type DirecaoMensagem = "incoming" | "outgoing" | "system";
 export type StatusMensagem = "pending" | "sent" | "delivered" | "read" | "failed" | "received";
@@ -41,6 +43,8 @@ export type PedidoEnvio = {
   conteudo?: string | null;
   midia?: Midia | null;
   respostaAExternoId?: string | null;
+  /** modelo aprovado pela Meta (fora da janela de 24 h); `conteudo` é o texto já preenchido */
+  modelo?: { nome: string; idioma: string; componentes: unknown[] } | null;
 };
 
 export type ResultadoEnvio = { externoId: string | null; status: "sent" | "failed"; erro?: string };
@@ -57,4 +61,6 @@ export interface ProvedorMensagens {
   enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio>;
   /** Reação a uma mensagem (emoji vazio tira a reação). */
   reagir(telefone: string, externoId: string, emoji: string): Promise<{ ok: true } | { ok: false; erro: string }>;
+  /** Modelos de mensagem aprovados pela Meta (lib/mensageria/modelos.ts). */
+  listarModelos(): Promise<{ ok: true; modelos: ModeloMensagem[] } | { ok: false; erro: string }>;
 }

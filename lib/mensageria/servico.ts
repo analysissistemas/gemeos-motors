@@ -14,7 +14,8 @@ import { iaLigada } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { mensagemSistema } from "./anotacoes";
 export { mensagemSistema, anotarNegocioNaConversa } from "./anotacoes";
-import type { MensagemEntrante, Midia, TipoMensagem } from "./tipos";
+import type { MensagemEntrante, Midia, PedidoEnvio, TipoMensagem } from "./tipos";
+import { componentesDoEnvio, montarTexto } from "./modelos";
 
 type Quem = { id: number; nome: string };
 
@@ -192,7 +193,11 @@ export async function executarTriagem(conversaId: number) {
 }
 
 /* ---------------- saída (sistema → cliente) ---------------- */
-export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: TipoMensagem; conteudo?: string | null; midia?: Midia | null; respostaA?: number | null; metadados?: Record<string, unknown> }) {
+export async function enviarMensagem(
+  u: Quem,
+  conversaId: number,
+  e: { tipo: TipoMensagem; conteudo?: string | null; midia?: Midia | null; respostaA?: number | null; metadados?: Record<string, unknown>; modelo?: PedidoEnvio["modelo"] },
+) {
   const texto = e.conteudo?.trim() ?? null;
   if (e.tipo === "texto" && !texto) throw new ErroRegra("Escreva a mensagem.");
   if (texto && texto.length > 4096) throw new ErroRegra("Mensagem longa demais (máximo 4.096 caracteres).");
@@ -207,7 +212,7 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
     if (!orig) e = { ...e, respostaA: null };
     respostaExterno = orig?.externoId ?? null;
   }
-  const env = await prov.enviar({ telefone: c.contatoTelefone, tipo: e.tipo, conteudo: texto, midia, respostaAExternoId: respostaExterno });
+  const env = await prov.enviar({ telefone: c.contatoTelefone, tipo: e.tipo, conteudo: texto, midia, respostaAExternoId: respostaExterno, modelo: e.modelo ?? null });
   return db.transaction(async (tx) => {
     if (c.modo === "ia") await assumirNaTransacao(tx, u, c, true);
     const [msg] = await tx
@@ -246,6 +251,32 @@ export async function enviarMensagem(u: Quem, conversaId: number, e: { tipo: Tip
     await registrarLog(u, { acao: "mensagem.enviada", entidade: "conversa", entidadeId: conversaId, descricao: `Enviou ${e.tipo === "texto" ? "mensagem" : e.tipo} para ${c.contatoNome ?? formatarTelefone(c.contatoTelefone)}`, dados: { mensagemId: msg.id, status: env.status } }, tx);
     if (env.status === "failed") throw new ErroRegra(`A mensagem não foi enviada: ${env.erro ?? "falha no provedor"}`);
     return msg.id;
+  });
+}
+
+/** Modelos aprovados pela Meta, para a tela escolher (fora da janela de 24 h). */
+export async function listarModelosAprovados() {
+  const prov = await obterProvedor();
+  const r = await prov.listarModelos();
+  if (!r.ok) throw new ErroRegra(`Não foi possível buscar os modelos na Meta: ${r.erro}`);
+  return { simulado: prov.simulado, modelos: r.modelos };
+}
+
+/** Envia um modelo aprovado com os campos preenchidos. O texto preenchido fica no chat. */
+export async function enviarModelo(u: Quem, conversaId: number, d: { nome: string; idioma: string; valores: string[] }) {
+  const { modelos } = await listarModelosAprovados();
+  const m = modelos.find((x) => x.nome === d.nome && x.idioma === d.idioma);
+  if (!m) throw new ErroRegra("Esse modelo não está mais aprovado na Meta. Atualize a lista.");
+  if (!m.suportado) throw new ErroRegra(`Esse modelo ainda não pode ser enviado pelo sistema (${m.motivo}).`);
+  const valores = m.campos.map((_, i) => (d.valores[i] ?? "").trim());
+  const vazio = valores.findIndex((v) => !v);
+  if (vazio >= 0) throw new ErroRegra(`Preencha o campo {{${m.campos[vazio].chave}}}.`);
+  if (valores.some((v) => /[\n\t]| {5,}/.test(v))) throw new ErroRegra("Os campos do modelo não aceitam quebra de linha, tab nem muitos espaços seguidos (regra da Meta).");
+  return enviarMensagem(u, conversaId, {
+    tipo: "texto",
+    conteudo: montarTexto(m, valores),
+    metadados: { modelo: m.nome },
+    modelo: { nome: m.nome, idioma: m.idioma, componentes: componentesDoEnvio(m, valores) },
   });
 }
 

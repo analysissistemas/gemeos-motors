@@ -22,6 +22,7 @@ import {
   acaoContexto,
   acaoConversaComNumero,
   acaoEnviarMensagem,
+  acaoEnviarModelo,
   acaoListarConversas,
   acaoMensagensAntigas,
   acaoNota,
@@ -288,6 +289,17 @@ export function CentralConversas({
         return false;
       }
       setDados((d) => (d ? { ...d, notas: [...d.notas, { id: r.dados.id, conteudo: e.conteudo, criadoEm: new Date(), usuarioNome: usuario.nome }] } : d));
+      return true;
+    }
+    if (e.modo === "modelo") {
+      const r = await acaoEnviarModelo(id, { nome: e.nome, idioma: e.idioma, valores: e.valores });
+      if (!r.ok) {
+        toast.error(r.erro);
+        return false;
+      }
+      toast.success("Modelo enviado. Quando o cliente responder, a conversa volta ao normal.");
+      setItens((xs) => ordenar(xs.map((x) => (x.id === id ? { ...x, ultimaMensagemEm: new Date(), ultimaMensagemTexto: e.previa, ultimaMensagemDirecao: "outgoing", naoLidas: 0 } : x))));
+      sincronizar();
       return true;
     }
     /* resposta a uma mensagem (só as que já existem no banco) */

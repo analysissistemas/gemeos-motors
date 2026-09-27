@@ -5,13 +5,16 @@ import { FileText, Mic, Paperclip, Send, Sticker, StickyNote, X, Zap } from "luc
 import { cn } from "@/lib/cn";
 import { EMOJIS } from "./util";
 import { useGravador } from "./gravador";
+import { AvisoJanela, DialogoModelos } from "./modelos";
 
 export type Resposta = { id: number; atalho: string; titulo: string; conteudo: string };
 export type EnvioChat =
   | { modo: "mensagem"; tipo: "texto"; conteudo: string }
   | { modo: "mensagem"; tipo: "imagem" | "documento"; conteudo: string; midia: { url: string; nome: string; mime: string; tamanho: number } }
   | { modo: "mensagem"; tipo: "audio"; blob: Blob; mime: string; duracao: number }
-  | { modo: "nota"; conteudo: string };
+  | { modo: "nota"; conteudo: string }
+  /* modelo aprovado pela Meta (fora da janela de 24 h); `previa` é o texto preenchido */
+  | { modo: "modelo"; nome: string; idioma: string; valores: string[]; previa: string };
 
 const LIMITE_ARQUIVO = 2 * 1024 * 1024;
 
@@ -24,6 +27,8 @@ export function Compositor({
   aoEnviar,
   respondendo,
   aoCancelarResposta,
+  janelaFechada,
+  nomeCliente,
 }: {
   respostas: Resposta[];
   simulado?: boolean;
@@ -31,7 +36,11 @@ export function Compositor({
   aoEnviar: (e: EnvioChat) => Promise<boolean>;
   respondendo?: Citacao | null;
   aoCancelarResposta?: () => void;
+  /** passou de 24 h desde a última mensagem do cliente (ou ele nunca escreveu) */
+  janelaFechada?: boolean;
+  nomeCliente?: string | null;
 }) {
+  const [modelosAberto, setModelosAberto] = useState(false);
   const [texto, setTexto] = useState("");
   const [nota, setNota] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -107,6 +116,8 @@ export function Compositor({
 
   return (
     <div className="relative border-t border-linha bg-[var(--cabecalho)] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-3">
+      {janelaFechada && <AvisoJanela aoAbrir={() => setModelosAberto(true)} />}
+      <DialogoModelos aberto={modelosAberto} aoMudar={setModelosAberto} nomeCliente={nomeCliente ?? null} aoEnviar={aoEnviar} />
       {sugestoes.length > 0 && (
         <ul className="absolute bottom-full left-2 right-2 mb-2 max-h-64 overflow-auto rounded-2xl border border-linha-forte bg-elevado p-1 shadow-alta" role="listbox" aria-label="Respostas rápidas">
           {sugestoes.map((r) => (

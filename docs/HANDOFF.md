@@ -35,7 +35,14 @@ armadilha de robô dá 422, JSON sem custo nem estoque.
   limpeza dos testes (`tests/e2e/limpeza.ts`) usa `--env-file=.env.local` (banco
   antigo): deixe `DATABASE_URL` do banco descartável definido antes de rodar.
 
-### 2. Modelos de mensagem aprovados pela Meta (templates) — NÃO COMEÇADO
+### 2. Modelos de mensagem aprovados pela Meta (templates) — FEITO (26/09/2026)
+`lib/mensageria/modelos.ts` (lê, preenche e monta o envio), `listarModelos` nos provedores
+(Graph: `/{wabaId}/message_templates`, só APPROVED), `enviarModelo` no serviço, aviso e janela
+no chat (`components/conversas/modelos.tsx`) quando passou de 24 h da última mensagem do cliente.
+Precisa do **ID da WABA** salvo em Configurações → API Oficial. Não suporta ainda: cabeçalho de
+foto/vídeo/documento, campo no cabeçalho e botão de link com campo (aparecem com o motivo).
+
+<!-- texto antigo da tarefa 2 -->
 Sem isso a loja não consegue escrever primeiro para contato novo nem para cliente
 calado há mais de 24 h (erro 131047, já traduzido em `lib/mensageria/provedores.ts`).
 Precisa: listar os templates aprovados da WABA, escolher e enviar com variáveis, e
@@ -58,7 +65,7 @@ do telefone do cliente; lançamentos em painel grande com carrossel; favicon 16/
 
 **Falta o dono:** rodar no console do serviço sistema `APLICAR=1 node scripts/compactar-midia.mjs`
 (o modo automático bloqueia digitar no console remoto); excluir a promoção de teste em
-Promoções; conferir catálogo/lançamento/reserva no ar. **Próximo comigo:** templates da Meta.
+Promoções; conferir catálogo/lançamento/reserva no ar. **Próximo:** "opção para testar a IA" na entrada de veículo (só admin) — detalhar com o dono.
 
 ## Já feito hoje (para não refazer)
 Trava por senha em Configurações e IA; token da Meta protegido; chat com responder,

@@ -4,6 +4,7 @@ import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 import { lerBytes } from "./midia";
 import { MIME_OGG_OPUS, nomeOgg, paraOggOpus } from "./transcodificar";
+import { camposDoTexto, converterModeloMeta, type ModeloMensagem, type ModeloMeta } from "./modelos";
 
 /* ============================================================
    PROVEDOR SIMULADO (MOCK)
@@ -24,6 +25,21 @@ export class ProvedorSimulado implements ProvedorMensagens {
   }
   async reagir() {
     return { ok: true as const };
+  }
+  /* no modo simulado não há conta da Meta: dois modelos de exemplo, só para a tela funcionar */
+  async listarModelos() {
+    const exemplo = (nome: string, corpo: string): ModeloMensagem => ({
+      nome, idioma: "pt_BR", categoria: "MARKETING", cabecalho: null, corpo, rodape: "Gêmeos Motors", botoes: [],
+      campos: camposDoTexto(corpo),
+      suportado: true, motivo: null,
+    });
+    return {
+      ok: true as const,
+      modelos: [
+        exemplo("simulado_retomar_contato", "Olá, {{1}}! Aqui é da Gêmeos Motors. Podemos continuar o seu atendimento por aqui?"),
+        exemplo("simulado_interesse_modelo", "Oi, {{1}}! Passando para saber se você ainda tem interesse na {{2}}. Qualquer dúvida, é só responder."),
+      ],
+    };
   }
 }
 
@@ -78,7 +94,9 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     if (!this.configurado()) return { externoId: null, status: "failed", erro: "WhatsApp Business não configurado" };
     const corpo: Record<string, unknown> = { messaging_product: "whatsapp", to: pedido.telefone };
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
-    if (pedido.tipo === "texto") Object.assign(corpo, { type: "text", text: { body: pedido.conteudo ?? "", preview_url: true } });
+    if (pedido.modelo)
+      Object.assign(corpo, { type: "template", template: { name: pedido.modelo.nome, language: { code: pedido.modelo.idioma }, components: pedido.modelo.componentes } });
+    else if (pedido.tipo === "texto") Object.assign(corpo, { type: "text", text: { body: pedido.conteudo ?? "", preview_url: true } });
     else if (pedido.tipo === "audio" && pedido.midia) {
       /* Todo áudio vira OGG/Opus mono antes de subir: o MP4 fragmentado que o Chrome grava é
          aceito pela Meta mas não chega ao cliente. O arquivo guardado no chat não muda. */
@@ -111,6 +129,26 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     const j = (await r.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message?: string; code?: number } };
     if (!r.ok) return { externoId: null, status: "failed", erro: explicarErroMeta(j.error) ?? `HTTP ${r.status}` };
     return { externoId: j.messages?.[0]?.id ?? null, status: "sent" };
+  }
+
+  /** Modelos aprovados da conta do WhatsApp Business (WABA), todas as páginas. */
+  async listarModelos() {
+    if (!this.cfg.token) return { ok: false as const, erro: "WhatsApp Business não configurado." };
+    if (!this.cfg.wabaId) return { ok: false as const, erro: "Falta o ID da conta do WhatsApp Business (WABA) em Configurações → API Oficial." };
+    const modelos: ModeloMensagem[] = [];
+    let url: string | null = `https://graph.facebook.com/${this.versao}/${this.cfg.wabaId}/message_templates?fields=name,language,status,category,components&limit=100`;
+    for (let pagina = 0; url && pagina < 10; pagina++) {
+      const r: Response = await fetch(url, { headers: { Authorization: `Bearer ${this.cfg.token}` } });
+      const j = (await r.json().catch(() => ({}))) as { data?: ModeloMeta[]; paging?: { next?: string }; error?: { message?: string; code?: number } };
+      if (!r.ok) return { ok: false as const, erro: explicarErroMeta(j.error) ?? `HTTP ${r.status}` };
+      for (const m of j.data ?? []) {
+        const c = converterModeloMeta(m);
+        if (c) modelos.push(c);
+      }
+      url = j.paging?.next ?? null;
+    }
+    modelos.sort((a, b) => Number(b.suportado) - Number(a.suportado) || a.nome.localeCompare(b.nome));
+    return { ok: true as const, modelos };
   }
 
   async reagir(telefone: string, externoId: string, emoji: string) {

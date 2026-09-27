@@ -25,6 +25,8 @@ import {
   receberMensagem,
   triagemAutomaticaLigada,
   vincularCliente,
+  enviarModelo,
+  listarModelosAprovados,
 } from "@/lib/mensageria/servico";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
@@ -93,6 +95,28 @@ export async function acaoEnviarMensagem(conversaId: number, dados: unknown) {
       midia: d.midia ?? null,
       respostaA: d.respostaA ?? null,
     });
+    return { id };
+  });
+}
+
+/** Modelos aprovados pela Meta (para escrever fora da janela de 24 h). */
+export async function acaoListarModelos() {
+  return executar(async () => {
+    await autorizar("conversas.ver");
+    return listarModelosAprovados();
+  });
+}
+
+const esquemaModelo = z.object({
+  nome: z.string().min(1).max(512),
+  idioma: z.string().min(2).max(20),
+  valores: z.array(z.string().max(1024)).max(20),
+});
+
+export async function acaoEnviarModelo(conversaId: number, dados: unknown) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    const id = await enviarModelo(u, z.number().int().positive().parse(conversaId), esquemaModelo.parse(dados));
     return { id };
   });
 }

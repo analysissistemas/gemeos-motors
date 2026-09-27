@@ -63,6 +63,18 @@ export function Chat({
   const alturaAntes = useRef<number | null>(null);
   const ultimoId = mensagens[mensagens.length - 1]?.id;
   const qtdAntes = useRef(mensagens.length);
+  /* janela de 24 h da Meta: conta a última mensagem do cliente (do banco ou recém-chegada) */
+  const ultimaDoCliente = Math.max(
+    contexto.ultimaDoClienteEm ? new Date(contexto.ultimaDoClienteEm).getTime() : 0,
+    ...mensagens.filter((m) => m.direcao === "incoming").map((m) => new Date(m.criadoEm).getTime()),
+  );
+  /* relógio da tela: a janela fecha sozinha com a conversa aberta (confere a cada minuto) */
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const janelaFechada = agora - ultimaDoCliente > 24 * 60 * 60 * 1000;
   /* clique na citação: rola até a mensagem original (carrega as antigas se ela ainda não veio) */
   const irPara = useRef<{ id: number; tentativas: number } | null>(null);
   const buscarCitada = useCallback(() => {
@@ -245,6 +257,8 @@ export function Chat({
         aoEnviar={aoEnviar}
         respondendo={respondendo ? { quem: quemEscreveu(respondendo, nome), texto: resumoCurto(respondendo.tipo, respondendo.conteudo) } : null}
         aoCancelarResposta={() => aoResponder(null)}
+        janelaFechada={janelaFechada}
+        nomeCliente={contexto.cliente?.nome ?? c.contatoNome ?? null}
       />
     </div>
   );

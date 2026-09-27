@@ -241,7 +241,12 @@ export async function contextoDaConversa(conversaId: number) {
         })
         .from(sql`(select 1) as um`)
     : [null];
+  /* última mensagem do cliente: define a janela de 24 h da Meta (fora dela, só modelo aprovado) */
+  const [ult] = await db
+    .select({ em: sql<Date | null>`max(${schema.mensagens.criadoEm})` })
+    .from(schema.mensagens)
+    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.direcao, "incoming")));
   /* responsavel: quem atende a conversa (nome e foto), para o cabeçalho do chat */
-  return { conversa, atendimentoHumano: conv.atendimentoHumano, responsavel: conv.responsavel?.nome ? conv.responsavel : null, cliente: cli, negocio: negocio[0] ?? null, followups, historico: historico[0] };
+  return { conversa, atendimentoHumano: conv.atendimentoHumano, responsavel: conv.responsavel?.nome ? conv.responsavel : null, cliente: cli, negocio: negocio[0] ?? null, followups, historico: historico[0], ultimaDoClienteEm: ult?.em ? new Date(ult.em) : null };
 }
 export type ContextoConversa = NonNullable<Awaited<ReturnType<typeof contextoDaConversa>>>;
