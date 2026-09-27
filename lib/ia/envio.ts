@@ -18,7 +18,7 @@ export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "va
    bloqueada, fica registrada em ia_execucoes para consulta na Central de IA.
    Nenhum outro código deve chamar o provedor com texto escrito pela IA.
    ============================================================ */
-export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean }): Promise<ResultadoEnvioIa> {
+export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean; /** fontes a mais só deste envio (ex.: a conta de economia feita pelo sistema para o uso do cliente) */ fontesExtras?: string[] }): Promise<ResultadoEnvioIa> {
   /* formato organizado para o WhatsApp (título, **negrito**, lista com hífen, espaços) */
   /* e o cumprimento certo para o horário de Recife (de madrugada nunca "bom dia"), em TODO envio da IA */
   p = { ...p, texto: corrigirCumprimento(organizarTexto(p.texto)) };
@@ -26,7 +26,7 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
   /* conversa do simulador (demo): grava no chat, mas nada sai para o WhatsApp */
   const [cv] = await tx.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
   const simulado = !!p.simulado || !!cv?.demo;
-  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema(), fontesAutorizadas: await fontesAutorizadas() });
+  const validacao = validarResposta(p.texto, { promptSistema: await montarPromptSistema(), fontesAutorizadas: [...(await fontesAutorizadas()), ...(p.fontesExtras ?? [])] });
 
   let motivo: ResultadoEnvioIa["motivo"] = null;
   let explicacao: string | null = null;

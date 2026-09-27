@@ -118,7 +118,10 @@ export async function apagarMemoria(conversaId: number) {
 
 async function enviar(c: CtxWorkflow, texto: string, citar = false, gravarFalha = true) {
   const respostaA = citar && c.mensagem ? { id: c.mensagem.id, externoId: c.mensagem.externoId } : undefined;
-  return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha });
+  /* a conta de economia do uso deste cliente (feita pelo sistema) também é fonte para a trava de valores */
+  const kmSemana = kmDoCliente(c);
+  const fontesExtras = kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana })).texto] : [];
+  return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha, fontesExtras });
 }
 
 /* ---------------- agente: o gerador que o pipeline usa, com memória e fatos ---------------- */
@@ -728,7 +731,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     /* o cliente acabou de dizer o nome: a resposta o chama pelo nome ("Prazer, Carla!") — pedido do dono */
     const nomeNovo = !c.memoria.fatos.nome ? primeiroNome(c.aprendido.fatos.nome) : null;
     if (nomeNovo && resposta.length && !new RegExp(`(?<![\\p{L}])${nomeNovo}(?![\\p{L}])`, "iu").test(resposta.join(" "))) {
-      const [primeiro, ...resto] = resposta;
+      /* a IA já disse "Prazer em falar com você": essa frase sai, fica só o "Prazer, Sandra!" */
+      const [primeiro0, ...resto] = resposta;
+      const primeiro = primeiro0.replace(/^prazer[^.!?\n]*[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu, "").trim() || primeiro0;
       resposta = [/\n/.test(primeiro) ? `Prazer, ${nomeNovo}!` : `Prazer, ${nomeNovo}! ${primeiro[0].toUpperCase()}${primeiro.slice(1)}`, ...(/\n/.test(primeiro) ? [primeiro] : []), ...resto];
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): apresentação + UMA pergunta */
