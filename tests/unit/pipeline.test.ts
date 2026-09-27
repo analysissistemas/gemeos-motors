@@ -351,9 +351,18 @@ test("LINHA DA LOJA: 'temos motos elétricas' (sem citar modelo) passa, mesmo se
   assert.equal(enviados.length, 1);
 });
 
-test("SEM ESTOQUE: 'pronta entrega' genérico ou modelo específico 'temos' continuam bloqueados", async () => {
-  for (const t of ["Temos pronta entrega!", "Temos a Voltz EV1 para você."]) {
+test("SEM ESTOQUE: 'pronta entrega' genérico ou modelo 'disponível' sem unidade continuam bloqueados", async () => {
+  for (const t of ["Temos pronta entrega!", "A Voltz EV1 está disponível para você."]) {
     const { r } = await rodar("Tem moto?", { modelo: [texto(t)], catalogo: ["Voltz", "EV1"] });
     assert.equal(r.motivo, "produto_sem_confirmacao", t);
   }
+});
+
+test("ESTOQUE POR FRASE: listar a linha com 'temos' passa; 'pronta entrega' só na frase do modelo com unidade", async () => {
+  const ok = "Temos a Voltz EV1 e a Scooter X1. A Voltz EV1 tem a pronta entrega.";
+  const r1 = await rodar("Quais motos?", { modelo: [texto(ok)], catalogo: ["Voltz", "EV1", "Scooter", "X1"] });
+  /* sem modelosComEstoque na harness: a frase de estoque cita modelo sem unidade -> barra */
+  assert.equal(r1.r.motivo, "produto_sem_confirmacao");
+  const r2 = await rodar("Quais motos?", { modelo: [texto("Temos a Voltz EV1 e a Scooter X1. Qual combina mais com você?")], catalogo: ["Voltz", "EV1", "Scooter", "X1"] });
+  assert.equal(r2.enviados.length, 1);
 });

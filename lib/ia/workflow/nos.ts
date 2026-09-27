@@ -607,6 +607,16 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       const semPergunta = frases.filter((f) => !/\?/.test(f)).join("").trim();
       resposta = [...resposta.slice(0, -1), ...(semPergunta ? [semPergunta] : []), "Com quem eu falo? 😊"];
     }
+    /* 1º contato sem nome: só a pergunta do nome fica (as outras perguntas saem, a informação fica) */
+    if (!nomeConhecido && !jaConversou && resposta.length) {
+      const NOME = /com quem (?:eu )?falo|seu nome|como (?:você|vc) se chama/iu;
+      resposta = resposta
+        .map((b) => {
+          const frases = b.match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [b];
+          return frases.filter((f) => !/\?/.test(f) || NOME.test(f)).join("").trim();
+        })
+        .filter(Boolean);
+    }
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;

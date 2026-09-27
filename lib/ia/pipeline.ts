@@ -121,11 +121,16 @@ export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesD
   /* sem catálogo nas Deps (fluxo antigo): continua rígido */
   if (!deps.nomesDoCatalogo) return false;
   const comEstoque = new Set((deps.modelosComEstoque ?? []).map(norm));
-  const t = ` ${norm(texto)} `;
-  const citados = deps.nomesDoCatalogo.map(norm).filter((n) => n.length >= 2 && new RegExp(palavraInteira(n).source, "u").test(t));
-  if (citados.length) return citados.every((n) => comEstoque.has(n));
-  /* sem citar modelo: "temos motos elétricas" fala da linha da loja; estoque/pronta entrega/disponível exigem alguma unidade */
-  return /(?:em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))/iu.test(texto) ? comEstoque.size > 0 : true;
+  const catalogo = deps.nomesDoCatalogo.map(norm).filter((n) => n.length >= 2);
+  const ESTOQUE = /(?:em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))/iu;
+  /* frase por frase: só a frase que fala de estoque precisa que os modelos dela tenham unidade */
+  for (const frase of texto.split(/(?<=[.!?\n])\s*|•/u)) {
+    if (!ESTOQUE.test(frase)) continue;
+    const f = ` ${norm(frase)} `;
+    const citados = catalogo.filter((n) => new RegExp(palavraInteira(n).source, "u").test(f));
+    if (citados.length ? !citados.every((n) => comEstoque.has(n)) : comEstoque.size === 0) return false;
+  }
+  return true;
 }
 
 /* Horário e endereço são os fatos que mais se inventam. Só valem se estiverem, iguais, numa fonte autorizada. */
