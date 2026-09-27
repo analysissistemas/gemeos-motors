@@ -141,10 +141,24 @@ Devolva também:
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
 
+/* Roda a trava de fatos e o validador sobre a resposta; se barrariam, devolve a instrução de correção. */
+async function motivoDoBloqueio(ctx: CtxPipeline): Promise<string | null> {
+  const trava = await travaDeFatos.rodar(ctx);
+  if (trava.encerrar) {
+    return trava.detalhe === "sem_fonte_autorizada"
+      ? "Você citou horário ou endereço que não está na base de conhecimento. Reescreva sem citar horário nem endereço."
+      : 'Você afirmou estoque ("temos", "disponível", "pronta entrega") de modelo que NÃO está marcado EM ESTOQUE no catálogo, ou citou marca ou modelo que não está no CATÁLOGO DA LOJA. Reescreva: cite só modelos do catálogo e, para os que não estão EM ESTOQUE, diga que a equipe confirma o prazo. Continue ajudando o cliente e faça UMA pergunta para avançar a venda.';
+  }
+  const v = validarResposta(ctx.texto, { promptSistema: ctx.deps.promptSistema, fontesAutorizadas: ctx.deps.fontesAutorizadas });
+  if (!v.aprovada) return `O validador reprovou a resposta: ${v.violacoes.map((x) => `${x.rotulo} (${x.detalhe})`).join("; ")}. Reescreva corrigindo isso, curta e organizada.`;
+  return null;
+}
+
 function criarGerador(p: { promptSistema: string; memoria: CtxWorkflow["memoria"]; agora: string }) {
   const chamadas: { etapa: string; saida: unknown; ms: number }[] = [];
   let ultimo: z.infer<typeof esquemaAgente> | null = null;
   let ultimoErro: string | null = null;
+  let correcao: string | null = null;
   const blocoMemoria = `${p.agora}
 
 ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESUMO ANTERIOR\n${p.memoria.resumo ?? "(nenhum)"}\n\n## HISTÓRICO (mais antigo primeiro)\n${p.memoria.historico || "(primeira conversa)"}`;
@@ -156,7 +170,7 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
       r = await gerarObjeto({
         schema: esquemaAgente,
         maxTokens: 900,
-        sistema: `${p.promptSistema}\n\n${etapa === "interpretar" ? INSTRUCOES_INTERPRETAR : INSTRUCOES_REDIGIR}\n\n${blocoMemoria}`,
+        sistema: `${p.promptSistema}\n\n${etapa === "interpretar" ? INSTRUCOES_INTERPRETAR : INSTRUCOES_REDIGIR}\n\n${blocoMemoria}${correcao ? `\n\n# CORREÇÃO OBRIGATÓRIA (sua resposta anterior foi barrada)\n${correcao}` : ""}`,
         prompt: estoque ? `${montarEntrada(mensagemCliente)}\n\n# DADOS DO ESTOQUE\n${fatosDoEstoque(estoque)}` : montarEntrada(mensagemCliente),
       });
     } catch (e) {
@@ -168,23 +182,26 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
     return { mensagem: r.mensagem, consultaEstoque: r.consultaEstoque, transferir: r.transferir } satisfies SaidaModelo;
   };
   const saudacao = () => (chamadas.map((c) => (c.saida as { saudacao?: string | null }).saudacao).find((x) => !!x?.trim()) ?? null) as string | null;
-  return { gerar, chamadas, saudacao, erro: () => ultimoErro, ultimo: () => ultimo as z.infer<typeof esquemaAgente> | null };
+  return { gerar, chamadas, saudacao, erro: () => ultimoErro, ultimo: () => ultimo as z.infer<typeof esquemaAgente> | null, corrigir: (texto: string) => void (correcao = texto) };
 }
 
 async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
   const incluirTeste = !!c.conversa?.demo;
-  const [controle, promptSistema, modelos, veiculos, conhecimento] = await Promise.all([
+  const [controle, promptSistema, modelos, veiculos, conhecimento, catalogo] = await Promise.all([
     lerControle(),
     montarPromptSistema(),
-    db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca, ativo: schema.modelos.ativo, noSite: schema.modelos.mostrarNoSite }).from(schema.modelos),
+    db.select({ nome: schema.modelos.nome, marca: schema.modelos.marca }).from(schema.modelos),
     db.select({ marca: schema.veiculos.marca, modelo: schema.veiculos.modelo }).from(schema.veiculos).where(incluirTeste ? undefined : eq(schema.veiculos.teste, false)).limit(1000),
     fontesAutorizadas(),
+    catalogoParaIa({ incluirTeste }),
   ]);
   return {
     controle,
     promptSistema,
     nomesDeProdutos: Array.from(new Set([...modelos.flatMap((m) => [m.nome, m.marca]), ...veiculos.flatMap((v) => [v.marca, v.modelo])].filter((x): x is string => !!x))),
-    nomesDoCatalogo: Array.from(new Set(modelos.filter((m) => m.ativo && m.noSite).flatMap((m) => [m.nome, m.marca]).filter((x): x is string => !!x))),
+    /* só motos elétricas e acessórios do catálogo podem ser citados; "tem" só com unidade no estoque */
+    nomesDoCatalogo: catalogo.nomes,
+    modelosComEstoque: catalogo.comEstoque,
     fontesAutorizadas: conhecimento,
     gerar,
     consultarEstoque: (q) => consultarEstoque(q, { incluirTeste }),
@@ -325,7 +342,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   },
 
   agente: async (c) => {
-    const promptSistema = [await montarPromptSistema(), await catalogoParaIa()].filter(Boolean).join("\n\n");
+    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo })).texto].filter(Boolean).join("\n\n");
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -336,7 +353,19 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()}".${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}`,
     });
     const deps = await montarDeps(c, g.gerar);
-    const r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
+    let r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
+    /* pedido do dono (27/09/2026): a IA precisa sempre responder. Se a trava ou o validador barrarem,
+       ela reescreve uma vez com o motivo nas instruções; só se barrar de novo sai o texto padrão. */
+    const correcao = r.ctx.texto && !r.ctx.humano ? await motivoDoBloqueio(r.ctx) : null;
+    let reescreveu = false;
+    if (correcao) {
+      g.corrigir(correcao);
+      const r2 = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
+      if (r2.ctx.texto && !r2.ctx.humano) {
+        r = r2;
+        reescreveu = true;
+      }
+    }
     const ultimo = g.ultimo();
     const ferramentas = ["modelo", "prompt", ...(r.ctx.chamouEstoque ? ["tool_estoque"] : []), ...(r.ctx.textoCatalogo ? ["tool_catalogo"] : [])];
     const saida = {
@@ -352,6 +381,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       chamadas: g.chamadas,
       ferramentas,
       trilha: r.trilha,
+      ...(correcao ? { reescrita: { motivo: correcao, aproveitada: reescreveu } } : {}),
     };
     const aprendido = { fatos: ultimo?.fatos ?? {}, resumo: ultimo?.resumo ?? null };
     /* a IA falhou: quebra o nó para o motor tentar de novo (3x, esperas crescentes); esgotou, vai pelo caminho "erro" (vendedor) */

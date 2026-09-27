@@ -39,6 +39,8 @@ export type Deps = {
   /** modelos e marcas do catálogo que a loja vende (ativo e no site): podem ser citados, com preço
       de tabela e ficha, mas SEM afirmar disponibilidade (isso só com o estoque confirmando) */
   nomesDoCatalogo?: string[];
+  /** modelos com unidade disponível no estoque agora: para eles a IA pode dizer "tem"/"pronta entrega" */
+  modelosComEstoque?: string[];
   /** textos autorizados (base de conhecimento ativa): horário e endereço só valem se estiverem aqui */
   fontesAutorizadas: string[];
   gerar: (p: { mensagemCliente: string; estoque: ResultadoEstoque | null }) => Promise<SaidaModelo>;
@@ -112,6 +114,16 @@ export function produtosNaoConfirmados(texto: string, nomesDeProdutos: string[],
    Pega o "Temos sim!" genérico, sem nome de produto. Conservador de propósito. */
 const AFIRMA_DISPONIBILIDADE = /(?<![\p{L}\p{N}])(?:temos|tenho|tem\s+sim|h[aá]\s+sim|em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))(?![\p{L}\p{N}])/iu;
 export const afirmaDisponibilidade = (t: string) => AFIRMA_DISPONIBILIDADE.test(t);
+
+/* "Tem"/"pronta entrega" sem consultar um modelo específico: vale quando TODO modelo do catálogo citado
+   tem unidade no estoque agora (lista entregue à IA), ou, sem citar modelo, quando há alguma unidade. */
+export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesDoCatalogo" | "modelosComEstoque">) {
+  const comEstoque = new Set((deps.modelosComEstoque ?? []).map(norm));
+  if (!comEstoque.size) return false;
+  const t = ` ${norm(texto)} `;
+  const citados = (deps.nomesDoCatalogo ?? []).map(norm).filter((n) => n.length >= 2 && new RegExp(palavraInteira(n).source, "u").test(t));
+  return citados.every((n) => comEstoque.has(n));
+}
 
 /* Horário e endereço são os fatos que mais se inventam. Só valem se estiverem, iguais, numa fonte autorizada. */
 const AFIRMACOES = [
@@ -237,7 +249,7 @@ export const travaDeFatos: EtapaDeAtendimento = {
     /* nunca citar produto que o estoque não confirmou nesta execução */
     const doCatalogo = new Set((c.deps.nomesDoCatalogo ?? []).map(norm));
     if (produtosNaoConfirmados(t, c.deps.nomesDeProdutos, c.estoque).filter((n) => !doCatalogo.has(n)).length) return bloqueia("produto_sem_confirmacao");
-    if (afirmaDisponibilidade(t) && c.estoque?.estado !== "CONFIRMADO_DISPONIVEL") return bloqueia("produto_sem_confirmacao");
+    if (afirmaDisponibilidade(t) && c.estoque?.estado !== "CONFIRMADO_DISPONIVEL" && !disponibilidadeDoEstoque(t, c.deps)) return bloqueia("produto_sem_confirmacao");
     /* nunca afirmar horário ou endereço que não esteja numa fonte autorizada */
     if (afirmacoesSemFonte(t, c.deps.fontesAutorizadas).length) return bloqueia("sem_fonte_autorizada");
     return {};

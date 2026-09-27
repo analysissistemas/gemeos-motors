@@ -127,6 +127,13 @@
       "when": 1790482238976,
       "tag": "0017_ia_digitando",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790483550627,
+      "tag": "0018_ia_especialista_vendas",
+      "breakpoints": true
     }
   ]
 }

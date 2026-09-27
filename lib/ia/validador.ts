@@ -22,8 +22,8 @@ export type OpcoesValidacao = {
 export const EMOJIS_PERMITIDOS = ["🙏", "🙏🏻", "🙏🏼", "🙏🏽", "😊", "🙂", "🤝", "✅", "😉"];
 export const MAX_EMOJIS = 2;
 
-export const MAX_CARACTERES = 700;
-export const MAX_LINHAS = 6;
+export const MAX_CARACTERES = 1000;
+export const MAX_LINHAS = 12;
 
 export const REGRAS: Record<string, string> = {
   vazia: "Resposta vazia",

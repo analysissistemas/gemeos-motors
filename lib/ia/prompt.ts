@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
 import { normalizarHorario, textoHorario, type HorarioLoja } from "./horario";
@@ -82,29 +82,54 @@ export async function conhecimentoAtivo() {
 
 /** Textos que autorizam fatos (horário, endereço, valores, parcelas) na trava de fatos e no validador. */
 export async function fontesAutorizadas() {
-  /* o catálogo oficial também é fonte: nome e preço de tabela dele podem ser ditos ao cliente */
+  /* o catálogo oficial também é fonte: nome, preço de tabela, ficha e cores podem ser ditos ao cliente */
   const catalogo = await catalogoParaIa();
-  return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo ? [catalogo] : [])];
+  return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo.texto ? [catalogo.texto] : [])];
 }
 
-/* catálogo oficial (Estoque → Catálogo, o mesmo do site): a IA apresenta os modelos com preço de
-   tabela e ficha, mas disponibilidade quem confirma é o estoque/equipe */
-export async function catalogoParaIa() {
+const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", peso: "peso", recarga: "recarga" };
+
+/* Catálogo oficial (Estoque → Catálogo, o mesmo do site) + o que há no estoque agora. Regras do dono
+   (27/09/2026): só moto ELÉTRICA (nunca combustão nem carro) e acessório; a IA mostra opções, ficha,
+   cores e preço, e só diz "tem"/"pronta entrega" para modelo com unidade disponível no estoque.
+   `incluirTeste`: conversa simulada enxerga os veículos de teste. */
+export async function catalogoParaIa(opcoes: { incluirTeste?: boolean } = {}) {
   const m = schema.modelos;
-  const linhas = await db
-    .select({ nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha })
-    .from(m)
-    .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true)))
-    .orderBy(asc(m.ordem), asc(m.nome));
-  if (!linhas.length) return "";
-  const brl = (v: number | null) => (v ? `R$ ${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "preço sob consulta");
+  const v = schema.veiculos;
+  const [linhas, cores, unidades] = await Promise.all([
+    db
+      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade })
+      .from(m)
+      .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, ["moto_eletrica", "acessorio"])))
+      .orderBy(asc(m.ordem), asc(m.nome)),
+    db.select({ modeloId: schema.modeloCores.modeloId, nome: schema.modeloCores.nome }).from(schema.modeloCores).where(eq(schema.modeloCores.ativo, true)).orderBy(asc(schema.modeloCores.ordem)),
+    db
+      .select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor })
+      .from(v)
+      .where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
+  ]);
+  if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[] };
+  const brl = (x: number | null) => (x ? `R$ ${Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "preço sob consulta");
+  const comEstoque: string[] = [];
   const itens = linhas.map((l) => {
-    const f = l.ficha ?? {};
-    const destaque = [f.motor, f.autonomia && `autonomia ${f.autonomia}`, f.velocidade && `até ${f.velocidade}`].filter(Boolean).join(", ");
-    return `• ${[l.marca, l.nome].filter(Boolean).join(" ")}${l.tipo === "acessorio" ? " (acessório)" : ""}: ${brl(l.preco as number | null)}${destaque ? ` — ${destaque}` : ""}`;
+    const nome = [l.marca, l.nome].filter(Boolean).join(" ");
+    if (l.tipo === "acessorio") return `• ${nome} (acessório): ${brl(l.preco as number | null)}`;
+    const f = (l.ficha ?? {}) as Record<string, string>;
+    const ficha = Object.entries(ROTULO_FICHA).filter(([k]) => f[k]).map(([k, r]) => `${r} ${f[k]}`).join("; ");
+    const coresDoModelo = cores.filter((c) => c.modeloId === l.id).map((c) => c.nome);
+    /* unidade ligada ao modelo, ou com o mesmo nome digitado na entrada */
+    const minhas = unidades.filter((u) => u.modeloId === l.id || (!u.modeloId && u.modelo.trim().toLowerCase() === l.nome.trim().toLowerCase()));
+    if (minhas.length) comEstoque.push(l.nome, ...(l.marca ? [l.marca] : []));
+    const coresEstoque = Array.from(new Set(minhas.map((u) => u.cor).filter((c): c is string => !!c)));
+    const estoque = minhas.length
+      ? `EM ESTOQUE: ${minhas.length} unidade(s)${coresEstoque.length ? ` (${coresEstoque.join(", ")})` : ""} — pode dizer que tem a pronta entrega`
+      : `sem unidade no estoque agora — ${l.disponibilidade === "sob_encomenda" ? "sob encomenda" : "a equipe confirma o prazo"}`;
+    return `• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${coresDoModelo.length ? ` | cores: ${coresDoModelo.join(", ")}` : ""} | ${estoque}`;
   });
-  return `# CATÁLOGO DA LOJA (o mesmo do site)
-Estes são os modelos que a loja vende. Pode apresentá-los com nome, preço de tabela e ficha. NÃO diga "temos", "disponível", "em estoque" nem "pronta entrega": a disponibilidade você confirma com a equipe. Se o cliente perguntar quais opções existem ou se chegou moto nova, mostre a lista (só as motos, a não ser que ele pergunte de acessórios) e faça UMA pergunta para entender o que ele precisa (uso, autonomia ou orçamento).
+  const texto = `# CATÁLOGO DA LOJA (o mesmo do site) E ESTOQUE AGORA
+Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
+Pode apresentar nome, preço de tabela, ficha e cores. "Tem", "disponível" e "pronta entrega" SÓ para modelo marcado EM ESTOQUE; para os outros, diga que a equipe confirma o prazo.
 ${itens.join("\n")}`;
+  return { texto, nomes: Array.from(new Set(linhas.flatMap((l) => [l.nome, l.marca]).filter((x): x is string => !!x))), comEstoque: Array.from(new Set(comEstoque)) };
 }
 

@@ -69,8 +69,8 @@ test("reprova fingir ser pessoa ou negar ser assistente virtual", () => {
 });
 
 test("reprova resposta longa", () => {
-  assert.ok(regras("a".repeat(701)).includes("longa"));
-  assert.ok(regras(Array.from({ length: 8 }, (_, i) => `Linha ${i}`).join("\n")).includes("longa"));
+  assert.ok(regras("a".repeat(1001)).includes("longa"));
+  assert.ok(regras(Array.from({ length: 13 }, (_, i) => `Linha ${i}`).join("\n")).includes("longa"));
 });
 
 test("reprova quando a resposta repete trecho do prompt (vazamento)", () => {
