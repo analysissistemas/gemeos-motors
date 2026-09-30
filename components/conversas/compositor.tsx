@@ -18,6 +18,43 @@ export type EnvioChat =
 
 const LIMITE_ARQUIVO = 2 * 1024 * 1024;
 
+/* Foto de iPhone passa fácil de 2 MB, e o envio pela tela tem teto de 4 MB
+   (serverActions.bodySizeLimit). Em vez de recusar, reduz no próprio aparelho
+   (como o WhatsApp faz): tenta lados e qualidades menores até caber. Fundo
+   branco porque PNG com transparência sairia preto ao virar JPEG. */
+const TENTATIVAS_FOTO: [lado: number, qualidade: number][] = [[2048, 0.85], [1600, 0.8], [1280, 0.75]];
+
+async function reduzirFoto(f: File): Promise<{ url: string; tamanho: number } | null> {
+  const original = await new Promise<string>((ok, erro) => {
+    const leitor = new FileReader();
+    leitor.onload = () => ok(String(leitor.result));
+    leitor.onerror = () => erro(leitor.error);
+    leitor.readAsDataURL(f);
+  });
+  const im = new Image();
+  await new Promise((ok, erro) => {
+    im.onload = ok;
+    im.onerror = erro;
+    im.src = original;
+  });
+  for (const [lado, qualidade] of TENTATIVAS_FOTO) {
+    const escala = Math.min(1, lado / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(im.naturalWidth * escala);
+    c.height = Math.round(im.naturalHeight * escala);
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(im, 0, 0, c.width, c.height);
+    const url = c.toDataURL("image/jpeg", qualidade);
+    const tamanho = Math.floor(((url.length - url.indexOf(",") - 1) * 3) / 4);
+    if (tamanho <= LIMITE_ARQUIVO) return { url, tamanho };
+  }
+  return null;
+}
+
 /** Mensagem que está sendo respondida: aparece acima da caixa de texto. */
 export type Citacao = { quem: string; texto: string };
 
@@ -104,9 +141,14 @@ export function Compositor({
     }
   }
 
-  function escolherArquivo(f: File | undefined) {
+  async function escolherArquivo(f: File | undefined) {
     if (!f) return;
-    if (f.size > LIMITE_ARQUIVO) return void toast.error("Arquivo acima de 2 MB. No modo simulado o limite é 2 MB.");
+    if (f.type.startsWith("image/") && f.size > LIMITE_ARQUIVO) {
+      const r = await reduzirFoto(f).catch(() => null);
+      if (!r) return void toast.error("Não consegui preparar essa foto. Tente outra.");
+      return setAnexo({ url: r.url, nome: f.name.replace(/\.[^.]+$/, "") + ".jpg", mime: "image/jpeg", tamanho: r.tamanho });
+    }
+    if (f.size > LIMITE_ARQUIVO) return void toast.error("Documento acima de 2 MB.");
     const leitor = new FileReader();
     leitor.onload = () => setAnexo({ url: String(leitor.result), nome: f.name, mime: f.type || "application/octet-stream", tamanho: f.size });
     leitor.readAsDataURL(f);
