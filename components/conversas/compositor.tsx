@@ -143,7 +143,8 @@ export function Compositor({
 
   async function escolherArquivo(f: File | undefined) {
     if (!f) return;
-    if (f.type.startsWith("image/") && f.size > LIMITE_ARQUIVO) {
+    /* imagem grande ou em formato que o envio não aceita (ex.: colada de outro programa) vira JPEG */
+    if (f.type.startsWith("image/") && (f.size > LIMITE_ARQUIVO || !/^image\/(png|jpe?g|webp|gif)$/.test(f.type))) {
       const r = await reduzirFoto(f).catch(() => null);
       if (!r) return void toast.error("Não consegui preparar essa foto. Tente outra.");
       return setAnexo({ url: r.url, nome: f.name.replace(/\.[^.]+$/, "") + ".jpg", mime: "image/jpeg", tamanho: r.tamanho });
@@ -272,6 +273,14 @@ export function Compositor({
               onChange={(e) => {
                 setTexto(e.target.value);
                 if (emoji) setEmoji(false);
+              }}
+              onPaste={(e) => {
+                /* Ctrl+V com imagem vira anexo, como no WhatsApp; texto continua colando normal */
+                if (nota) return;
+                const imagem = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+                if (!imagem) return;
+                e.preventDefault();
+                escolherArquivo(imagem);
               }}
               onKeyDown={(e) => {
                 /* Enter envia no computador; no celular o Enter quebra linha e o botão envia */
