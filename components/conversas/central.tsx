@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { EstadoVazio } from "@/components/ui/basicos";
 import { Dialogo } from "@/components/ui/dialogo";
 import { pedirAtualizacaoContadores } from "@/components/shell/contadores";
+import { recarregarSeVersaoNova } from "@/components/shell/versao";
 import { DialogoPerda } from "@/components/negocios/dialogo-perda";
 import { DialogoFecharVenda } from "@/components/negocios/dialogo-fechar-venda";
 import { FormularioNegocio, type NegocioForm } from "@/components/negocios/formulario-negocio";
@@ -101,8 +102,8 @@ export function CentralConversas({
       if (abertaRef.current === id) setDados(d);
       setItens((xs) => xs.map((x) => (x.id === id ? { ...x, naoLidas: 0 } : x)));
       pedirAtualizacaoContadores();
-    } catch {
-      toast.error("Não foi possível abrir a conversa.");
+    } catch (e) {
+      if (!recarregarSeVersaoNova(e)) toast.error("Não foi possível abrir a conversa.");
     }
   }, []);
 

@@ -2,9 +2,12 @@
 import { useEffect } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Botao, BotaoLink } from "@/components/ui/botao";
+import { recarregarSeVersaoNova } from "@/components/shell/versao";
 
 export default function ErroSistema({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => console.error(error), [error]);
+  useEffect(() => {
+    if (!recarregarSeVersaoNova(error)) console.error(error);
+  }, [error]);
   return (
     <div className="grid min-h-[60dvh] place-items-center px-4">
       <div className="painel flex max-w-md flex-col items-center gap-2 p-8 text-center">
