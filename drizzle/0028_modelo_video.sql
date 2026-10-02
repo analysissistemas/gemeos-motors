@@ -1,0 +1,1 @@
+ALTER TABLE "modelos" ADD COLUMN "video_url" text;

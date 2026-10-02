@@ -43,6 +43,7 @@ export async function rodarWorkflowAtendimento(p: { conversaId: number; mensagem
     citar: -1,
     indice: 0,
     enviados: 0,
+    midia: null,
   };
 
   try {

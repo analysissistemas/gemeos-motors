@@ -114,11 +114,13 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       // voice: o cliente vê mensagem de voz (foto da loja com microfone), não arquivo de áudio com fone
       Object.assign(corpo, { type: "audio", audio: { id: up.id, voice: true } });
     }
-    else if ((pedido.tipo === "imagem" || pedido.tipo === "documento") && pedido.midia) {
-      const up = await this.subirMidia(pedido.midia);
+    else if ((pedido.tipo === "imagem" || pedido.tipo === "documento" || pedido.tipo === "video") && (pedido.midia || pedido.arquivo)) {
+      const up = pedido.arquivo ? await this.subirBytes(pedido.arquivo.bytes, pedido.arquivo.mime, pedido.arquivo.nome) : await this.subirMidia(pedido.midia!);
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
       if (pedido.tipo === "imagem") Object.assign(corpo, { type: "image", image: { id: up.id, caption: pedido.conteudo ?? undefined } });
-      else Object.assign(corpo, { type: "document", document: { id: up.id, filename: pedido.midia.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
+      /* vídeo: a Meta aceita MP4 (H.264 + AAC) até 16 MB */
+      else if (pedido.tipo === "video") Object.assign(corpo, { type: "video", video: { id: up.id, caption: pedido.conteudo ?? undefined } });
+      else Object.assign(corpo, { type: "document", document: { id: up.id, filename: pedido.midia?.nome ?? pedido.arquivo?.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
     }
     else return { externoId: null, status: "failed", erro: `Tipo ${pedido.tipo} ainda não suportado no envio real` };
 

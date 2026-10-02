@@ -132,6 +132,8 @@ export const modelos = pgTable(
     descricao: text(),
     /* foto principal do card (/api/vitrine/foto/...; pública) */
     fotoUrl: text(),
+    /* vídeo da moto (MP4 no volume de mídia, /api/midia/...): a IA manda no WhatsApp junto com a ficha */
+    videoUrl: text(),
     mostrarNoSite: boolean().notNull().default(true),
     disponibilidade: text().notNull().default("consultar"), // pronta_entrega | sob_encomenda | consultar
     /* lançamento: destaque no site e formulário de reserva */

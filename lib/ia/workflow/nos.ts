@@ -6,7 +6,7 @@ import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
 import { consultarEstoque } from "@/lib/ia/estoque";
 import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
-import { enviarRespostaDaIa } from "@/lib/ia/envio";
+import { enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
@@ -32,6 +32,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
+import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { criarNegocio } from "@/lib/servicos/negocios";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
@@ -100,6 +101,8 @@ export type CtxWorkflow = {
   citar: number;
   indice: number;
   enviados: number;
+  /** foto e vídeo da moto que vão depois do texto (pedido do cliente ou 1ª vez que a moto aparece) */
+  midia: PlanoMidia | null;
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -469,6 +472,39 @@ function gasolinaDoCliente(c: CtxWorkflow) {
   return gasolinaPara({ cidade, textoDoCliente: textoDoCliente(c) }).catch(() => null);
 }
 
+/** Motos com unidade disponível e a mídia de cada uma: foto de cada cor do estoque (sem foto da cor, a
+ *  principal do modelo) e o vídeo do catálogo. Conversa simulada enxerga os veículos de teste. */
+async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const k = schema.modeloCores;
+  const [modelos, unidades, cores] = await Promise.all([
+    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica"))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ modeloId: k.modeloId, nome: k.nome, fotoUrl: k.fotoUrl }).from(k),
+  ]);
+  return modelos.flatMap((x) => {
+    const minhas = unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase()));
+    if (!minhas.length) return [];
+    const coresEstoque = Array.from(new Set(minhas.map((u) => u.cor?.trim()).filter((cor): cor is string => !!cor)));
+    const fotos: { url: string; cor: string | null }[] = coresEstoque.flatMap((cor) => {
+      const f = cores.find((y) => y.modeloId === x.id && y.fotoUrl && y.nome.trim().toLowerCase() === cor.toLowerCase());
+      return f?.fotoUrl ? [{ url: f.fotoUrl, cor }] : [];
+    });
+    if (!fotos.length && x.fotoUrl) fotos.push({ url: x.fotoUrl, cor: coresEstoque.length === 1 ? coresEstoque[0] : null });
+    return [{ id: x.id, nome: x.nome, fotos, videoUrl: x.videoUrl }];
+  });
+}
+
+/** Endereços de foto/vídeo que a IA já mandou nesta conversa (para não repetir sem o cliente pedir). */
+async function midiasJaEnviadas(conversaId: number) {
+  const linhas = await db
+    .select({ url: schema.mensagens.midiaUrl })
+    .from(schema.mensagens)
+    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.autor, "ia"), sql`${schema.mensagens.midiaUrl} is not null`));
+  return linhas.map((l) => l.url).filter((u): u is string => !!u);
+}
+
 /** Nomes das motos sem unidade que o cliente não citou (se citou uma, todos os nomes dela ficam liberados). */
 function semEstoqueNaoCitadas(catalogo: { comEstoque: string[]; semEstoque: string[][] }, doCliente: string) {
   return catalogo.semEstoque.filter((apelidos) => !ofereceSemEstoque(doCliente, { modelosSemEstoque: apelidos, modelosComEstoque: catalogo.comEstoque }).length).flat();
@@ -635,6 +671,9 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 
   agente: async (c) => {
     const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
+    /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
+    const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
+    const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null });
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -642,7 +681,9 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       promptSistema,
       memoria: c.memoria,
       agora: `# AGORA
-Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}`,
+Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
+
+${instrucaoDeMidia(midia)}`,
     });
     const deps = await montarDeps(c, g.gerar);
     let r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
@@ -685,7 +726,8 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
     const aprendido = { fatos: ultimo?.fatos ?? {}, resumo: ultimo?.resumo ?? null };
     /* a IA falhou: quebra o nó para o motor tentar de novo (3x, esperas crescentes); esgotou, vai pelo caminho "erro" (vendedor) */
     if (r.fim === "bloqueada" || r.fim === "erro_etapa") throw new Error(g.erro() ?? r.trilha.at(-1)?.detalhe ?? "A IA não respondeu");
-    return { ctx: { pipe: r.ctx, aprendido, saudacao: g.saudacao(), motivoTransferencia: ultimo?.motivoTransferencia ?? (r.ctx.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida };
+    const midiaPedida = midia ? { modelo: midia.modelo?.nome ?? null, pedido: midia.pedido, vai: midia.itens.map((i) => i.tipo) } : null;
+    return { ctx: { pipe: r.ctx, aprendido, saudacao: g.saudacao(), midia, motivoTransferencia: ultimo?.motivoTransferencia ?? (r.ctx.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida } };
   },
 
   trava_fatos: async (c) => {
@@ -872,10 +914,26 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       if (/\?/u.test(b)) perguntou = true;
       return true;
     });
+    /* foto e vídeo da moto (pedido do dono, 02/10/2026): o que o cliente pediu ou, na 1ª vez que a moto
+       aparece na conversa, a foto da cor e o vídeo. Resposta-padrão (confirmar, fora do horário) não leva. */
+    const respostaDaIa = !!c.pipe?.texto && ![TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
+    /* o cliente pediu (mesmo sem arquivo para mandar): vale o que a IA já sabia ao escrever */
+    let midia: PlanoMidia | null = c.midia;
+    if (!midia && respostaDaIa && resposta.length) {
+      try {
+        midia = planejarApresentacao({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas: await midiasJaEnviadas(c.conversaId) });
+      } catch {
+        midia = null;
+      }
+    }
+    /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
+    if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
     const blocos = [...(saudacao ? [corrigirCumprimento(saudacao.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;
-    return blocos.length ? { ctx: { blocos, indice: 0, citar }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null } } : { ramo: "vazio", saida: { blocos: [] } };
+    const vaiMidia = midia?.itens.length ? midia : null;
+    const midiaSaida = vaiMidia ? vaiMidia.itens.map((i) => `${i.tipo}: ${i.legenda}`) : null;
+    return blocos.length ? { ctx: { blocos, indice: 0, citar, midia: vaiMidia }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null, midia: midiaSaida } } : { ramo: "vazio", ctx: { midia: null }, saida: { blocos: [] } };
   },
 
   loop: (c) => (c.indice < c.blocos.length ? { ramo: "proximo", saida: { bloco: c.indice + 1, de: c.blocos.length } } : { ramo: "fim", saida: { enviados: c.enviados } }),
@@ -896,7 +954,25 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
       await mensagemSistema(db, c.conversaId, `Resposta da IA não enviada: ${r.explicacao}. Um consultor precisa assumir.`);
       return { fim: "parou", detalhe: `Não enviada: ${r.explicacao}`, entrada: { texto }, saida: r };
     }
-    return { ctx: { indice: c.indice + 1, enviados: c.enviados + 1 }, entrada: { texto }, saida: { enviada: true, citou: c.indice === c.citar, simulado: c.simulado } };
+    /* depois do último bloco de texto: a foto e o vídeo da moto. Falha aqui não repete o texto
+       (o nó não é refeito): vira um aviso para a equipe mandar à mão. */
+    const midias: { tipo: string; enviada: boolean; erro: string | null }[] = [];
+    if (c.indice === c.blocos.length - 1 && c.midia?.itens.length) {
+      for (const item of c.midia.itens) {
+        try {
+          await mostrarDigitando(c, 1500);
+          await esperar(1500);
+          const m = await enviarMidiaDaIa({ conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, tipo: item.tipo, url: item.url, legenda: item.legenda, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo });
+          midias.push({ tipo: item.tipo, enviada: m.enviada, erro: m.explicacao });
+        } catch (e) {
+          midias.push({ tipo: item.tipo, enviada: false, erro: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
+      const falhas = midias.filter((x) => !x.enviada);
+      if (falhas.length) await mensagemSistema(db, c.conversaId, `A IA não conseguiu mandar ${falhas.map((x) => (x.tipo === "foto" ? "a foto" : "o vídeo")).join(" e ")} da ${c.midia.modelo?.nome ?? "moto"} (${falhas[0].erro ?? "erro"}). Mande à mão, se o cliente ainda quiser.`);
+    }
+    return { ctx: { indice: c.indice + 1, enviados: c.enviados + 1 }, entrada: { texto }, saida: { enviada: true, citou: c.indice === c.citar, simulado: c.simulado, ...(midias.length ? { midias } : {}) } };
   },
 
   final: (c) => ({ fim: "sucesso", detalhe: c.enviados ? `${c.enviados} mensagem(ns) enviada(s)` : "Nada a enviar", saida: { enviados: c.enviados, transferida: !!c.pipe?.humano } }),

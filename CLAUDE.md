@@ -254,6 +254,11 @@ página, ação e rota de API — esconder botão não é segurança.
   simulado no envio da equipe, na reação e na resposta da IA (`lib/ia/envio.ts`). Número de cliente
   real é recusado (juntaria a simulação à conversa de verdade).
 - **Desligar a IA** exige digitar `DESLIGAR` (maiúsculas), conferido no servidor (`acaoSalvarControle`).
+- **A IA só oferece moto com unidade Disponível no estoque** (02/10/2026). Moto do catálogo sem
+  unidade só aparece se o cliente perguntar por ela (diz que não tem agora e anota o interesse).
+- **A IA manda a foto e o vídeo da moto** (02/10/2026): foto da cor que está no estoque e o vídeo do
+  catálogo (Estoque → Catálogo → editar modelo → Vídeo, MP4 até 10 MB), depois do texto, na 1ª vez
+  que a moto aparece na conversa ou quando o cliente pede (`lib/ia/midia-tipos.ts`). Nunca link.
 - **Cada veículo é peça única** (chassi, quilometragem, avarias, e placa e ano
   quando é emplacado), nunca contagem por modelo. **Acessórios são por
   quantidade.**

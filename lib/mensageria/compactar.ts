@@ -100,3 +100,12 @@ export async function compactarFoto(bytes: Uint8Array): Promise<Buffer | null> {
 export async function compactarVideoArquivo(entrada: string, saida: string, timeoutMs = 10 * 60_000) {
   await ffmpeg(["-y", "-i", entrada, ...ARGS_VIDEO_SAIDA, "-f", "mp4", saida], null, timeoutMs);
 }
+
+/** Foto do catálogo (WebP) em JPEG para o WhatsApp, que não aceita WebP como foto. JPEG e PNG passam direto. */
+export async function fotoParaWhatsApp(bytes: Uint8Array): Promise<{ bytes: Buffer; mime: "image/jpeg" | "image/png" }> {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return { bytes: Buffer.from(bytes), mime: "image/jpeg" };
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return { bytes: Buffer.from(bytes), mime: "image/png" };
+  const jpeg = await ffmpeg(["-i", "pipe:0", "-frames:v", "1", ...ARGS_FOTO_SAIDA, "pipe:1"], bytes, 30_000);
+  if (!(jpeg[0] === 0xff && jpeg[1] === 0xd8)) throw new Error("a conversão da foto para JPEG falhou");
+  return { bytes: jpeg, mime: "image/jpeg" };
+}

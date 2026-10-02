@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, Film, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2 } from "lucide-react";
 import type { CorModelo, ItemCatalogo } from "@/lib/consultas/estoque";
 import { CAMPOS_FICHA, DISPONIBILIDADES, TIPOS_CATALOGO, type Disponibilidade, type TipoCatalogo } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
@@ -204,6 +204,9 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   const [fotoUrl, setFotoUrl] = useState(item?.fotoUrl ?? null);
   const [enviando, setEnviando] = useState(false);
   const entradaFoto = useRef<HTMLInputElement>(null);
+  const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? null);
+  const [enviandoVideo, setEnviandoVideo] = useState(false);
+  const entradaVideo = useRef<HTMLInputElement>(null);
   const acessorio = tipo === "acessorio";
 
   async function salvar() {
@@ -249,6 +252,30 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     }
   }
 
+  /* vídeo vai por rota própria (até 10 MB); a ação de servidor só aceita 4 MB */
+  async function trocarVideo(arquivo: File | null) {
+    if (!item) return;
+    if (arquivo && arquivo.type !== "video/mp4") return void toast.error("Use um vídeo MP4.");
+    if (arquivo && arquivo.size > 10 * 1024 * 1024) return void toast.error("O vídeo passa de 10 MB. Mande um mais curto ou mais leve.");
+    setEnviandoVideo(true);
+    try {
+      let r: Response;
+      if (arquivo) {
+        const dados = new FormData();
+        dados.set("video", arquivo);
+        r = await fetch(`/api/catalogo/video/${item.id}`, { method: "POST", body: dados });
+      } else r = await fetch(`/api/catalogo/video/${item.id}`, { method: "DELETE" });
+      const j = (await r.json().catch(() => ({}))) as { videoUrl?: string | null; erro?: string };
+      if (!r.ok) return void toast.error(j.erro ?? "Não foi possível guardar o vídeo.");
+      setVideoUrl(j.videoUrl ?? null);
+      await rodar(async () => ({ ok: true, mensagem: arquivo ? "Vídeo da moto guardado" : "Vídeo removido" }));
+    } catch {
+      toast.error("Sem conexão. Tente de novo.");
+    } finally {
+      setEnviandoVideo(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-linha p-3">
@@ -286,6 +313,42 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
           </div>
         )}
       </div>
+
+      {!acessorio && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-linha p-3">
+          <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-trilho ring-1 ring-linha">
+            {videoUrl ? <video src={videoUrl} muted playsInline preload="metadata" className="size-full object-cover" aria-label="Vídeo da moto" /> : <Film className="size-6 text-ink-3" aria-label="Sem vídeo" />}
+          </span>
+          <div className="min-w-0 flex-1 text-[13px]">
+            <p className="font-semibold">Vídeo da moto</p>
+            <p className="text-ink-3">{item ? "A IA manda no WhatsApp junto com a ficha, quando o cliente fala desta moto. MP4 até 10 MB." : "Salve o modelo primeiro; depois dá para pôr o vídeo."}</p>
+          </div>
+          {item && (
+            <div className="flex gap-1">
+              <input
+                ref={entradaVideo}
+                type="file"
+                accept="video/mp4"
+                className="hidden"
+                aria-label="Escolher vídeo da moto"
+                onChange={(e) => {
+                  const arquivo = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  if (arquivo) void trocarVideo(arquivo);
+                }}
+              />
+              <Botao tamanho="sm" variante="secundario" carregando={enviandoVideo} disabled={pendente} onClick={() => entradaVideo.current?.click()}>
+                <Film className="size-4" /> {videoUrl ? "Trocar vídeo" : "Pôr vídeo"}
+              </Botao>
+              {videoUrl && (
+                <Botao tamanho="icone" variante="fantasma" aria-label="Remover vídeo da moto" disabled={pendente || enviandoVideo} onClick={() => void trocarVideo(null)}>
+                  <Trash2 className="size-4" />
+                </Botao>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo rotulo="Nome" obrigatorio erro={erros.nome}>

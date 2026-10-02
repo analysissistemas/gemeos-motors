@@ -123,6 +123,7 @@ export async function listarCatalogo() {
       ficha: m.ficha,
       descricao: m.descricao,
       fotoUrl: m.fotoUrl,
+      videoUrl: m.videoUrl,
       mostrarNoSite: m.mostrarNoSite,
       disponibilidade: m.disponibilidade,
       lancamento: m.lancamento,

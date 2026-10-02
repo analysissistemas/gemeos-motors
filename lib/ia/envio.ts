@@ -2,6 +2,9 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db, schema, type Tx } from "@/lib/db";
 import { obterProvedor } from "@/lib/mensageria/provedores";
+import { lerBytes } from "@/lib/mensageria/midia";
+import { fotoParaWhatsApp } from "@/lib/mensageria/compactar";
+import { lerFotoCatalogo } from "@/lib/fotos";
 import { lerControle } from "./controle";
 import { MODELO_IA } from "./cliente";
 import { fontesAutorizadas, montarPromptSistema, versoesEmUso } from "./prompt";
@@ -60,4 +63,59 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
   const enviada = motivo === null;
   await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: p.texto, aprovada: validacao.aprovada, enviada, motivo, violacoes: validacao.violacoes, promptVersoes: await versoesEmUso(), modelo: MODELO_IA });
   return { enviada, motivo, violacoes: validacao.violacoes, explicacao };
+}
+
+/* Foto ou vídeo da moto mandado pela IA junto com a resposta (pedido do dono, 02/10/2026). Mesmas
+   travas do texto: chave geral e permissão de envio; conversa simulada fica só no chat. O arquivo é
+   o do catálogo (foto da cor ou vídeo do modelo), nunca algo que a IA escreveu. A foto vai em JPEG
+   (o WhatsApp não aceita WebP); o vídeo, como está guardado (MP4). */
+export async function enviarMidiaDaIa(p: { conversaId: number; telefone: string; tipo: "foto" | "video"; url: string; legenda: string; origem: string; simulado?: boolean }): Promise<{ enviada: boolean; explicacao: string | null }> {
+  const controle = await lerControle();
+  if (!controle.ligada || !controle.permissoes.enviarMensagem) return { enviada: false, explicacao: "a IA não tem permissão de envio" };
+  const [cv] = await db.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
+  const simulado = !!p.simulado || !!cv?.demo;
+  const tipo = p.tipo === "foto" ? ("imagem" as const) : ("video" as const);
+
+  let arquivo: { bytes: Uint8Array; mime: string; nome: string } | null = null;
+  let erro: string | null = null;
+  try {
+    const nomeFoto = p.url.startsWith("/api/vitrine/foto/") ? p.url.slice("/api/vitrine/foto/".length) : null;
+    const lido = nomeFoto ? await lerFotoCatalogo(nomeFoto) : await lerBytes(p.url);
+    if (!lido) erro = "arquivo do catálogo não encontrado";
+    else if (p.tipo === "foto") {
+      const jpeg = await fotoParaWhatsApp(lido.bytes);
+      arquivo = { bytes: jpeg.bytes, mime: jpeg.mime, nome: jpeg.mime === "image/png" ? "moto.png" : "moto.jpg" };
+    } else if (lido.bytes.byteLength > 16 * 1024 * 1024) erro = "vídeo maior que 16 MB (limite do WhatsApp)";
+    else arquivo = { bytes: lido.bytes, mime: "video/mp4", nome: "moto.mp4" };
+  } catch (e) {
+    erro = e instanceof Error ? e.message : String(e);
+  }
+
+  let externoId: string | null = null;
+  if (arquivo && !simulado) {
+    const env = await (await obterProvedor()).enviar({ telefone: p.telefone, tipo, conteudo: p.legenda, arquivo });
+    externoId = env.externoId;
+    if (env.status === "failed") erro = env.erro ?? "o WhatsApp recusou o envio";
+  }
+  const enviada = !erro;
+  if (enviada) {
+    await db.insert(schema.mensagens).values({
+      conversaId: p.conversaId,
+      direcao: "outgoing",
+      autor: "ia",
+      tipo,
+      conteudo: p.legenda,
+      midiaUrl: p.url,
+      midiaMime: arquivo?.mime ?? null,
+      midiaTamanho: arquivo?.bytes.byteLength ?? null,
+      status: "sent",
+      externoId,
+    });
+    await db
+      .update(schema.conversas)
+      .set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: `${p.tipo === "foto" ? "Foto" : "Vídeo"}: ${p.legenda.replace(/\*/g, "")}`.slice(0, 160), ultimaMensagemDirecao: "outgoing" })
+      .where(eq(schema.conversas.id, p.conversaId));
+  }
+  await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: `[${p.tipo === "foto" ? "foto" : "vídeo"}] ${p.legenda}`, aprovada: true, enviada, motivo: enviada ? null : "falha_envio", violacoes: [], promptVersoes: await versoesEmUso(), modelo: MODELO_IA });
+  return { enviada, explicacao: erro };
 }

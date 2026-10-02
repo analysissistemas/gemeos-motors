@@ -45,6 +45,8 @@ export type PedidoEnvio = {
   respostaAExternoId?: string | null;
   /** modelo aprovado pela Meta (fora da janela de 24 h); `conteudo` é o texto já preenchido */
   modelo?: { nome: string; idioma: string; componentes: unknown[] } | null;
+  /** bytes já prontos para subir (ex.: foto do catálogo convertida para JPEG); sem isso, lê de `midia.url` */
+  arquivo?: { bytes: Uint8Array; mime: string; nome: string } | null;
 };
 
 export type ResultadoEnvio = { externoId: string | null; status: "sent" | "failed"; erro?: string };
