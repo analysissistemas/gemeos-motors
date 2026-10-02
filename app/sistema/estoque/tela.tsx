@@ -11,7 +11,7 @@ import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
-import { mudarStatusVeiculo, salvarVeiculo } from "./acoes";
+import { darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
 import { Catalogo } from "./catalogo";
 
@@ -329,16 +329,320 @@ function FormularioVeiculo({
   custo: boolean;
   admin: boolean;
 }) {
+  /* entrada nova abre na rápida (moto elétrica do catálogo); editar e "outro veículo" usam o formulário completo */
+  const [modo, setModo] = useState<"rapida" | "completa">("rapida");
+  const temEletrica = modelos.some((m) => m.tipo === "moto_eletrica");
+  const rapida = !inicial.id && temEletrica && modo === "rapida";
   return (
     <Dialogo
       aberto={aberto}
-      aoMudar={aoMudar}
+      aoMudar={(v) => {
+        aoMudar(v);
+        if (!v) setModo("rapida");
+      }}
       largura="lg"
       titulo={inicial.id ? "Editar veículo" : "Dar entrada em veículo"}
-      descricao="Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
+      descricao={
+        rapida
+          ? "Escolha o modelo, a cor e quantas chegaram. O resto vem do catálogo."
+          : "Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
+      }
     >
-      {aberto && <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />}
+      {aberto && !inicial.id && temEletrica && (
+        <Abas
+          className="mb-4"
+          abas={[
+            { id: "rapida", rotulo: "Moto elétrica nova" },
+            { id: "completa", rotulo: "Outro veículo (usado, a combustão, carro)" },
+          ]}
+          atual={modo}
+          aoMudar={setModo}
+        />
+      )}
+      {aberto &&
+        (rapida ? (
+          <EntradaRapida modelos={modelos.filter((m) => m.tipo === "moto_eletrica")} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
+        ) : (
+          <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
+        ))}
     </Dialogo>
+  );
+}
+
+/* Entrada rápida: moto elétrica nova do catálogo, várias de uma vez. Só o que muda de uma moto
+   para outra é perguntado (modelo, cor, quantas); tipo, nome, condição e preço vêm do catálogo,
+   então a unidade fica sempre ligada ao modelo e a IA enxerga certinho o que tem. */
+function EntradaRapida({
+  modelos,
+  cores,
+  unidades,
+  custo,
+  admin,
+  aoFechar,
+}: {
+  modelos: Modelo[];
+  cores: CorModelo[];
+  unidades: { id: number; nome: string }[];
+  custo: boolean;
+  admin: boolean;
+  aoFechar: () => void;
+}) {
+  const [modeloId, setModeloId] = useState<number | null>(null);
+  const [cor, setCor] = useState("");
+  const [outraCor, setOutraCor] = useState(false);
+  const [quantidade, setQuantidade] = useState(1);
+  const [valor, setValor] = useState<number | null>(null);
+  const [status, setStatus] = useState<"disponivel" | "reservado">("disponivel");
+  const [chassis, setChassis] = useState("");
+  const [mais, setMais] = useState({ custo: null as number | null, origemEntrada: "fornecedor", entradaEm: "", observacoes: "", unidadeId: (unidades[0]?.id ?? null) as number | null, teste: false });
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+
+  const modelo = modelos.find((m) => m.id === modeloId) ?? null;
+  /* as cores que aparecem no site primeiro; as escondidas continuam escolhíveis */
+  const coresDoModelo = modelo ? cores.filter((c) => c.modeloId === modelo.id).sort((a, b) => Number(b.ativo) - Number(a.ativo)) : [];
+  const listaChassis = chassis.split(/[\s,;]+/).map((c) => c.trim().toUpperCase()).filter(Boolean);
+  const nomeMoto = modelo ? `${modelo.nome}${cor.trim() ? ` ${cor.trim()}` : ""}` : "";
+
+  function escolherModelo(m: Modelo) {
+    setModeloId(m.id);
+    setValor(m.precoTabela);
+    const doModelo = cores.filter((c) => c.modeloId === m.id);
+    /* cor única: já vem marcada */
+    setCor(doModelo.length === 1 ? doModelo[0].nome : "");
+    setOutraCor(doModelo.length === 0);
+    setErros({});
+  }
+
+  function salvar() {
+    iniciar(async () => {
+      if (!modelo) return void setErros({ modeloId: "Escolha o modelo" });
+      if (!cor.trim()) return void setErros({ cor: "Escolha a cor" });
+      const r = await darEntradaEmLote({
+        modeloId: modelo.id,
+        cor: cor.trim(),
+        quantidade,
+        chassis: listaChassis,
+        valorAnunciado: valor,
+        custo: mais.custo,
+        status,
+        unidadeId: mais.unidadeId,
+        origemEntrada: mais.origemEntrada,
+        entradaEm: mais.entradaEm || null,
+        observacoes: mais.observacoes || null,
+        teste: mais.teste,
+      });
+      if (!r.ok) {
+        setErros(r.campos ?? {});
+        toast.error(r.erro);
+        return;
+      }
+      toast.success(r.mensagem);
+      aoFechar();
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-5">
+        <fieldset>
+          <legend className="mb-2 text-[12px] font-medium text-ink-2">
+            Modelo <span className="text-critico">*</span>
+          </legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Modelo">
+            {modelos.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => escolherModelo(m)}
+                aria-pressed={m.id === modeloId}
+                className={`flex min-h-14 flex-col items-start justify-center rounded-xl border px-3 py-2 text-left transition ${m.id === modeloId ? "border-ink bg-trilho" : "border-linha hover:border-linha-forte"}`}
+              >
+                <span className="text-[14px] font-semibold leading-tight">{m.nome}</span>
+                <span className="num text-[12px] text-ink-3">{m.precoTabela ? brl(m.precoTabela) : "sem preço"}</span>
+              </button>
+            ))}
+          </div>
+          {erros.modeloId && (
+            <p className="mt-1.5 text-[12px] text-critico" role="alert">
+              {erros.modeloId}
+            </p>
+          )}
+        </fieldset>
+
+        {modelo && (
+          <>
+            <fieldset>
+              <legend className="mb-2 text-[12px] font-medium text-ink-2">
+                Cor <span className="text-critico">*</span>
+              </legend>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Cor">
+                {coresDoModelo.map((c) => {
+                  const marcada = !outraCor && cor.toLowerCase() === c.nome.toLowerCase();
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setOutraCor(false);
+                        setCor(c.nome);
+                      }}
+                      aria-pressed={marcada}
+                      className={`flex items-center gap-1.5 rounded-full border py-1.5 pl-1.5 pr-3 text-[13px] ${marcada ? "border-ink bg-trilho font-semibold" : "border-linha hover:border-linha-forte"}`}
+                    >
+                      <BolinhaCor hex={c.hex} tamanho="sm" />
+                      {c.nome}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOutraCor(true);
+                    setCor("");
+                  }}
+                  aria-pressed={outraCor}
+                  className={`rounded-full border px-3 py-1.5 text-[13px] ${outraCor ? "border-ink bg-trilho font-semibold" : "border-dashed border-linha hover:border-linha-forte"}`}
+                >
+                  Outra cor
+                </button>
+              </div>
+              {outraCor && (
+                <Entrada className="mt-2" aria-label="Nome da cor" value={cor} onChange={(e) => setCor(e.target.value)} placeholder="Ex.: Cinza com laranja" autoFocus invalido={!!erros.cor} />
+              )}
+              <p className={`mt-1.5 text-[12px] ${erros.cor ? "text-critico" : "text-ink-3"}`} role={erros.cor ? "alert" : undefined}>
+                {erros.cor ?? "A IA oferece a moto exatamente com esta cor."}
+              </p>
+            </fieldset>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Campo rotulo="Quantas chegaram" erro={erros.quantidade} htmlFor="entrada-quantidade">
+                <div className="flex items-center gap-2">
+                  <Botao variante="secundario" aria-label="Uma a menos" onClick={() => setQuantidade((q) => Math.max(1, q - 1))} disabled={quantidade <= 1}>
+                    −
+                  </Botao>
+                  <Entrada
+                    id="entrada-quantidade"
+                    inputMode="numeric"
+                    className="num w-16 text-center"
+                    value={quantidade}
+                    onChange={(e) => setQuantidade(Math.min(30, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))}
+                  />
+                  <Botao variante="secundario" aria-label="Uma a mais" onClick={() => setQuantidade((q) => Math.min(30, q + 1))} disabled={quantidade >= 30}>
+                    +
+                  </Botao>
+                </div>
+              </Campo>
+              <Campo rotulo="Valor anunciado (cada)" erro={erros.valorAnunciado} dica={modelo.precoTabela && valor === modelo.precoTabela ? "Preço de tabela do catálogo." : undefined}>
+                <CampoDinheiro valor={valor} aoMudar={setValor} />
+              </Campo>
+            </div>
+
+            <fieldset>
+              <legend className="mb-2 text-[12px] font-medium text-ink-2">Onde está</legend>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="Onde está">
+                {(
+                  [
+                    ["disponivel", "Já está na loja", "Fica Disponível: a IA já pode oferecer."],
+                    ["reservado", "Ainda vai chegar", "Fica Reservado: a IA só oferece quando você mudar para Disponível."],
+                  ] as const
+                ).map(([k, titulo, detalhe]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setStatus(k)}
+                    aria-pressed={status === k}
+                    className={`rounded-xl border px-3 py-2 text-left ${status === k ? "border-ink bg-trilho" : "border-linha hover:border-linha-forte"}`}
+                  >
+                    <span className="block text-[14px] font-semibold">{titulo}</span>
+                    <span className="block text-[12px] text-ink-3">{detalhe}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <Campo
+              rotulo="Chassi (opcional)"
+              erro={erros.chassis}
+              dica={`Um por linha, ou cole a lista. ${listaChassis.length ? `${listaChassis.length} de ${quantidade} preenchido(s); o resto você completa depois.` : "Pode deixar para depois."}`}
+            >
+              <AreaTexto value={chassis} onChange={(e) => setChassis(e.target.value.toUpperCase())} className="num min-h-[72px]" invalido={!!erros.chassis} />
+            </Campo>
+
+            <details className="rounded-xl border border-linha px-3 py-2">
+              <summary className="cursor-pointer text-[13px] font-medium text-ink-2">Mais detalhes (custo, origem, data, observações)</summary>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {custo && (
+                  <Campo rotulo="Custo de cada (só administrador vê)">
+                    <CampoDinheiro valor={mais.custo} aoMudar={(v) => setMais((x) => ({ ...x, custo: v }))} />
+                  </Campo>
+                )}
+                <Campo rotulo="Origem">
+                  <Selecao value={mais.origemEntrada} onChange={(e) => setMais((x) => ({ ...x, origemEntrada: e.target.value }))}>
+                    {Object.entries(ORIGENS_ENTRADA).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </Selecao>
+                </Campo>
+                <Campo rotulo="Data de entrada" dica="Vazio = hoje.">
+                  <Entrada type="date" value={mais.entradaEm} onChange={(e) => setMais((x) => ({ ...x, entradaEm: e.target.value }))} />
+                </Campo>
+                {unidades.length > 1 && (
+                  <Campo rotulo="Loja">
+                    <Selecao value={mais.unidadeId ?? ""} onChange={(e) => setMais((x) => ({ ...x, unidadeId: e.target.value ? Number(e.target.value) : null }))}>
+                      {unidades.map((un) => (
+                        <option key={un.id} value={un.id}>
+                          {un.nome}
+                        </option>
+                      ))}
+                    </Selecao>
+                  </Campo>
+                )}
+                <Campo rotulo="Observações" className="sm:col-span-2">
+                  <AreaTexto value={mais.observacoes} onChange={(e) => setMais((x) => ({ ...x, observacoes: e.target.value }))} placeholder="Vale para todas as unidades desta entrada." />
+                </Campo>
+                {admin && (
+                  <div className="sm:col-span-2">
+                    <Alternar
+                      marcado={mais.teste}
+                      aoMudar={(v) => setMais((x) => ({ ...x, teste: v }))}
+                      rotulo="Veículo de teste (só para testar a IA)"
+                      descricao="Não entra no estoque real, nas vendas, no painel nem nos avisos aos clientes."
+                    />
+                  </div>
+                )}
+              </div>
+            </details>
+
+            <div className="rounded-xl bg-trilho px-3 py-2.5 text-[13px]" aria-live="polite">
+              <p>
+                Vai entrar: <strong className="num">{quantidade}</strong> × <strong>{nomeMoto}</strong>
+                {valor ? <span className="num"> · {brl(valor)} cada</span> : null} · {status === "disponivel" ? "Disponível" : "Reservado (chegando)"}
+              </p>
+              <p className="text-[12px] text-ink-3">
+                {mais.teste
+                  ? "Veículo de teste: a IA só enxerga em conversa simulada."
+                  : status === "disponivel"
+                    ? `A IA passa a oferecer a ${nomeMoto || "moto"} a pronta entrega.`
+                    : "A IA não oferece enquanto estiver Reservado."}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+      <RodapeDialogo>
+        <Botao variante="fantasma" onClick={aoFechar}>
+          Cancelar
+        </Botao>
+        <Botao variante="primario" carregando={pendente} onClick={salvar} disabled={!modelo}>
+          {quantidade > 1 ? `Cadastrar ${quantidade} motos` : "Cadastrar moto"}
+        </Botao>
+      </RodapeDialogo>
+    </>
   );
 }
 

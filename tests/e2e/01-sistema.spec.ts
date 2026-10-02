@@ -140,6 +140,9 @@ test("entrada de veículo no estoque", async () => {
   await page.goto("/sistema/estoque");
   await page.getByRole("button", { name: "Dar entrada em veículo" }).first().click();
   const d = page.getByRole("dialog", { name: "Dar entrada em veículo" });
+  /* veículo fora do catálogo: formulário completo (a aba rápida é só para moto elétrica do catálogo) */
+  const outro = d.getByRole("tab", { name: /Outro veículo/ });
+  if (await outro.count()) await outro.click();
   await campo(d, "Tipo").selectOption({ index: 0 });
   await campo(d, "Modelo").fill(estado.veiculo);
   await campo(d, "Cor").fill("Branca");

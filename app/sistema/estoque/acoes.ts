@@ -1,5 +1,5 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
@@ -76,6 +76,91 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
     revalidatePath("/sistema/estoque");
     return { id };
   }, entrada.id ? "Veículo atualizado" : "Veículo cadastrado no estoque");
+}
+
+/* Entrada rápida (pedido do dono, 02/10/2026: cadastrar moto estava "ruim demais"): moto elétrica NOVA
+   do catálogo, várias unidades de uma vez. Tipo, marca, nome e preço vêm do catálogo, então a unidade
+   sempre fica ligada ao modelo (é por essa ligação que a IA e o site sabem o que tem). Cada unidade
+   continua sendo um veículo próprio; chassi é opcional e pode ser completado depois, um por unidade. */
+export async function darEntradaEmLote(entrada: {
+  modeloId: number;
+  cor: string;
+  quantidade: number;
+  chassis: string[];
+  valorAnunciado: number | null;
+  custo?: number | null;
+  status: "disponivel" | "reservado";
+  unidadeId?: number | null;
+  origemEntrada?: string | null;
+  entradaEm?: string | null;
+  observacoes?: string | null;
+  teste?: boolean;
+}) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const podeCusto = pode(u.papel, "custo.ver");
+    const podeTeste = u.papel === "admin";
+    const quantidade = Math.trunc(Number(entrada.quantidade));
+    if (!(quantidade >= 1 && quantidade <= 30)) throw new ErroRegra("Quantidade de 1 a 30 por vez.", { quantidade: "De 1 a 30" });
+    if (entrada.status !== "disponivel" && entrada.status !== "reservado") throw new ErroRegra("Situação inválida.");
+    const [m] = await db.select().from(schema.modelos).where(eq(schema.modelos.id, Number(entrada.modeloId))).limit(1);
+    if (!m || !m.ativo || m.tipo === "acessorio") throw new ErroRegra("Escolha um modelo do catálogo.", { modeloId: "Escolha o modelo" });
+    const cor = (entrada.cor ?? "").trim();
+    if (!cor) throw new ErroRegra("Escolha a cor.", { cor: "Escolha a cor" });
+
+    const chassis = (entrada.chassis ?? []).map((c) => c.toUpperCase().replace(/\s/g, "")).filter(Boolean);
+    if (chassis.length > quantidade) throw new ErroRegra(`São ${chassis.length} chassis para ${quantidade} moto(s). Um chassi por moto.`, { chassis: "Mais chassis que motos" });
+    const repetido = chassis.find((c, i) => chassis.indexOf(c) !== i);
+    if (repetido) throw new ErroRegra(`O chassi ${repetido} está repetido na lista.`, { chassis: "Chassi repetido" });
+    if (chassis.length) {
+      const ja = await db.select({ chassi: schema.veiculos.chassi }).from(schema.veiculos).where(inArray(schema.veiculos.chassi, chassis)).limit(1);
+      if (ja.length) throw new ErroRegra(`O chassi ${ja[0].chassi} já está cadastrado no estoque.`, { chassis: "Chassi já cadastrado" });
+    }
+
+    /* cada unidade passa pela mesma validação do cadastro de um veículo */
+    const unidades = Array.from({ length: quantidade }, (_, i) =>
+      esquemaVeiculo.parse({
+        modeloId: m.id,
+        tipo: m.tipo,
+        marca: m.marca,
+        modelo: m.nome,
+        cor,
+        chassi: chassis[i] ?? null,
+        condicao: "zero_km",
+        valorAnunciado: entrada.valorAnunciado ?? m.precoTabela,
+        custo: podeCusto ? (entrada.custo ?? null) : null,
+        status: entrada.status,
+        unidadeId: entrada.unidadeId ?? null,
+        origemEntrada: entrada.origemEntrada || "fornecedor",
+        entradaEm: entrada.entradaEm || null,
+        observacoes: entrada.observacoes || null,
+      }),
+    );
+    const teste = podeTeste && !!entrada.teste;
+    const nome = [m.marca, m.nome, cor].filter(Boolean).join(" ") + (teste ? " (teste)" : "");
+
+    await db.transaction(async (tx) => {
+      for (const [i, d] of unidades.entries()) {
+        const [novo] = await tx
+          .insert(schema.veiculos)
+          .values({ ...d, placa: null, renavam: null, teste, entradaEm: d.entradaEm ?? undefined, criadoPor: u.id })
+          .returning({ id: schema.veiculos.id });
+        await registrarLog(
+          u,
+          {
+            acao: "veiculo.criado",
+            entidade: "veiculo",
+            entidadeId: novo.id,
+            descricao: `Deu entrada no veículo ${nome}${d.valorAnunciado ? ` (${brl(d.valorAnunciado)})` : ""}${quantidade > 1 ? ` · ${i + 1} de ${quantidade}` : ""}`,
+          },
+          tx,
+        );
+      }
+    });
+    if (entrada.status === "disponivel" && !teste) await avisarInteressados(m.id);
+    revalidatePath("/sistema/estoque");
+    return { quantidade };
+  }, entrada.quantidade > 1 ? `${entrada.quantidade} motos cadastradas no estoque` : "Moto cadastrada no estoque");
 }
 
 export async function mudarStatusVeiculo(id: number, status: "disponivel" | "reservado" | "inativo") {
