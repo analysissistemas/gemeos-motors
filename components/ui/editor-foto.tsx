@@ -21,7 +21,7 @@ const LADO = 256;
  *  - `ladoMaior`: mantém a proporção e limita o lado maior (catálogo: 1200 px).
  *  Nunca amplia. Se o navegador não souber, manda o arquivo original — o
  *  servidor confere de novo (tipo pelos bytes e 2 MB). */
-export async function reduzirFoto(arquivo: File, opcoes: { quadrado: number } | { ladoMaior: number }): Promise<File> {
+export async function reduzirFoto(arquivo: File, opcoes: ({ quadrado: number } | { ladoMaior: number }) & { /** "image/jpeg" para o WhatsApp (não aceita WebP como foto) */ formato?: "image/webp" | "image/jpeg" }): Promise<File> {
   try {
     const img = await createImageBitmap(arquivo);
     const canvas = document.createElement("canvas");
@@ -39,9 +39,15 @@ export async function reduzirFoto(arquivo: File, opcoes: { quadrado: number } | 
     const ctx = canvas.getContext("2d");
     if (!ctx) return arquivo;
     ctx.imageSmoothingQuality = "high";
+    const formato = opcoes.formato ?? "image/webp";
+    /* JPEG não tem transparência: fundo branco antes de desenhar (PNG transparente ficaria preto) */
+    if (formato === "image/jpeg") {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     ctx.drawImage(img, ...origem, 0, 0, canvas.width, canvas.height);
     img.close();
-    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/webp", 0.85));
+    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, formato, formato === "image/jpeg" ? 0.88 : 0.85));
     if (!blob || !TIPOS.includes(blob.type)) return arquivo;
     const ext = blob.type === "image/webp" ? "webp" : blob.type === "image/png" ? "png" : "jpg";
     return new File([blob], `foto.${ext}`, { type: blob.type });

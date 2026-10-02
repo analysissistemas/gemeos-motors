@@ -1,0 +1,1 @@
+ALTER TABLE "modelos" ADD COLUMN "foto_whatsapp_url" text;

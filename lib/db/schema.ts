@@ -134,6 +134,9 @@ export const modelos = pgTable(
     fotoUrl: text(),
     /* vídeo da moto (MP4 no volume de mídia, /api/midia/...): a IA manda no WhatsApp junto com a ficha */
     videoUrl: text(),
+    /* foto só do WhatsApp (ex.: o panfleto com a ficha), diferente da do site. Com ela, a IA manda esta
+       no lugar da foto da cor. Mesmo acervo das fotos do catálogo (/api/vitrine/foto/...) */
+    fotoWhatsappUrl: text(),
     mostrarNoSite: boolean().notNull().default(true),
     disponibilidade: text().notNull().default("consultar"), // pronta_entrega | sob_encomenda | consultar
     /* lançamento: destaque no site e formulário de reserva */

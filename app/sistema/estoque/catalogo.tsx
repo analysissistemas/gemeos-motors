@@ -13,7 +13,7 @@ import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/c
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { LIMITE_FOTO, TIPOS_FOTO, reduzirFoto } from "@/components/ui/editor-foto";
 import { BolinhaCor, CoresDoModelo, LADO_CATALOGO } from "./cores";
-import { acaoAlternarAtivo, acaoAlternarSite, acaoEnviarFotoModelo, acaoExcluirModelo, acaoMoverModelo, acaoRemoverFotoModelo, acaoSalvarModelo } from "./acoes-catalogo";
+import { acaoAlternarAtivo, acaoAlternarSite, acaoEnviarFotoModelo, acaoEnviarFotoWhatsapp, acaoExcluirModelo, acaoMoverModelo, acaoRemoverFotoModelo, acaoRemoverFotoWhatsapp, acaoSalvarModelo } from "./acoes-catalogo";
 
 type Resposta = { ok: true; mensagem?: string; dados?: unknown } | { ok: false; erro: string; campos?: Record<string, string> };
 
@@ -204,6 +204,9 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   const [fotoUrl, setFotoUrl] = useState(item?.fotoUrl ?? null);
   const [enviando, setEnviando] = useState(false);
   const entradaFoto = useRef<HTMLInputElement>(null);
+  const [fotoWhats, setFotoWhats] = useState(item?.fotoWhatsappUrl ?? null);
+  const [enviandoWhats, setEnviandoWhats] = useState(false);
+  const entradaWhats = useRef<HTMLInputElement>(null);
   const [videoUrl, setVideoUrl] = useState(item?.videoUrl ?? null);
   const [enviandoVideo, setEnviandoVideo] = useState(false);
   const entradaVideo = useRef<HTMLInputElement>(null);
@@ -249,6 +252,27 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       await rodar(async () => ({ ok: true, mensagem: r.mensagem }));
     } finally {
       setEnviando(false);
+    }
+  }
+
+  /* foto só do WhatsApp: vai em JPEG (o WhatsApp não aceita WebP), lado maior até 1600 px */
+  async function escolherFotoWhats(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = e.target.files?.[0];
+    e.target.value = "";
+    if (!arquivo || !item) return;
+    if (!TIPOS_FOTO.includes(arquivo.type)) return void toast.error("Use uma foto JPG, PNG ou WebP.");
+    setEnviandoWhats(true);
+    try {
+      const pronto = await reduzirFoto(arquivo, { ladoMaior: 1600, formato: "image/jpeg" });
+      if (pronto.size > LIMITE_FOTO) return void toast.error("A foto passa de 2 MB mesmo reduzida. Escolha uma menor.");
+      const dados = new FormData();
+      dados.set("foto", pronto);
+      const r = await acaoEnviarFotoWhatsapp(item.id, dados);
+      if (!r.ok) return void toast.error(r.erro);
+      setFotoWhats(r.dados.fotoWhatsappUrl);
+      await rodar(async () => ({ ok: true, mensagem: r.mensagem }));
+    } finally {
+      setEnviandoWhats(false);
     }
   }
 
@@ -313,6 +337,48 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
           </div>
         )}
       </div>
+
+      {!acessorio && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-linha p-3">
+          <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-trilho ring-1 ring-linha">
+            {fotoWhats ? (
+              // eslint-disable-next-line @next/next/no-img-element -- foto do catálogo (/api/vitrine/foto)
+              <img src={fotoWhats} alt="Foto do WhatsApp" className="size-full object-contain" />
+            ) : (
+              <ImageOff className="size-6 text-ink-3" aria-label="Sem foto do WhatsApp" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1 text-[13px]">
+            <p className="font-semibold">Foto do WhatsApp (a IA manda)</p>
+            <p className="text-ink-3">
+              {item
+                ? "Não aparece no site. Pode ser o panfleto com a ficha. Sem ela, a IA manda a foto da cor que está no estoque. JPG, PNG ou WebP; a tela reduz sozinha."
+                : "Salve o modelo primeiro; depois dá para pôr a foto."}
+            </p>
+          </div>
+          {item && (
+            <div className="flex gap-1">
+              <input ref={entradaWhats} type="file" accept={TIPOS_FOTO.join(",")} className="hidden" onChange={escolherFotoWhats} aria-label="Escolher foto do WhatsApp" />
+              <Botao tamanho="sm" variante="secundario" carregando={enviandoWhats} disabled={pendente} onClick={() => entradaWhats.current?.click()}>
+                <ImageUp className="size-4" /> {fotoWhats ? "Trocar foto" : "Pôr foto"}
+              </Botao>
+              {fotoWhats && (
+                <Botao
+                  tamanho="icone"
+                  variante="fantasma"
+                  aria-label="Remover foto do WhatsApp"
+                  disabled={pendente || enviandoWhats}
+                  onClick={async () => {
+                    if (await rodar(() => acaoRemoverFotoWhatsapp(item.id))) setFotoWhats(null);
+                  }}
+                >
+                  <ImageOff className="size-4" />
+                </Botao>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {!acessorio && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-linha p-3">

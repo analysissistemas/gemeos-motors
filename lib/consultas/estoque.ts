@@ -124,6 +124,7 @@ export async function listarCatalogo() {
       descricao: m.descricao,
       fotoUrl: m.fotoUrl,
       videoUrl: m.videoUrl,
+      fotoWhatsappUrl: m.fotoWhatsappUrl,
       mostrarNoSite: m.mostrarNoSite,
       disponibilidade: m.disponibilidade,
       lancamento: m.lancamento,

@@ -236,3 +236,30 @@ export async function excluirModelo(u: Quem, id: number) {
   /* depois do banco: se apagar arquivo falhar, só sobra arquivo */
   for (const f of [antes.fotoUrl, ...cores.map((c) => c.fotoUrl)]) await apagarFotoCatalogo(f);
 }
+
+/** Foto só do WhatsApp (a IA manda no lugar da foto da cor). Não aparece no site. */
+export async function trocarFotoWhatsappModelo(u: Quem, id: number, url: string | null) {
+  let antes;
+  try {
+    antes = await modeloPorId(id);
+  } catch (e) {
+    await apagarFotoCatalogo(url);
+    throw e;
+  }
+  const [atual] = await db.select({ fotoWhatsappUrl: m.fotoWhatsappUrl }).from(m).where(eq(m.id, id)).limit(1);
+  await db.transaction(async (tx) => {
+    await tx.update(m).set({ fotoWhatsappUrl: url }).where(eq(m.id, id));
+    await registrarLog(
+      u,
+      {
+        acao: url ? "modelo.foto_whatsapp_alterada" : "modelo.foto_whatsapp_removida",
+        entidade: "modelo",
+        entidadeId: id,
+        descricao: `${url ? (atual?.fotoWhatsappUrl ? "Trocou" : "Colocou") : "Removeu"} a foto do WhatsApp do ${antes.nome}`,
+      },
+      tx,
+    );
+  });
+  if (atual?.fotoWhatsappUrl && atual.fotoWhatsappUrl !== url) await apagarFotoCatalogo(atual.fotoWhatsappUrl);
+  return { fotoWhatsappUrl: url };
+}

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { autorizar } from "@/lib/auth/dal";
 import { executar } from "@/lib/acao";
 import { apagarFotoCatalogo, guardarFotoCatalogo } from "@/lib/fotos";
-import { alternarAtivo, alternarSite, excluirModelo, modeloPorId, moverModelo, salvarModelo, trocarFotoModelo } from "@/lib/servicos/catalogo";
+import { alternarAtivo, alternarSite, excluirModelo, modeloPorId, moverModelo, salvarModelo, trocarFotoModelo, trocarFotoWhatsappModelo } from "@/lib/servicos/catalogo";
 
 /* Aba "Catálogo" do estoque: quem edita o estoque edita o catálogo do site.
    Permissão conferida aqui em cada ação; o histórico é gravado no serviço. */
@@ -80,4 +80,30 @@ export async function acaoExcluirModelo(id: number) {
     atualizarTelas();
     return null;
   }, "Modelo apagado do catálogo");
+}
+
+/* Foto só do WhatsApp (ex.: o panfleto da moto): a IA manda esta no lugar da foto da cor. */
+export async function acaoEnviarFotoWhatsapp(id: number, dados: FormData) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const modelo = await modeloPorId(idValido.parse(id));
+    const url = await guardarFotoCatalogo(dados.get("foto"), modelo.id);
+    try {
+      const r = await trocarFotoWhatsappModelo(u, modelo.id, url);
+      atualizarTelas();
+      return r;
+    } catch (e) {
+      await apagarFotoCatalogo(url);
+      throw e;
+    }
+  }, "Foto do WhatsApp guardada");
+}
+
+export async function acaoRemoverFotoWhatsapp(id: number) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const r = await trocarFotoWhatsappModelo(u, idValido.parse(id), null);
+    atualizarTelas();
+    return r;
+  }, "Foto do WhatsApp removida");
 }

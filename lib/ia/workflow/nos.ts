@@ -472,14 +472,14 @@ function gasolinaDoCliente(c: CtxWorkflow) {
   return gasolinaPara({ cidade, textoDoCliente: textoDoCliente(c) }).catch(() => null);
 }
 
-/** Motos com unidade disponível e a mídia de cada uma: foto de cada cor do estoque (sem foto da cor, a
- *  principal do modelo) e o vídeo do catálogo. Conversa simulada enxerga os veículos de teste. */
+/** Motos com unidade disponível e a mídia de cada uma: a foto do WhatsApp do modelo ou, sem ela, a foto
+ *  de cada cor do estoque (sem foto da cor, a principal do modelo) e o vídeo do catálogo. Conversa simulada enxerga os veículos de teste. */
 async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   const m = schema.modelos;
   const v = schema.veiculos;
   const k = schema.modeloCores;
   const [modelos, unidades, cores] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica"))),
+    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, fotoWhatsappUrl: m.fotoWhatsappUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica"))),
     db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ modeloId: k.modeloId, nome: k.nome, fotoUrl: k.fotoUrl }).from(k),
   ]);
@@ -487,6 +487,8 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
     const minhas = unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase()));
     if (!minhas.length) return [];
     const coresEstoque = Array.from(new Set(minhas.map((u) => u.cor?.trim()).filter((cor): cor is string => !!cor)));
+    /* foto só do WhatsApp (o panfleto da moto): vai ela, no lugar das fotos das cores */
+    if (x.fotoWhatsappUrl) return [{ id: x.id, nome: x.nome, fotos: [{ url: x.fotoWhatsappUrl, cor: null }], videoUrl: x.videoUrl }];
     const fotos: { url: string; cor: string | null }[] = coresEstoque.flatMap((cor) => {
       const f = cores.find((y) => y.modeloId === x.id && y.fotoUrl && y.nome.trim().toLowerCase() === cor.toLowerCase());
       return f?.fotoUrl ? [{ url: f.fotoUrl, cor }] : [];
