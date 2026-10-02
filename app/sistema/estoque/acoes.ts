@@ -1,5 +1,5 @@
 "use server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
@@ -161,6 +161,87 @@ export async function darEntradaEmLote(entrada: {
     revalidatePath("/sistema/estoque");
     return { quantidade };
   }, entrada.quantidade > 1 ? `${entrada.quantidade} motos cadastradas no estoque` : "Moto cadastrada no estoque");
+}
+
+/* Linha agrupada do estoque ("AG08 · Cinza · 5 unidades"): o dono ajusta quantidade, preço e situação
+   de todas de uma vez. Por dentro cada unidade continua sendo um veículo (chassi e venda próprios).
+   Aumentar cria unidades iguais à primeira, sem chassi; diminuir manda as que sobram para Fora de venda
+   (nada é apagado), começando pelas sem chassi e sem negociação aberta. Venda de verdade baixa sozinha. */
+export async function ajustarGrupoVeiculos(entrada: { ids: number[]; quantidade: number; valorAnunciado: number | null; status: "disponivel" | "reservado" }) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const ids = Array.from(new Set((entrada.ids ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+    const quantidade = Math.trunc(Number(entrada.quantidade));
+    if (!ids.length) throw new ErroRegra("Nenhuma moto escolhida.");
+    if (!(quantidade >= 0 && quantidade <= 50)) throw new ErroRegra("Quantidade de 0 a 50.", { quantidade: "De 0 a 50" });
+    if (entrada.status !== "disponivel" && entrada.status !== "reservado") throw new ErroRegra("Situação inválida.");
+    const valor = entrada.valorAnunciado == null ? null : Number(entrada.valorAnunciado);
+    if (valor != null && !(valor > 0 && valor < 100_000_000)) throw new ErroRegra("Valor inválido.", { valorAnunciado: "Valor inválido" });
+
+    const v = schema.veiculos;
+    const linhas = await db.select().from(v).where(inArray(v.id, ids));
+    if (linhas.length !== ids.length) throw new ErroRegra("Alguma moto não foi encontrada. Atualize a página.");
+    if (linhas.some((l) => l.status === "vendido" || l.status === "inativo")) throw new ErroRegra("Alguma moto mudou de situação. Atualize a página.");
+    /* o grupo só junta unidades iguais: confere de novo no servidor */
+    const chave = (l: (typeof linhas)[number]) => [l.modeloId, l.tipo, l.marca, l.modelo, l.versao, l.cor, l.condicao, l.teste, l.unidadeId].join("|");
+    if (new Set(linhas.map(chave)).size !== 1) throw new ErroRegra("Essas motos não são iguais. Edite uma por uma.");
+
+    const abertos = await db
+      .select({ veiculoId: schema.negocios.veiculoId })
+      .from(schema.negocios)
+      .where(and(inArray(schema.negocios.veiculoId, ids), inArray(schema.negocios.etapa, ["whatsapp", "proposta", "negociando"])));
+    const comNegocio = new Set(abertos.map((a) => a.veiculoId));
+    /* sai primeiro: sem negociação, sem chassi, a mais nova */
+    const ordemSaida = [...linhas].sort((a, b) => Number(comNegocio.has(a.id)) - Number(comNegocio.has(b.id)) || Number(!!a.chassi) - Number(!!b.chassi) || b.id - a.id);
+    const sair = ordemSaida.slice(0, Math.max(0, linhas.length - quantidade));
+    const ficam = linhas.filter((l) => !sair.includes(l));
+    const base = linhas[0];
+    const nome = [base.marca, base.modelo, base.cor].filter(Boolean).join(" ");
+    const novas = Math.max(0, quantidade - linhas.length);
+
+    await db.transaction(async (tx) => {
+      for (const l of sair) {
+        await tx.update(v).set({ status: "inativo", atualizadoEm: new Date() }).where(eq(v.id, l.id));
+        await registrarLog(u, { acao: "veiculo.status", entidade: "veiculo", entidadeId: l.id, descricao: `Mudou ${l.modelo} de "${STATUS_VEICULO[l.status as keyof typeof STATUS_VEICULO]}" para "Fora de venda" (quantidade de ${nome} ajustada para ${quantidade})` }, tx);
+      }
+      for (const l of ficam) {
+        const mudouPreco = valor != null && Number(l.valorAnunciado) !== valor;
+        const mudouStatus = l.status !== entrada.status;
+        if (!mudouPreco && !mudouStatus) continue;
+        await tx
+          .update(v)
+          .set({ ...(mudouPreco ? { valorAnunciado: valor } : {}), status: entrada.status, atualizadoEm: new Date() })
+          .where(eq(v.id, l.id));
+        if (mudouPreco) await registrarLog(u, { acao: "veiculo.preco_alterado", entidade: "veiculo", entidadeId: l.id, descricao: `Alterou o preço de ${nome} de ${brl(l.valorAnunciado)} para ${brl(valor)}` }, tx);
+        if (mudouStatus) await registrarLog(u, { acao: "veiculo.status", entidade: "veiculo", entidadeId: l.id, descricao: `Mudou ${l.modelo} de "${STATUS_VEICULO[l.status as keyof typeof STATUS_VEICULO]}" para "${STATUS_VEICULO[entrada.status]}"` }, tx);
+      }
+      for (let i = 0; i < novas; i++) {
+        const [novo] = await tx
+          .insert(v)
+          .values({
+            modeloId: base.modeloId,
+            teste: base.teste,
+            tipo: base.tipo,
+            marca: base.marca,
+            modelo: base.modelo,
+            versao: base.versao,
+            cor: base.cor,
+            condicao: base.condicao,
+            valorAnunciado: valor ?? base.valorAnunciado,
+            custo: pode(u.papel, "custo.ver") ? base.custo : null,
+            status: entrada.status,
+            unidadeId: base.unidadeId,
+            origemEntrada: base.origemEntrada,
+            criadoPor: u.id,
+          })
+          .returning({ id: v.id });
+        await registrarLog(u, { acao: "veiculo.criado", entidade: "veiculo", entidadeId: novo.id, descricao: `Deu entrada no veículo ${nome}${(valor ?? base.valorAnunciado) ? ` (${brl(valor ?? base.valorAnunciado)})` : ""} · quantidade ajustada para ${quantidade}` }, tx);
+      }
+    });
+    if (entrada.status === "disponivel" && quantidade > 0 && !base.teste) await avisarInteressados(base.modeloId);
+    revalidatePath("/sistema/estoque");
+    return { quantidade };
+  }, "Estoque atualizado");
 }
 
 export async function mudarStatusVeiculo(id: number, status: "disponivel" | "reservado" | "inativo") {

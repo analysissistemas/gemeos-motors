@@ -2,7 +2,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Bike, Pencil, Plus, Search } from "lucide-react";
+import { Bike, ChevronRight, Pencil, Plus, Search } from "lucide-react";
 import type { CorModelo, ItemCatalogo, VeiculoLinha } from "@/lib/consultas/estoque";
 import { CONDICOES, ORIGENS_ENTRADA, STATUS_VEICULO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
 import { brl, data, formatarPlaca, km } from "@/lib/formato";
@@ -11,7 +11,7 @@ import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
-import { darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
+import { ajustarGrupoVeiculos, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
 import { Catalogo } from "./catalogo";
 
@@ -22,6 +22,264 @@ type Mov = {
 };
 
 const tomStatus = (s: string) => (s === "disponivel" ? "bom" : s === "reservado" ? "atencao" : s === "vendido" ? "info" : "neutro") as "bom" | "atencao" | "info" | "neutro";
+/* "R$ 8.999,90"; preço redondo sem centavos ("R$ 7.190") */
+const preco = (x: number) => brl(x, Number.isInteger(x) ? 0 : 2);
+const nomeVeiculo = (v: VeiculoLinha) => [v.marca, v.modelo, v.versao].filter(Boolean).join(" ");
+
+/* Unidades iguais (moto zero km do mesmo modelo, cor, preço e situação, sem placa nem km) viram uma
+   linha só com a quantidade, pedido do dono (02/10/2026). Por dentro cada uma continua sendo um veículo.
+   A mesma chave (menos preço e situação, que o ajuste muda) é conferida de novo no servidor. */
+function agrupar(veiculos: VeiculoLinha[]): VeiculoLinha[][] {
+  const grupos = new Map<string, VeiculoLinha[]>();
+  const saida: VeiculoLinha[][] = [];
+  for (const v of veiculos) {
+    const agrupavel = v.status !== "vendido" && v.status !== "inativo" && !v.placa && !v.km && v.condicao === "zero_km";
+    if (!agrupavel) {
+      saida.push([v]);
+      continue;
+    }
+    const chave = [v.modeloId, v.tipo, v.marca, v.modelo, v.versao, v.cor, v.condicao, v.teste, v.unidadeId, v.status, v.valorAnunciado].join("|");
+    const g = grupos.get(chave);
+    if (g) g.push(v);
+    else {
+      const novo = [v];
+      grupos.set(chave, novo);
+      saida.push(novo);
+    }
+  }
+  return saida;
+}
+
+function resumoChassis(g: VeiculoLinha[]) {
+  const com = g.filter((v) => v.chassi).length;
+  return `Sem placa · ${com === 0 ? "sem chassi" : com === g.length ? "todas com chassi" : `${com} com chassi, ${g.length - com} sem`}`;
+}
+
+type PropsLinha = { v: VeiculoLinha; custo: boolean; editar: boolean; aoEditar: (v: VeiculoLinha) => void };
+
+function LinhaVeiculo({ v, custo, editar, aoEditar, rotulo, recuo }: PropsLinha & { rotulo?: string; recuo?: boolean }) {
+  const margem = v.custo && v.valorAnunciado ? Math.round(((v.valorAnunciado - v.custo) / v.valorAnunciado) * 100) : null;
+  return (
+    <tr className={`border-b border-linha last:border-0 hover:bg-trilho ${recuo ? "bg-trilho/40" : ""}`}>
+      <td className={`py-3 pr-4 ${recuo ? "pl-10" : "pl-4"}`}>
+        <p className="font-semibold">
+          {rotulo ?? nomeVeiculo(v)} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+        </p>
+        {!recuo && (
+          <p className="text-[12px] text-ink-3">
+            {TIPOS_VEICULO[v.tipo as keyof typeof TIPOS_VEICULO]}
+            {v.cor ? ` · ${v.cor}` : ""}
+            {v.anoModelo ? ` · ${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : ""}
+            {v.unidade ? ` · ${v.unidade}` : ""}
+          </p>
+        )}
+      </td>
+      <td className="px-4 py-3 text-ink-2">{CONDICOES[v.condicao as keyof typeof CONDICOES]}</td>
+      <td className="num px-4 py-3 text-ink-2">
+        {v.placa ? formatarPlaca(v.placa) : ehEletrico(v.tipo) ? "Sem placa" : "—"}
+        {v.chassi ? <span className="block text-[11.5px] text-ink-3">{v.chassi}</span> : recuo ? <span className="block text-[11.5px] text-ink-3">sem chassi</span> : null}
+      </td>
+      <td className="num px-4 py-3 text-right text-ink-2">{km(v.km)}</td>
+      <td className="num px-4 py-3 text-right font-semibold">{v.valorAnunciado ? preco(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</td>
+      {custo && (
+        <td className="num px-4 py-3 text-right text-ink-2">
+          {v.custo ? brl(v.custo) : "—"}
+          {margem != null && <span className="block text-[11.5px] text-ink-3">{margem}%</span>}
+        </td>
+      )}
+      <td className="px-4 py-3">
+        <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
+        {v.negociosAbertos > 0 && <span className="mt-1 block text-[11.5px] text-ink-3">{v.negociosAbertos} negociação(ões)</span>}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {editar && v.status !== "vendido" && (
+          <Botao tamanho="sm" variante="fantasma" onClick={() => aoEditar(v)} aria-label={`Editar ${rotulo ? `${rotulo} de ` : ""}${v.modelo}`}>
+            <Pencil className="size-4" />
+          </Botao>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function GrupoLinhas({ g, custo, editar, aberto, aoAbrir, aoEditar, aoAjustar }: { g: VeiculoLinha[]; custo: boolean; editar: boolean; aberto: boolean; aoAbrir: () => void; aoEditar: (v: VeiculoLinha) => void; aoAjustar: () => void }) {
+  const v = g[0];
+  const negocios = g.reduce((s, x) => s + x.negociosAbertos, 0);
+  return (
+    <>
+      <tr className="border-b border-linha last:border-0 hover:bg-trilho">
+        <td className="px-4 py-3">
+          <button type="button" onClick={aoAbrir} aria-expanded={aberto} className="flex items-start gap-1.5 text-left">
+            <ChevronRight className={`mt-0.5 size-4 shrink-0 text-ink-3 transition ${aberto ? "rotate-90" : ""}`} aria-hidden />
+            <span>
+              <span className="flex flex-wrap items-center gap-1.5 font-semibold">
+                {nomeVeiculo(v)} <Selo tom="info">{g.length} unidades</Selo> {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+              </span>
+              <span className="block text-[12px] text-ink-3">
+                {TIPOS_VEICULO[v.tipo as keyof typeof TIPOS_VEICULO]}
+                {v.cor ? ` · ${v.cor}` : ""}
+                {v.unidade ? ` · ${v.unidade}` : ""}
+              </span>
+            </span>
+          </button>
+        </td>
+        <td className="px-4 py-3 text-ink-2">{CONDICOES[v.condicao as keyof typeof CONDICOES]}</td>
+        <td className="num px-4 py-3 text-ink-2">{resumoChassis(g)}</td>
+        <td className="num px-4 py-3 text-right text-ink-2">{km(null)}</td>
+        <td className="num px-4 py-3 text-right font-semibold">
+          {v.valorAnunciado ? preco(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}
+          <span className="block text-[11.5px] font-normal text-ink-3">cada</span>
+        </td>
+        {custo && <td className="num px-4 py-3 text-right text-ink-2">{v.custo ? brl(v.custo) : "—"}</td>}
+        <td className="px-4 py-3">
+          <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
+          {negocios > 0 && <span className="mt-1 block text-[11.5px] text-ink-3">{negocios} negociação(ões)</span>}
+        </td>
+        <td className="px-4 py-3 text-right">
+          {editar && (
+            <Botao tamanho="sm" variante="secundario" onClick={aoAjustar} aria-label={`Ajustar quantidade de ${nomeVeiculo(v)} ${v.cor ?? ""}`}>
+              Quantidade
+            </Botao>
+          )}
+        </td>
+      </tr>
+      {aberto && g.map((x, i) => <LinhaVeiculo key={x.id} v={x} custo={custo} editar={editar} aoEditar={aoEditar} rotulo={`Unidade ${i + 1}`} recuo />)}
+    </>
+  );
+}
+
+function ItemVeiculo({ v, custo, editar, aoEditar, rotulo }: PropsLinha & { rotulo?: string }) {
+  const margem = v.custo && v.valorAnunciado ? Math.round(((v.valorAnunciado - v.custo) / v.valorAnunciado) * 100) : null;
+  return (
+    <li className={`flex items-start gap-2 border-b border-linha py-3 pr-4 last:border-0 ${rotulo ? "pl-8" : "pl-4"}`}>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold">
+          {rotulo ?? nomeVeiculo(v)} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+        </p>
+        {!rotulo && (
+          <p className="truncate text-[12.5px] text-ink-2">
+            {[CONDICOES[v.condicao as keyof typeof CONDICOES], v.cor, v.anoModelo ? `${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : null, v.km ? km(v.km) : null].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        <p className="num truncate text-[12px] text-ink-3">
+          {v.placa ? formatarPlaca(v.placa) : "Sem placa"}
+          {rotulo ? ` · ${v.chassi ?? "sem chassi"}` : v.unidade ? ` · ${v.unidade}` : ""}
+        </p>
+        {!rotulo && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
+            <span className="num font-semibold">{v.valorAnunciado ? preco(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</span>
+            {custo && v.custo ? (
+              <span className="num text-[12px] text-ink-3">
+                custo {brl(v.custo)}
+                {margem != null ? ` · ${margem}%` : ""}
+              </span>
+            ) : null}
+          </div>
+        )}
+      </div>
+      {editar && v.status !== "vendido" && (
+        <button type="button" onClick={() => aoEditar(v)} aria-label={`Editar ${rotulo ? `${rotulo} de ` : ""}${v.modelo}`} className="grid size-11 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-trilho active:bg-trilho">
+          <Pencil className="size-4" />
+        </button>
+      )}
+    </li>
+  );
+}
+
+/* Quantidade, preço e situação de uma linha agrupada, de uma vez. */
+function DialogoQuantidade({ grupo, aoFechar }: { grupo: VeiculoLinha[]; aoFechar: () => void }) {
+  const v = grupo[0];
+  const [quantidade, setQuantidade] = useState(grupo.length);
+  const [valor, setValor] = useState<number | null>(v.valorAnunciado);
+  const [status, setStatus] = useState<"disponivel" | "reservado">(v.status === "reservado" ? "reservado" : "disponivel");
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const nome = `${nomeVeiculo(v)}${v.cor ? ` ${v.cor}` : ""}`;
+  const diferenca = quantidade - grupo.length;
+
+  function salvar() {
+    iniciar(async () => {
+      const r = await ajustarGrupoVeiculos({ ids: grupo.map((x) => x.id), quantidade, valorAnunciado: valor, status });
+      if (!r.ok) {
+        setErros(r.campos ?? {});
+        toast.error(r.erro);
+        return;
+      }
+      toast.success(r.mensagem);
+      aoFechar();
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialogo aberto aoMudar={(x) => !x && aoFechar()} titulo={nome} descricao="Quantas tem, o preço e se já estão na loja. Vale para todas as unidades desta linha.">
+      <div className="flex flex-col gap-4">
+        <Campo rotulo="Quantidade em estoque" erro={erros.quantidade} htmlFor="grupo-quantidade">
+          <div className="flex items-center gap-2">
+            <Botao variante="secundario" aria-label="Uma a menos" onClick={() => setQuantidade((q) => Math.max(0, q - 1))} disabled={quantidade <= 0}>
+              −
+            </Botao>
+            <Entrada
+              id="grupo-quantidade"
+              inputMode="numeric"
+              className="num w-16 text-center"
+              value={quantidade}
+              onChange={(e) => setQuantidade(Math.min(50, Math.max(0, Number(e.target.value.replace(/\D/g, "")) || 0)))}
+            />
+            <Botao variante="secundario" aria-label="Uma a mais" onClick={() => setQuantidade((q) => Math.min(50, q + 1))} disabled={quantidade >= 50}>
+              +
+            </Botao>
+          </div>
+        </Campo>
+        <Campo rotulo="Valor anunciado (cada)" erro={erros.valorAnunciado}>
+          <CampoDinheiro valor={valor} aoMudar={setValor} />
+        </Campo>
+        <fieldset>
+          <legend className="mb-2 text-[12px] font-medium text-ink-2">Onde estão</legend>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Onde estão">
+            {(
+              [
+                ["disponivel", "Na loja", "Disponível"],
+                ["reservado", "Vão chegar", "Reservado"],
+              ] as const
+            ).map(([k, titulo, detalhe]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setStatus(k)}
+                aria-pressed={status === k}
+                className={`rounded-xl border px-3 py-2 text-left ${status === k ? "border-ink bg-trilho" : "border-linha hover:border-linha-forte"}`}
+              >
+                <span className="block text-[14px] font-semibold">{titulo}</span>
+                <span className="block text-[12px] text-ink-3">{detalhe}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <p className="rounded-xl bg-trilho px-3 py-2.5 text-[13px]" aria-live="polite">
+          {diferenca > 0
+            ? `Entram mais ${diferenca} unidade(s) iguais, sem chassi (dá para completar depois).`
+            : diferenca < 0
+              ? `${-diferenca} unidade(s) vão para "Fora de venda" (nada é apagado). Moto vendida baixa sozinha pela venda; use isto só para corrigir a contagem.`
+              : "A quantidade continua a mesma."}
+          <span className="block text-[12px] text-ink-3">
+            {quantidade === 0 ? "A IA deixa de oferecer esta moto." : status === "disponivel" ? `A IA oferece ${quantidade} unidade(s) a pronta entrega.` : "A IA só oferece quando mudar para Na loja."}
+          </span>
+        </p>
+      </div>
+      <RodapeDialogo>
+        <Botao variante="fantasma" onClick={aoFechar}>
+          Cancelar
+        </Botao>
+        <Botao variante="primario" carregando={pendente} onClick={salvar}>
+          Salvar
+        </Botao>
+      </RodapeDialogo>
+    </Dialogo>
+  );
+}
 
 export function TelaEstoque({
   veiculos,
@@ -46,6 +304,16 @@ export function TelaEstoque({
 }) {
   const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov">("veiculos");
   const [editando, setEditando] = useState<Partial<VeiculoLinha> | null>(null);
+  const [ajustando, setAjustando] = useState<VeiculoLinha[] | null>(null);
+  const [abertos, setAbertos] = useState<Set<number>>(() => new Set());
+  const grupos = agrupar(veiculos);
+  const alternarGrupo = (id: number) =>
+    setAbertos((x) => {
+      const n = new Set(x);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const router = useRouter();
   const params = useSearchParams();
   const [busca, setBusca] = useState(filtros.q ?? "");
@@ -156,86 +424,51 @@ export function TelaEstoque({
                     </tr>
                   </thead>
                   <tbody>
-                    {veiculos.map((v) => {
-                      const margem = v.custo && v.valorAnunciado ? Math.round(((v.valorAnunciado - v.custo) / v.valorAnunciado) * 100) : null;
-                      return (
-                        <tr key={v.id} className="border-b border-linha last:border-0 hover:bg-trilho">
-                          <td className="px-4 py-3">
-                            <p className="font-semibold">
-                              {[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
-                            </p>
-                            <p className="text-[12px] text-ink-3">
-                              {TIPOS_VEICULO[v.tipo as keyof typeof TIPOS_VEICULO]}
-                              {v.cor ? ` · ${v.cor}` : ""}
-                              {v.anoModelo ? ` · ${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : ""}
-                              {v.unidade ? ` · ${v.unidade}` : ""}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 text-ink-2">{CONDICOES[v.condicao as keyof typeof CONDICOES]}</td>
-                          <td className="num px-4 py-3 text-ink-2">
-                            {v.placa ? formatarPlaca(v.placa) : ehEletrico(v.tipo) ? "Sem placa" : "—"}
-                            {v.chassi && <span className="block text-[11.5px] text-ink-3">{v.chassi}</span>}
-                          </td>
-                          <td className="num px-4 py-3 text-right text-ink-2">{km(v.km)}</td>
-                          <td className="num px-4 py-3 text-right font-semibold">{v.valorAnunciado ? brl(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</td>
-                          {permissoes.custo && (
-                            <td className="num px-4 py-3 text-right text-ink-2">
-                              {v.custo ? brl(v.custo) : "—"}
-                              {margem != null && <span className="block text-[11.5px] text-ink-3">{margem}%</span>}
-                            </td>
-                          )}
-                          <td className="px-4 py-3">
-                            <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
-                            {v.negociosAbertos > 0 && <span className="mt-1 block text-[11.5px] text-ink-3">{v.negociosAbertos} negociação(ões)</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {permissoes.editar && v.status !== "vendido" && (
-                              <Botao tamanho="sm" variante="fantasma" onClick={() => setEditando(v)} aria-label={`Editar ${v.modelo}`}>
-                                <Pencil className="size-4" />
-                              </Botao>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {grupos.map((g) =>
+                      g.length === 1 ? (
+                        <LinhaVeiculo key={g[0].id} v={g[0]} custo={permissoes.custo} editar={permissoes.editar} aoEditar={setEditando} />
+                      ) : (
+                        <GrupoLinhas key={g[0].id} g={g} custo={permissoes.custo} editar={permissoes.editar} aberto={abertos.has(g[0].id)} aoAbrir={() => alternarGrupo(g[0].id)} aoEditar={setEditando} aoAjustar={() => setAjustando(g)} />
+                      ),
+                    )}
                   </tbody>
                 </table>
               </div>
               <ul className="md:hidden">
-                {veiculos.map((v) => {
-                  const margem = v.custo && v.valorAnunciado ? Math.round(((v.valorAnunciado - v.custo) / v.valorAnunciado) * 100) : null;
-                  return (
-                    <li key={v.id} className="flex items-start gap-2 border-b border-linha px-4 py-3 last:border-0">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">
-                          {[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")} {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
-                        </p>
-                        <p className="truncate text-[12.5px] text-ink-2">
-                          {[CONDICOES[v.condicao as keyof typeof CONDICOES], v.cor, v.anoModelo ? `${v.anoFabricacao ?? v.anoModelo}/${v.anoModelo}` : null, v.km ? km(v.km) : null].filter(Boolean).join(" · ")}
-                        </p>
-                        <p className="num truncate text-[12px] text-ink-3">
-                          {v.placa ? formatarPlaca(v.placa) : "Sem placa"}
-                          {v.unidade ? ` · ${v.unidade}` : ""}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <Selo tom={tomStatus(v.status)}>{STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}</Selo>
-                          <span className="num font-semibold">{v.valorAnunciado ? brl(v.valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</span>
-                          {permissoes.custo && v.custo ? (
-                            <span className="num text-[12px] text-ink-3">
-                              custo {brl(v.custo)}
-                              {margem != null ? ` · ${margem}%` : ""}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      {permissoes.editar && v.status !== "vendido" && (
-                        <button type="button" onClick={() => setEditando(v)} aria-label={`Editar ${v.modelo}`} className="grid size-11 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-trilho active:bg-trilho">
-                          <Pencil className="size-4" />
+                {grupos.map((g) =>
+                  g.length === 1 ? (
+                    <ItemVeiculo key={g[0].id} v={g[0]} custo={permissoes.custo} editar={permissoes.editar} aoEditar={setEditando} />
+                  ) : (
+                    <li key={g[0].id} className="border-b border-linha last:border-0">
+                      <div className="flex items-start gap-2 px-4 py-3">
+                        <button type="button" onClick={() => alternarGrupo(g[0].id)} aria-expanded={abertos.has(g[0].id)} className="min-w-0 flex-1 text-left">
+                          <p className="flex items-center gap-1.5 truncate font-semibold">
+                            {nomeVeiculo(g[0])} <Selo tom="info">{g.length} unidades</Selo> {g[0].teste && <Selo tom="atencao">Teste · IA</Selo>}
+                          </p>
+                          <p className="truncate text-[12.5px] text-ink-2">{[CONDICOES[g[0].condicao as keyof typeof CONDICOES], g[0].cor].filter(Boolean).join(" · ")}</p>
+                          <p className="num truncate text-[12px] text-ink-3">{resumoChassis(g)}</p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <Selo tom={tomStatus(g[0].status)}>{STATUS_VEICULO[g[0].status as keyof typeof STATUS_VEICULO]}</Selo>
+                            <span className="num font-semibold">{g[0].valorAnunciado ? preco(g[0].valorAnunciado) : <Selo tom="atencao">Sem preço</Selo>}</span>
+                            <span className="text-[12px] text-ink-3">{abertos.has(g[0].id) ? "toque para fechar" : "toque para ver cada uma"}</span>
+                          </div>
                         </button>
+                        {permissoes.editar && (
+                          <Botao tamanho="sm" variante="secundario" onClick={() => setAjustando(g)} aria-label={`Ajustar quantidade de ${nomeVeiculo(g[0])} ${g[0].cor ?? ""}`}>
+                            Quantidade
+                          </Botao>
+                        )}
+                      </div>
+                      {abertos.has(g[0].id) && (
+                        <ul className="border-t border-linha bg-trilho/40">
+                          {g.map((v, i) => (
+                            <ItemVeiculo key={v.id} v={v} custo={permissoes.custo} editar={permissoes.editar} aoEditar={setEditando} rotulo={`Unidade ${i + 1}`} />
+                          ))}
+                        </ul>
                       )}
                     </li>
-                  );
-                })}
+                  ),
+                )}
               </ul>
               </>
             )}
@@ -295,6 +528,7 @@ export function TelaEstoque({
         </div>
       )}
 
+      {ajustando && <DialogoQuantidade grupo={ajustando} aoFechar={() => setAjustando(null)} />}
       <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} admin={permissoes.admin} />
     </>
   );
