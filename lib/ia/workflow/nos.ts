@@ -32,6 +32,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { criarNegocio } from "@/lib/servicos/negocios";
 import { registrarLog } from "@/lib/logs";
@@ -364,53 +365,35 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
 
 const PERGUNTA_ECONOMIA = /gasolin|econom|vale a pena|compensa|gast[oa]r?\b|gasto/iu;
 
-const PERGUNTAS_USO = [
-  "Você procura moto para trabalhar, para o dia a dia ou para passear? 😊",
-  "Me conta: a moto seria mais para o trabalho ou para o dia a dia? 🙂",
-  "Qual vai ser o uso principal: trabalho, dia a dia ou passeio? 😊",
-];
-
-/** Resumo do que a loja tem, com os números das motos com unidade no estoque (quantos modelos, menor
- *  preço, maior autonomia). Moto sem unidade não entra (regra do dono, 02/10/2026); sem nenhuma, não há resumo. */
-async function resumoDaLoja(c: CtxWorkflow) {
-  const m = schema.modelos;
-  const v = schema.veiculos;
-  const [modelos, unidades] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica"))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
-  ]);
-  const motos = modelos.filter((x) => unidades.some((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())));
-  if (!motos.length) return null;
-  const precos = motos.map((x) => Number(x.preco)).filter((x) => x > 0);
-  const autonomias = motos.map((x) => Number(((x.ficha as Record<string, string> | null)?.autonomia ?? "").match(/\d{2,3}(?!.*\d)/u)?.[0] ?? 0)).filter((x) => x > 0);
-  if (motos.length === 1) {
-    const [x] = motos;
-    const preco = precos.length ? ` por *${reais(precos[0])}*` : "";
-    const anda = autonomias.length ? `, que anda até ${autonomias[0]} km com uma carga` : "";
-    return `Aqui na Gêmeos Motors a gente tem a moto elétrica *${x.nome}*${preco}${anda} 🛵 Não precisa de CNH, emplacamento nem IPVA, e ainda temos acessórios, assistência técnica própria e entrega em Goiana e região.`;
-  }
-  const desde = precos.length ? ` a partir de *${reais(Math.min(...precos))}*` : "";
-  const alcance = autonomias.length ? `, que andam até ${Math.max(...autonomias)} km com uma carga` : "";
-  return variar([
-    `Aqui na Gêmeos Motors a gente trabalha com ${motos.length} modelos de motos elétricas${desde}${alcance} 🛵 Nenhuma precisa de CNH, emplacamento nem IPVA, e ainda temos acessórios, assistência técnica própria e entrega em Goiana e região.`,
-    `Pra você conhecer: temos ${motos.length} modelos de motos elétricas${desde}${alcance} ⚡ Todas sem CNH, sem emplacamento e sem IPVA, com assistência técnica própria e entrega em Goiana e região.`,
-  ]);
+/** Nomes das motos e acessórios do catálogo (para saber se o cliente já falou de produto). */
+async function nomesDoCatalogo() {
+  const linhas = await db.select({ nome: schema.modelos.nome }).from(schema.modelos).where(eq(schema.modelos.ativo, true));
+  return linhas.map((l) => l.nome);
 }
 
-async function apresentarLoja(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
-  const t = c.textoBuffer.trim();
-  /* só nome/cumprimento curto, sem pergunta nem assunto (moto, preço, cor...) */
-  const soSeApresentou = t.length <= 40 && !/\?/.test(t) && t.split(/\s+/).length <= 4 && !/moto|pre[çc]o|valor|cor|km|autonomia|bateria|entrega|pix|cart[aã]o|parcel|financ|troca|modelo|\d/iu.test(t);
-  const nomeAgora = !c.memoria.fatos.nome && !!c.aprendido.fatos.nome;
-  if (!soSeApresentou || !nomeAgora || !resposta.length) return resposta;
-  if (resposta.some((b) => /R\$|modelos|motos el[ée]tricas/iu.test(b)) || /R\$ \d/u.test(c.memoria.historico ?? "")) return resposta;
-  const resumo = await resumoDaLoja(c);
-  if (!resumo) return resposta;
-  /* o que não é pergunta fica no começo ("Prazer, Joelson!"), o resumo no meio, UMA pergunta no fim */
-  const frases = resposta.join(" ").match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [];
-  const perguntas = frases.filter((f) => /\?/.test(f)).map((f) => f.trim());
-  const resto = frases.filter((f) => !/\?/.test(f)).join("").trim();
-  return [...(resto ? [resto] : []), resumo, perguntas[perguntas.length - 1] ?? variar(PERGUNTAS_USO)];
+/** O que o cliente quer, pelo que ELE escreveu (esta mensagem, as anteriores e o interesse já anotado). */
+async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
+  return intencaoDoTexto([c.memoria.fatos.interesse ?? "", textoDoCliente(c)].join("\n"), await nomesDoCatalogo());
+}
+
+/* Pedido do dono (02/10/2026): na abordagem, primeiro ENTENDER o que o cliente quer. Quem só cumprimentou
+   ou disse o nome pode querer garantia, assistência ou peça: nada de moto, preço, estoque ou foto ainda.
+   Sai a frase que oferece produto; sabendo o nome, a pergunta final vira "o que você precisa?". */
+async function entenderPrimeiro(c: CtxWorkflow, resposta: string[], intencao: Intencao | null): Promise<string[]> {
+  if (intencao) return resposta;
+  const nomes = await nomesDoCatalogo();
+  let r = resposta.map((b) => tirarOfertaDeProduto(b, nomes)).filter((b) => /\p{L}/u.test(b));
+  const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome);
+  if (!nomeConhecido) {
+    /* sem nome: a pergunta continua sendo o nome (regra do dono de 27/09) */
+    if (!r.some((b) => RX_PERGUNTA_NOME.test(b))) r.push(variar(PERGUNTAS_NOME));
+    return r;
+  }
+  /* com nome: as outras perguntas saem e fica UMA, aberta, sobre o que ele precisa */
+  r = r
+    .map((b) => (b.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [b]).filter((f) => !/\?/.test(f)).join("").trim())
+    .filter((b) => /\p{L}/u.test(b));
+  return [...r, variar(PERGUNTAS_INTENCAO)];
 }
 
 async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
@@ -676,6 +659,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
     const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
     const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null });
+    /* o que o cliente quer (compra, assistência ou ainda não disse): sem saber, nada de produto */
+    const intencao = await intencaoDoCliente(c);
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -685,7 +670,9 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${instrucaoDeMidia(midia)}`,
+${instrucaoDeIntencao(intencao)}
+
+${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     });
     const deps = await montarDeps(c, g.gerar);
     let r = await executarFluxo([interpretar, consultaDeEstoque, redigirComEstoque], pipeInicial(c.textoBuffer, deps));
@@ -894,7 +881,8 @@ ${instrucaoDeMidia(midia)}`,
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
     /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
-    resposta = await apresentarLoja(c, resposta);
+    const intencao = await intencaoDoCliente(c);
+    resposta = await entenderPrimeiro(c, resposta, intencao);
     /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
        (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
     const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
@@ -920,8 +908,8 @@ ${instrucaoDeMidia(midia)}`,
        aparece na conversa, a foto da cor e o vídeo. Resposta-padrão (confirmar, fora do horário) não leva. */
     const respostaDaIa = !!c.pipe?.texto && ![TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
     /* o cliente pediu (mesmo sem arquivo para mandar): vale o que a IA já sabia ao escrever */
-    let midia: PlanoMidia | null = c.midia;
-    if (!midia && respostaDaIa && resposta.length) {
+    let midia: PlanoMidia | null = intencao === "compra" ? c.midia : null;
+    if (!midia && intencao === "compra" && respostaDaIa && resposta.length) {
       try {
         midia = planejarApresentacao({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas: await midiasJaEnviadas(c.conversaId) });
       } catch {

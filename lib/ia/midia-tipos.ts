@@ -96,6 +96,6 @@ export function instrucaoDeMidia(plano: PlanoMidia | null): string {
 /* Frases que prometem foto/vídeo ("segue a foto", "vou te mandar o vídeo"): saem quando nada vai junto. */
 const RX_PROMETE = /(?:segue[mn]?|aqui\s+est[aã]o?|te\s+mand(?:o|ei)|vou\s+(?:te\s+)?(?:mandar|enviar)|j[aá]\s+(?:te\s+)?(?:mando|envio)|enviei|mandei|envio)[^.!?\n]{0,40}(?:fotos?|v[ií]deos?|imagens?)|(?:fotos?|v[ií]deos?|imagens?)[^.!?\n]{0,25}(?:abaixo|a\s+seguir|logo\s+(?:abaixo|em\s+seguida)|👇)/iu;
 export function tirarPromessaDeMidia(bloco: string): string {
-  const frases = bloco.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
+  const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
   return frases.filter((f) => !RX_PROMETE.test(f)).join("").trim();
 }
