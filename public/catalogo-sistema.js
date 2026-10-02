@@ -117,6 +117,8 @@
       }
       p.venda = m.preco;
       p.ficha = aces ? null : m.ficha;
+      /* o vídeo ainda mora no estoque.js (o sistema não guarda vídeo) */
+      if(!aces) p.video = info.video || null;
       if(aces) p.descricao = m.descricao;
       if(m.cores.length && !m.cores.includes(p.cor)) p.cor = m.cores[0];
       p.modeloId = m.id;

@@ -14,7 +14,9 @@
    base  = preço de tabela da loja (o mesmo do site)
    cor   = a cor da foto oficial. Acrescente na lista as outras que a loja tiver.
    ficha = o que o cliente pergunta antes de qualquer outra coisa.
-   video = id do vídeo no YouTube, quando a loja gravou um daquele modelo. */
+   video = vídeo que a loja gravou daquele modelo. Caminho de arquivo em public/video
+           ("/video/ag08.mp4", com a capa ag08.webp ao lado) aparece no card com
+           "Ver vídeo"; id do YouTube (os antigos) fica guardado mas não aparece. */
 /* eletrico:true é o que libera os selos "sem CNH" e "sem IPVA" na vitrine.
    genero define se a tela escreve "seminova" ou "seminovo". */
 const GENERO = {moto:"f", carro:"m", acessorio:"m"};
@@ -44,7 +46,7 @@ const CATALOGO = {
            peso:"180 kg", recarga:"6h a 7h"}
   },
   "AG08": {
-    var:["Única"], cor:["Cinza"], base:8990, tipo:"Moto elétrica", video:"K7oJ2bk08lo",
+    var:["Única"], cor:["Cinza"], base:8999.9, tipo:"Moto elétrica", video:"/video/ag08.mp4",
     ficha:{motor:"1000W", autonomia:"40 a 45 km", velocidade:"32 km/h",
            bateria:"Lítio 60V 24Ah", pneu:"—", peso:"200 kg", recarga:"4h a 8h"}
   },

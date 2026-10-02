@@ -325,6 +325,17 @@ a{color:inherit;text-decoration:none}
 .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 .dlg-corpo [hidden]{display:none}
 
+/* ---------- VÍDEO DO MODELO ---------- */
+.btn-video{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 14px;border-radius:999px;
+  border:1px solid var(--linha);background:#fff;color:var(--tinta);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.btn-video:hover{border-color:var(--tinta)}
+.btn-video svg{width:11px;height:11px}
+.dlg-video{margin:auto;border:none;border-radius:22px;padding:0;background:#000;overflow:hidden;
+  width:min(420px,calc(100vw - 32px));box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.dlg-video::backdrop{background:rgba(10,10,8,.75)}
+.dlg-video video{display:block;width:100%;max-height:calc(100dvh - 48px);background:#000}
+.dlg-video .dlg-fechar{z-index:1}
+
 /* bolinhas de cor — a cor real de cada acabamento */
 .cores{display:flex;gap:7px;margin-top:13px;flex-wrap:wrap}
 .cor{width:19px;height:19px;border-radius:50%;cursor:pointer;border:1px solid transparent;
@@ -624,6 +635,11 @@ a{color:inherit;text-decoration:none}
   </div>
 </dialog>
 
+<dialog class="dlg-video" id="dlgVideo" aria-label="Vídeo do modelo">
+  <button type="button" class="dlg-fechar" data-fechar-video aria-label="Fechar">×</button>
+  <video id="videoModelo" controls playsinline preload="none"></video>
+</dialog>
+
 <div class="faixa"><div class="faixa-int" id="faixa"></div></div>
 
 <!-- ================= CATÁLOGO ================= -->
@@ -821,13 +837,13 @@ a{color:inherit;text-decoration:none}
 <!-- O ?v= força o navegador a buscar a versão nova em vez de usar a guardada.
      Suba o número sempre que mexer nestes arquivos, senão você (e o cliente)
      continuam vendo a versão antiga sem entender por quê. -->
-<script src="cores-motos.js?v=20"></script>
-<script src="fotos-disponiveis.js?v=20"></script>
+<script src="cores-motos.js?v=21"></script>
+<script src="fotos-disponiveis.js?v=21"></script>
 <!-- antes do estoque.js: é daqui que sai fotoDoProduto -->
-<script src="foto-produto.js?v=20"></script>
-<script src="estoque.js?v=20"></script>
-<script src="cores-sistema.js?v=20"></script>
-<script src="catalogo-sistema.js?v=20"></script>
+<script src="foto-produto.js?v=21"></script>
+<script src="estoque.js?v=21"></script>
+<script src="cores-sistema.js?v=21"></script>
+<script src="catalogo-sistema.js?v=21"></script>
 <script>
 /* ============================================================
    Número que recebe as mensagens do site.
@@ -838,7 +854,8 @@ a{color:inherit;text-decoration:none}
 const WHATSAPP = "5511948709625";
 
 const $ = s => document.querySelector(s);
-const brl  = n => "R$ " + n.toLocaleString("pt-BR",{maximumFractionDigits:0});
+/* preço redondo sem centavos (R$ 7.190); com centavos, mostra os centavos (R$ 8.999,90) */
+const brl  = n => "R$ " + n.toLocaleString("pt-BR", Number.isInteger(n) ? {maximumFractionDigits:0} : {minimumFractionDigits:2, maximumFractionDigits:2});
 
 function abrirZap(msg){
   window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`,"_blank","noopener");
@@ -896,6 +913,8 @@ function precoEscolhido(a){
   const p = precoDe(a);
   /* item sem preço publicado (acessório): o card pede para consultar */
   if(p == null) return null;
+  /* sem variação escolhida, vale o preço cadastrado como está (R$ 8.999,90 não vira R$ 9.000) */
+  if(!passo) return p;
   return Math.max(20, Math.round((p + passo*p*0.08)/10)*10);
 }
 /* Ordem de busca da foto:
@@ -996,6 +1015,11 @@ function fmtFim(ms){
   return `${dd(x.getDate())}/${dd(x.getMonth()+1)} às ${dd(x.getHours())}:${dd(x.getMinutes())}`;
 }
 
+/* vídeo próprio do modelo (arquivo em public/video); id antigo do YouTube não aparece */
+const videoDe = a => typeof a.video === "string" && a.video.startsWith("/video/") ? a.video : null;
+const botaoVideo = a => videoDe(a) ? `<button type="button" class="btn-video" data-video="${a.id}">
+    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"/></svg> Ver vídeo</button>` : "";
+
 function card(a){
   const e = esc(a), o = opcoesDe(a);
   const zero = e.cond==="Zero km";
@@ -1051,6 +1075,7 @@ function card(a){
         <span class="check">${CHECK} Garantia</span>
         ${a.avarias.length ? `<span class="check alerta">${ALERTA} ${a.avarias.length} detalhe${a.avarias.length>1?"s":""}</span>` : ""}
       </div>
+      ${botaoVideo(a)}
 
       ${a.reserva ? `<div class="reserva">${ALERTA} Chega na ${a.disponivelEm}. Dá para reservar a sua agora.</div>` : ""}
 
@@ -1179,6 +1204,7 @@ function slideLanc(a){
                <span class="check">${CHECK} Sem IPVA</span>` : ""}
         <span class="check">${CHECK} Garantia</span>
       </div>
+      ${botaoVideo(a)}
       <div class="lanc-preco">
         ${promo ? `<div class="preco-de">${brl(promo.de)}</div>` : ""}
         <div class="preco">${promo ? brl(promo.preco) : p == null ? "Consultar preço" : brl(p)}</div>
@@ -1283,6 +1309,29 @@ document.addEventListener("click", e=>{
   if(e.target === dlgRes) fecharReserva();   // toque fora da janela
 });
 $("#resZap").onclick = () => { abrirZap(zapReserva); fecharReserva(); };
+
+/* ---------- VÍDEO DO MODELO ----------
+   Só carrega o arquivo quando o cliente toca em "Ver vídeo" (preload none); ao fechar,
+   para e solta o vídeo para não seguir baixando nem tocando escondido. */
+const dlgVid = $("#dlgVideo"), vid = $("#videoModelo");
+function fecharVideo(){
+  vid.pause(); vid.removeAttribute("src"); vid.load();
+  if(dlgVid.open) dlgVid.close();
+}
+document.addEventListener("click", e=>{
+  const b = e.target.closest("[data-video]");
+  if(b){
+    const a = PRODUTOS.find(x => x.id === +b.dataset.video), src = a && videoDe(a);
+    if(!src) return;
+    vid.poster = src.replace(/\.mp4$/, ".webp");
+    vid.src = src;
+    if(typeof dlgVid.showModal === "function") dlgVid.showModal(); else dlgVid.setAttribute("open", "");
+    vid.play().catch(()=>{});
+    return;
+  }
+  if(e.target.closest("[data-fechar-video]") || e.target === dlgVid) fecharVideo();
+});
+dlgVid.addEventListener("close", () => { vid.pause(); vid.removeAttribute("src"); vid.load(); });
 formRes.addEventListener("input", () => { $("#resErro").textContent = ""; });
 formRes.addEventListener("submit", async ev=>{
   ev.preventDefault();
