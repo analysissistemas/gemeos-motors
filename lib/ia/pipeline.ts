@@ -41,6 +41,9 @@ export type Deps = {
   nomesDoCatalogo?: string[];
   /** modelos com unidade disponível no estoque agora: para eles a IA pode dizer "tem"/"pronta entrega" */
   modelosComEstoque?: string[];
+  /** motos do catálogo SEM unidade disponível que o cliente ainda não citou (nome e apelidos, ex. "T3"):
+      a IA não oferece nem cita nenhuma (regra do dono, 02/10/2026: só oferecer o que tem no estoque) */
+  modelosSemEstoque?: string[];
   /** textos autorizados (base de conhecimento ativa): horário e endereço só valem se estiverem aqui */
   fontesAutorizadas: string[];
   gerar: (p: { mensagemCliente: string; estoque: ResultadoEstoque | null }) => Promise<SaidaModelo>;
@@ -127,10 +130,27 @@ export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesD
   for (const frase of texto.split(/(?<=[.!?\n])\s*|•/u)) {
     if (!ESTOQUE.test(frase)) continue;
     const f = ` ${norm(frase)} `;
-    const citados = catalogo.filter((n) => new RegExp(palavraInteira(n).source, "u").test(f));
-    if (citados.length ? !citados.every((n) => comEstoque.has(n)) : comEstoque.size === 0) return false;
+    const cita = (n: string, t: string) => new RegExp(palavraInteira(n).source, "u").test(t);
+    if (!catalogo.some((n) => cita(n, f))) {
+      if (comEstoque.size === 0) return false;
+      continue;
+    }
+    /* tira os nomes com unidade (maiores primeiro): "T3 Retrô 2" com unidade não conta como "T3 Retrô" */
+    let resto = f;
+    for (const n of Array.from(comEstoque).sort((a, b) => b.length - a.length)) if (n.length >= 2) resto = resto.replace(palavraInteira(n), " ");
+    if (catalogo.some((n) => !comEstoque.has(n) && cita(n, resto))) return false;
   }
   return true;
+}
+
+/** Motos sem unidade que a resposta oferece (o cliente não perguntou por elas). Tira antes do texto os nomes
+ *  com estoque (maiores primeiro), para "T3 Retrô 2" com unidade não ser lida como "T3 Retrô" sem unidade. */
+export function ofereceSemEstoque(texto: string, deps: Pick<Deps, "modelosSemEstoque" | "modelosComEstoque">) {
+  const sem = Array.from(new Set((deps.modelosSemEstoque ?? []).map(norm))).filter((n) => n.length >= 2);
+  if (!sem.length) return [];
+  let resto = ` ${norm(texto)} `;
+  for (const n of Array.from(new Set((deps.modelosComEstoque ?? []).map(norm))).sort((a, b) => b.length - a.length)) if (n.length >= 2) resto = resto.replace(palavraInteira(n), " ");
+  return sem.filter((n) => new RegExp(palavraInteira(n).source, "u").test(resto));
 }
 
 /* Horário e endereço são os fatos que mais se inventam. Só valem se estiverem, iguais, numa fonte autorizada. */
@@ -264,6 +284,8 @@ export const travaDeFatos: EtapaDeAtendimento = {
     const doCatalogo = new Set((c.deps.nomesDoCatalogo ?? []).map(norm));
     if (produtosNaoConfirmados(t, c.deps.nomesDeProdutos, c.estoque).filter((n) => !doCatalogo.has(n)).length) return bloqueia("produto_sem_confirmacao");
     if (afirmaDisponibilidade(t) && c.estoque?.estado !== "CONFIRMADO_DISPONIVEL" && !disponibilidadeDoEstoque(t, c.deps)) return bloqueia("produto_sem_confirmacao");
+    /* nunca oferecer moto sem unidade no estoque (só falar dela se o cliente perguntou por ela) */
+    if (ofereceSemEstoque(t, c.deps).length) return bloqueia("produto_sem_confirmacao");
     /* nunca afirmar horário ou endereço que não esteja numa fonte autorizada */
     if (afirmacoesSemFonte(t, c.deps.fontesAutorizadas).length) return bloqueia("sem_fonte_autorizada");
     return {};

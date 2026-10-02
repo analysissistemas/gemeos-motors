@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
@@ -8,7 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
-import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
+import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
@@ -25,6 +25,7 @@ import {
   TEXTO_TRANSFERENCIA,
   travaDeFatos,
   produtosNaoConfirmados,
+  ofereceSemEstoque,
   validadorDeResposta,
   type Ctx as CtxPipeline,
   type Deps,
@@ -198,19 +199,21 @@ async function montarProposta(c: CtxWorkflow): Promise<string | null> {
     .sort((a, b) => b.pos - a.pos || b.nome.length - a.nome.length)[0];
   if (!achado || !achado.preco) return null;
   const texto = doCliente;
-  let cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
-  /* modelo sem cor no catálogo: valem as cores das unidades disponíveis e, sem unidade, a cor que o cliente pediu */
-  if (!cores.length) {
-    const v = schema.veiculos;
-    const soReal = c.conversa?.demo ? undefined : eq(v.teste, false);
-    cores = [...new Set((await db.select({ cor: v.cor }).from(v).where(and(eq(v.modeloId, achado.id), eq(v.status, "disponivel"), soReal))).map((x) => x.cor?.trim()).filter((x): x is string => !!x))];
-    if (!cores.length) cores = CORES_COMUNS.filter((n) => corNoTexto(n, c.textoBuffer));
-  }
+  /* só moto com unidade disponível (regra do dono, 02/10/2026): sem unidade, não há proposta. Valem as
+     cores das unidades; o catálogo só quando nenhuma unidade tem cor anotada. Unidade sem modelo ligado
+     conta pelo nome, como no catálogo da IA. */
+  const v = schema.veiculos;
+  const soReal = c.conversa?.demo ? undefined : eq(v.teste, false);
+  const doModelo = or(eq(v.modeloId, achado.id), and(isNull(v.modeloId), sql`lower(trim(${v.modelo})) = ${achado.nome.trim().toLowerCase()}`));
+  const unidades = await db.select({ cor: v.cor }).from(v).where(and(doModelo, eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), soReal));
+  if (!unidades.length) return null;
+  let cores = [...new Set(unidades.map((x) => x.cor?.trim()).filter((x): x is string => !!x))];
+  if (!cores.length) cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
   /* cor única só vale se o cliente não pediu outra cor */
   const pediuCor = CORES_COMUNS.some((n) => corNoTexto(n, texto));
   const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 && !pediuCor ? cores[0] : null);
   if (!cor) return null;
-  const valor = `R$ ${Number(achado.preco).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+  const valor = reais(Number(achado.preco));
   const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
   return `*Proposta Gêmeos Motors*\n• Moto: ${achado.nome} ${corDaMoto(cor)}\n• Valor: ${valor}\n• Pagamento: ${pag}\n• Entrega: Goiana e região`;
 }
@@ -232,7 +235,7 @@ function trechosBarrados(ctx: CtxPipeline): string[] {
   const doCatalogo = new Set((ctx.deps.nomesDoCatalogo ?? []).map((n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()));
   const nomes = produtosNaoConfirmados(t, ctx.deps.nomesDeProdutos, ctx.estoque).filter((n) => !doCatalogo.has(n));
   const disp = afirmaDisponibilidade(t) ? [(t.match(/(?<![\p{L}\p{N}])(?:temos|tenho|tem\s+sim|h[aá]\s+sim|em\s+estoque|pronta\s+entrega|dispon[ií]ve(?:l|is))(?![\p{L}\p{N}])/iu) ?? [""])[0]] : [];
-  return [...nomes, ...disp, ...afirmacoesSemFonte(t, ctx.deps.fontesAutorizadas)].filter(Boolean).slice(0, 5);
+  return [...nomes, ...disp, ...ofereceSemEstoque(t, ctx.deps), ...afirmacoesSemFonte(t, ctx.deps.fontesAutorizadas)].filter(Boolean).slice(0, 5);
 }
 
 /* Qualificação automática do lead (pedido do dono, 27/09/2026: converter venda). Com o que a IA
@@ -318,7 +321,7 @@ async function motivoDoBloqueio(ctx: CtxPipeline): Promise<string | null> {
     const quais = trechos.length ? ` Trechos barrados: ${trechos.map((x) => `"${x}"`).join(", ")}.` : "";
     return (trava.detalhe === "sem_fonte_autorizada"
       ? "Você citou horário ou endereço que não está na base de conhecimento. Reescreva sem citar horário nem endereço."
-      : 'Você afirmou estoque ("temos", "disponível", "pronta entrega") de modelo que NÃO está marcado EM ESTOQUE no catálogo, ou citou marca ou modelo que não está no CATÁLOGO DA LOJA. Reescreva: cite só modelos do catálogo e, para os que não estão EM ESTOQUE, diga que a equipe confirma o prazo. Continue ajudando o cliente e faça UMA pergunta para avançar a venda.') + quais;
+      : 'Você ofereceu moto que NÃO tem unidade no estoque, afirmou estoque ("temos", "disponível", "pronta entrega") sem unidade, ou citou marca ou modelo que não está no CATÁLOGO DA LOJA. Reescreva: ofereça só as motos marcadas EM ESTOQUE, com as cores delas; moto sem unidade só se o cliente perguntou por ela, dizendo que no momento não tem e oferecendo anotar o interesse. Continue ajudando o cliente e faça UMA pergunta para avançar a venda.') + quais;
   }
   const v = validarResposta(ctx.texto, { promptSistema: ctx.deps.promptSistema, fontesAutorizadas: ctx.deps.fontesAutorizadas });
   if (!v.aprovada) return `O validador reprovou a resposta: ${v.violacoes.map((x) => `${x.rotulo} (${x.detalhe})`).join("; ")}. Reescreva corrigindo isso, curta e organizada.`;
@@ -364,14 +367,26 @@ const PERGUNTAS_USO = [
   "Qual vai ser o uso principal: trabalho, dia a dia ou passeio? 😊",
 ];
 
-/** Resumo do que a loja vende, com os números do catálogo (quantos modelos, menor preço, maior autonomia). */
-async function resumoDaLoja() {
+/** Resumo do que a loja tem, com os números das motos com unidade no estoque (quantos modelos, menor
+ *  preço, maior autonomia). Moto sem unidade não entra (regra do dono, 02/10/2026); sem nenhuma, não há resumo. */
+async function resumoDaLoja(c: CtxWorkflow) {
   const m = schema.modelos;
-  const motos = await db.select({ preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica")));
+  const v = schema.veiculos;
+  const [modelos, unidades] = await Promise.all([
+    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica"))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+  ]);
+  const motos = modelos.filter((x) => unidades.some((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())));
   if (!motos.length) return null;
   const precos = motos.map((x) => Number(x.preco)).filter((x) => x > 0);
   const autonomias = motos.map((x) => Number(((x.ficha as Record<string, string> | null)?.autonomia ?? "").match(/\d{2,3}(?!.*\d)/u)?.[0] ?? 0)).filter((x) => x > 0);
-  const desde = precos.length ? ` a partir de *R$ ${Math.min(...precos).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}*` : "";
+  if (motos.length === 1) {
+    const [x] = motos;
+    const preco = precos.length ? ` por *${reais(precos[0])}*` : "";
+    const anda = autonomias.length ? `, que anda até ${autonomias[0]} km com uma carga` : "";
+    return `Aqui na Gêmeos Motors a gente tem a moto elétrica *${x.nome}*${preco}${anda} 🛵 Não precisa de CNH, emplacamento nem IPVA, e ainda temos acessórios, assistência técnica própria e entrega em Goiana e região.`;
+  }
+  const desde = precos.length ? ` a partir de *${reais(Math.min(...precos))}*` : "";
   const alcance = autonomias.length ? `, que andam até ${Math.max(...autonomias)} km com uma carga` : "";
   return variar([
     `Aqui na Gêmeos Motors a gente trabalha com ${motos.length} modelos de motos elétricas${desde}${alcance} 🛵 Nenhuma precisa de CNH, emplacamento nem IPVA, e ainda temos acessórios, assistência técnica própria e entrega em Goiana e região.`,
@@ -386,7 +401,7 @@ async function apresentarLoja(c: CtxWorkflow, resposta: string[]): Promise<strin
   const nomeAgora = !c.memoria.fatos.nome && !!c.aprendido.fatos.nome;
   if (!soSeApresentou || !nomeAgora || !resposta.length) return resposta;
   if (resposta.some((b) => /R\$|modelos|motos el[ée]tricas/iu.test(b)) || /R\$ \d/u.test(c.memoria.historico ?? "")) return resposta;
-  const resumo = await resumoDaLoja();
+  const resumo = await resumoDaLoja(c);
   if (!resumo) return resposta;
   /* o que não é pergunta fica no começo ("Prazer, Joelson!"), o resumo no meio, UMA pergunta no fim */
   const frases = resposta.join(" ").match(/[^.!?]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [];
@@ -409,24 +424,25 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
   const v = schema.veiculos;
   const [modelos, unidades, base] = await Promise.all([
     db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica"))),
-    db.select({ modeloId: v.modeloId }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   const pBase = lerParametrosEconomia(base.map((b) => b.conteudo));
   if (!pBase) return respostaOriginal;
   const p = comGasolinaDaRegiao(pBase, await gasolinaDoCliente(c));
   const lista = modelos
-    .map((x) => ({ ...x, autonomia: autonomiaMinima((x.ficha as Record<string, string> | null)?.autonomia), temEstoque: unidades.some((u) => u.modeloId === x.id) }))
+    .map((x) => ({ ...x, autonomia: autonomiaMinima((x.ficha as Record<string, string> | null)?.autonomia), temEstoque: unidades.some((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())) }))
     .filter((x): x is typeof x & { autonomia: number } => !!x.autonomia);
   const texto = respostaOriginal.join(" ").toLowerCase();
   const doCliente = [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n").toLowerCase();
   const citado = (t: string) => lista.filter((x) => corNoTexto(x.nome, t) || t.includes(x.nome.toLowerCase())).sort((a, b) => t.indexOf(a.nome.toLowerCase()) - t.indexOf(b.nome.toLowerCase()))[0];
-  /* a moto da conta: a que a resposta cita, a que o cliente citou, ou a que aguenta o dia dele (com estoque primeiro, depois a mais barata) */
+  /* a moto da conta: a que a resposta cita, a que o cliente citou, ou a mais barata COM unidade no estoque
+     que aguenta o dia dele (moto sem unidade o sistema não oferece: regra do dono, 02/10/2026) */
   const porDia = kmSemana / 7;
   const escolhida =
     citado(texto) ??
     citado(doCliente) ??
-    lista.filter((x) => x.autonomia >= porDia).sort((a, b) => Number(b.temEstoque) - Number(a.temEstoque) || Number(a.preco ?? 1e9) - Number(b.preco ?? 1e9))[0];
+    lista.filter((x) => x.temEstoque && x.autonomia >= porDia).sort((a, b) => Number(a.preco ?? 1e9) - Number(b.preco ?? 1e9))[0];
   if (!escolhida) return respostaOriginal;
   const frase = fraseEconomia(escolhida.nome, escolhida.autonomia, kmSemana, p);
   if (!resposta.length) return [frase];
@@ -453,6 +469,11 @@ function gasolinaDoCliente(c: CtxWorkflow) {
   return gasolinaPara({ cidade, textoDoCliente: textoDoCliente(c) }).catch(() => null);
 }
 
+/** Nomes das motos sem unidade que o cliente não citou (se citou uma, todos os nomes dela ficam liberados). */
+function semEstoqueNaoCitadas(catalogo: { comEstoque: string[]; semEstoque: string[][] }, doCliente: string) {
+  return catalogo.semEstoque.filter((apelidos) => !ofereceSemEstoque(doCliente, { modelosSemEstoque: apelidos, modelosComEstoque: catalogo.comEstoque }).length).flat();
+}
+
 async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
   const incluirTeste = !!c.conversa?.demo;
   const [controle, promptSistema, modelos, veiculos, conhecimento, catalogo] = await Promise.all([
@@ -470,6 +491,8 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     /* só motos elétricas e acessórios do catálogo podem ser citados; "tem" só com unidade no estoque */
     nomesDoCatalogo: catalogo.nomes,
     modelosComEstoque: catalogo.comEstoque,
+    /* moto sem unidade não pode aparecer na resposta, a não ser que o CLIENTE tenha perguntado por ela */
+    modelosSemEstoque: semEstoqueNaoCitadas(catalogo, [c.memoria.fatos.interesse ?? "", textoDoCliente(c)].join("\n")),
     /* + a conta de economia do uso deste cliente (semana e mês), que a IA pode citar */
     fontesAutorizadas: [...conhecimento, ...(catalogo.texto ? [catalogo.texto] : [])],
     gerar,

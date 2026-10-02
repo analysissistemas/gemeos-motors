@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CAMPOS_DO_ITEM, decidirEstoque, type ItemEstoque } from "../../lib/ia/estoque-tipos.ts";
 import { CONTROLE_PADRAO, type ControleIa } from "../../lib/ia/permissoes.ts";
-import { processarMensagem, TEXTO_CONFIRMAR_COM_EQUIPE, TEXTO_INDISPONIVEL, TEXTO_TRANSFERENCIA, type Deps, type SaidaModelo } from "../../lib/ia/pipeline.ts";
+import { ofereceSemEstoque, processarMensagem, TEXTO_CONFIRMAR_COM_EQUIPE, TEXTO_INDISPONIVEL, TEXTO_TRANSFERENCIA, type Deps, type SaidaModelo } from "../../lib/ia/pipeline.ts";
 
 const item = (id: number, marca: string, modelo: string, status: string, versao: string | null = null): ItemEstoque => ({ id, tipo: "moto_eletrica", marca, modelo, versao, cor: "Preta", condicao: "zero_km", status });
 
@@ -35,6 +35,8 @@ type Cenario = {
   falhaEstoque?: boolean;
   falhaEnvio?: boolean;
   catalogo?: string[];
+  comEstoque?: string[];
+  semEstoque?: string[];
 };
 
 async function rodar(mensagem: string, c: Cenario) {
@@ -47,6 +49,8 @@ async function rodar(mensagem: string, c: Cenario) {
     promptSistema: PROMPT,
     nomesDeProdutos: NOMES,
     nomesDoCatalogo: c.catalogo,
+    modelosComEstoque: c.comEstoque,
+    modelosSemEstoque: c.semEstoque,
     fontesAutorizadas: c.fontes ?? [],
     gerar: async () => {
       contagem.modelo++;
@@ -371,4 +375,29 @@ test("modelo do catálogo sem unidade no estoque não vira 'vou confirmar com a 
   const { r } = await rodar("a AG11 anda quantos km?", { modelo: [consulta("AG11")], catalogo: ["TANK AG11", "AG08"], estoque: [] });
   assert.notEqual(r.texto, TEXTO_CONFIRMAR_COM_EQUIPE);
   assert.notEqual(r.motivo, "estoque_nao_confirmado");
+});
+
+/* ---------- só oferecer o que tem no estoque (regra do dono, 02/10/2026) ---------- */
+const LOJA = { catalogo: ["AG08", "TANK AG11", "T1", "T3 RETRÔ", "T3 RETRÔ 2"], comEstoque: ["AG08", "T3 RETRÔ 2"], semEstoque: ["TANK AG11", "AG11", "T1", "T3 RETRÔ", "T3"] };
+
+test("SÓ O QUE TEM: oferecer moto sem unidade é barrado, mesmo sem dizer 'tem'", async () => {
+  for (const t of ["Temos a AG08 e a T1. Qual combina mais com você?", "Para subida eu indico a TANK AG11. Para que você vai usar?", "A AG11 anda até 64 km. Quer saber mais?"]) {
+    const { r, enviados } = await rodar("Quais motos vocês têm?", { modelo: [texto(t)], ...LOJA });
+    assert.equal(r.motivo, "produto_sem_confirmacao", t);
+    assert.deepEqual(enviados, [], t);
+  }
+});
+
+test("SÓ O QUE TEM: a moto com unidade passa (e o nome dela não é lido como o de outra sem unidade)", async () => {
+  for (const t of ["A AG08 tem a pronta entrega. Para que você vai usar?", "A T3 Retrô 2 tem a pronta entrega. Quer conhecer?"]) {
+    const { enviados } = await rodar("Quais motos vocês têm?", { modelo: [texto(t)], ...LOJA });
+    assert.equal(enviados.length, 1, t);
+  }
+});
+
+test("SÓ O QUE TEM: moto que o cliente perguntou sai da lista (quem monta as Deps tira) e pode ser citada", async () => {
+  assert.deepEqual(ofereceSemEstoque("vocês têm a T1?", { modelosSemEstoque: ["T1"] }), ["t1"]);
+  assert.deepEqual(ofereceSemEstoque("quero a T3 Retrô 2", { modelosSemEstoque: ["T3 RETRÔ", "T3"], modelosComEstoque: ["T3 RETRÔ 2"] }), []);
+  const { enviados } = await rodar("vocês têm a T1?", { modelo: [texto("A T1 no momento está sem unidade. Posso anotar seu interesse e te avisar quando chegar?")], ...LOJA, semEstoque: ["TANK AG11", "AG11", "T3 RETRÔ", "T3"] });
+  assert.equal(enviados.length, 1);
 });
