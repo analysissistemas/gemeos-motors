@@ -34,6 +34,7 @@ export function Chat({
   aoApagar,
   aoConversarCom,
   aoAssumir,
+  aoMudarModo,
   iaDigitando,
 }: {
   contexto: ContextoConversa;
@@ -55,6 +56,8 @@ export function Chat({
   aoApagar: (m: MensagemChat) => void;
   aoConversarCom: (telefone: string, nome: string | null) => void;
   aoAssumir: () => void;
+  /** botão IA ⇄ Humano do cabeçalho */
+  aoMudarModo: (modo: "ia" | "humano") => Promise<void>;
   /** a IA está preparando a resposta: balão "digitando…" no fim do chat */
   iaDigitando?: boolean;
 }) {
@@ -172,7 +175,8 @@ export function Chat({
             </span>
           </span>
         </button>
-        {!souResponsavel && (
+        <ModoAtendimento modo={c.modo} aoMudar={aoMudarModo} />
+        {c.modo === "humano" && !souResponsavel && (
           <Botao tamanho="sm" variante="primario" onClick={aoAssumir}>
             <UserCheck className="size-4" /> Assumir
           </Botao>
@@ -186,7 +190,14 @@ export function Chat({
         <div className="flex items-center gap-2 border-b border-linha bg-vidro px-4 py-2 text-[12.5px]">
           <Bot className="size-4 shrink-0" />
           <span className="flex-1">
-            {c.triagemIa?.prontoParaHumano ? <b>Triagem concluída — aguardando consultor.</b> : "A IA está fazendo a primeira triagem."} Ao responder ou assumir, o atendimento passa a ser humano.
+            {!contexto.iaPodeResponder ? (
+              <b className="text-critico">A IA está desligada em Inteligência artificial → Controle: ninguém está respondendo esta conversa.</b>
+            ) : c.triagemIa?.prontoParaHumano ? (
+              <b>Triagem concluída — aguardando consultor.</b>
+            ) : (
+              "A IA está fazendo a primeira triagem."
+            )}{" "}
+            Ao responder ou assumir, o atendimento passa a ser humano.
           </span>
         </div>
       )}
@@ -612,4 +623,36 @@ function Tiques({ status }: { status: string }) {
   if (status === "failed") return <CircleAlert className="size-3.5 text-critico" aria-label="Falhou" />;
   if (status === "sent") return <Check className="size-3.5" aria-label="Enviada" />;
   return <CheckCheck className={cn("size-3.5", status === "read" && "text-[#34b7f1]")} aria-label={status === "read" ? "Lida" : "Entregue"} />;
+}
+
+/** Botão IA ⇄ Humano: quem responde esta conversa. */
+function ModoAtendimento({ modo, aoMudar }: { modo: string; aoMudar: (m: "ia" | "humano") => Promise<void> }) {
+  const [mudando, setMudando] = useState(false);
+  const mudar = async (m: "ia" | "humano") => {
+    if (m === modo || mudando) return;
+    setMudando(true);
+    try {
+      await aoMudar(m);
+    } finally {
+      setMudando(false);
+    }
+  };
+  return (
+    <div role="group" aria-label="Quem responde esta conversa" className={cn("flex shrink-0 rounded-full border border-linha bg-plano/70 p-0.5 text-[12.5px] font-medium", mudando && "opacity-60")}>
+      {(["ia", "humano"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={modo === m}
+          disabled={mudando}
+          onClick={() => mudar(m)}
+          title={m === "ia" ? "A IA responde esta conversa" : "Um atendente responde esta conversa"}
+          className={cn("flex items-center gap-1 rounded-full px-2.5 py-1.5 transition", modo === m ? "bg-ink text-contra-ink" : "text-ink-2 hover:text-ink")}
+        >
+          {m === "ia" ? <Bot className="size-3.5" /> : <UserRound className="size-3.5" />}
+          {m === "ia" ? "IA" : "Humano"}
+        </button>
+      ))}
+    </div>
+  );
 }

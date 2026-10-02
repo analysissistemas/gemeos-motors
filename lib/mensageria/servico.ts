@@ -406,6 +406,29 @@ export async function assumirConversa(u: Quem, conversaId: number) {
   });
 }
 
+/* Botão IA ⇄ Humano (pedido do dono, 02/10/2026): devolve a conversa para a IA. Se o cliente está
+   esperando (a última mensagem é dele, dentro da janela de 24 h da Meta), devolve o id dela para a
+   IA responder já — a mesma chamada que o vigia faz. */
+export async function devolverParaIa(u: Quem, conversaId: number) {
+  return db.transaction(async (tx) => {
+    const [c] = await tx.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
+    if (!c) throw new ErroRegra("Conversa não encontrada.");
+    if (c.modo !== "ia") {
+      await tx.update(schema.conversas).set({ modo: "ia", responsavelId: null, atualizadoEm: new Date() }).where(eq(schema.conversas.id, conversaId));
+      await mensagemSistema(tx, conversaId, `Atendimento devolvido para a IA (por ${u.nome})`);
+      await registrarLog(u, { acao: "conversa.ia", entidade: "conversa", entidadeId: conversaId, descricao: `Conversa devolvida para a IA — ${c.contatoNome ?? formatarTelefone(c.contatoTelefone)}` }, tx);
+    }
+    const [ultima] = await tx
+      .select({ id: schema.mensagens.id, direcao: schema.mensagens.direcao, em: schema.mensagens.criadoEm })
+      .from(schema.mensagens)
+      .where(and(eq(schema.mensagens.conversaId, conversaId), inArray(schema.mensagens.direcao, ["incoming", "outgoing"])))
+      .orderBy(desc(schema.mensagens.id))
+      .limit(1);
+    const esperando = ultima?.direcao === "incoming" && Date.now() - new Date(ultima.em).getTime() < 24 * 60 * 60 * 1000;
+    return { demo: c.demo, mensagemEsperando: esperando ? ultima.id : null };
+  });
+}
+
 export async function atribuirConversa(u: Quem, conversaId: number, responsavelId: number | null) {
   return db.transaction(async (tx) => {
     const [c] = await tx.select().from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);

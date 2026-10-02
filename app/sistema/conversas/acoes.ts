@@ -17,6 +17,7 @@ import {
   assumirConversa,
   atribuirConversa,
   criarNegocioDaConversa,
+  devolverParaIa,
   encerrarFollowUp,
   enviarMensagem,
   executarTriagem,
@@ -33,6 +34,8 @@ import {
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
+import { lerConfigWorkflow } from "@/lib/ia/workflow/config";
+import { lerControle } from "@/lib/ia/controle";
 import type { TipoMensagem } from "@/lib/mensageria/tipos";
 
 const revalidarFunil = () => {
@@ -164,6 +167,26 @@ export async function acaoAssumir(conversaId: number) {
     revalidarFunil();
     return null;
   }, "Você assumiu o atendimento");
+}
+
+/** Botão IA ⇄ Humano do chat. Humano = assumir; IA = devolver (e a IA responde já se o cliente espera). */
+export async function acaoModoAtendimento(conversaId: number, modo: "ia" | "humano") {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    if (modo === "humano") {
+      await assumirConversa(u, conversaId);
+      revalidarFunil();
+      return { iaPodeResponder: true, respondendo: false };
+    }
+    const r = await devolverParaIa(u, conversaId);
+    const [controle, workflow] = await Promise.all([lerControle(), lerConfigWorkflow()]);
+    const iaPodeResponder = controle.ligada && workflow.ativo;
+    const mensagemId = r.mensagemEsperando;
+    const respondendo = iaPodeResponder && mensagemId != null;
+    if (respondendo) after(() => rodarWorkflowAtendimento({ conversaId, mensagemId, gatilho: "whatsapp", simulado: r.demo }).then(() => {}));
+    revalidarFunil();
+    return { iaPodeResponder, respondendo };
+  });
 }
 
 export async function acaoAtribuir(conversaId: number, responsavelId: number | null) {

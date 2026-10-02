@@ -2,6 +2,8 @@ import "server-only";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, schema } from "@/lib/db";
+import { lerControle } from "@/lib/ia/controle";
+import { lerConfigWorkflow } from "@/lib/ia/workflow/config";
 
 import type { FiltroConversa } from "./conversas.tipos";
 export { FILTROS_CONVERSA, type FiltroConversa } from "./conversas.tipos";
@@ -249,6 +251,18 @@ export async function contextoDaConversa(conversaId: number) {
     .from(schema.mensagens)
     .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.direcao, "incoming")));
   /* responsavel: quem atende a conversa (nome e foto), para o cabeçalho do chat */
-  return { conversa, atendimentoHumano: conv.atendimentoHumano, responsavel: conv.responsavel?.nome ? conv.responsavel : null, cliente: cli, negocio: negocio[0] ?? null, followups, historico: historico[0], ultimaDoClienteEm: ult?.em ? new Date(ult.em) : null };
+  /* botão IA ⇄ Humano: com a chave geral ou o atendimento da IA desligado, ninguém responde no modo IA */
+  const [controle, workflow] = await Promise.all([lerControle(), lerConfigWorkflow()]);
+  return {
+    conversa,
+    atendimentoHumano: conv.atendimentoHumano,
+    responsavel: conv.responsavel?.nome ? conv.responsavel : null,
+    cliente: cli,
+    negocio: negocio[0] ?? null,
+    followups,
+    historico: historico[0],
+    ultimaDoClienteEm: ult?.em ? new Date(ult.em) : null,
+    iaPodeResponder: controle.ligada && workflow.ativo,
+  };
 }
 export type ContextoConversa = NonNullable<Awaited<ReturnType<typeof contextoDaConversa>>>;

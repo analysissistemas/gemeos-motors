@@ -25,6 +25,7 @@ import {
   acaoEnviarMensagem,
   acaoEnviarModelo,
   acaoListarConversas,
+  acaoModoAtendimento,
   acaoMensagensAntigas,
   acaoNota,
   acaoReagir,
@@ -386,6 +387,17 @@ export function CentralConversas({
     sincronizar();
   }
 
+  /* botão IA ⇄ Humano: avisa quando a IA está desligada (a conversa fica no modo IA, mas ninguém responde) */
+  async function mudarModo(id: number, modo: "ia" | "humano") {
+    const r = await acaoModoAtendimento(id, modo);
+    if (!r.ok) return void toast.error(r.erro);
+    if (modo === "humano") toast.success("Você assumiu o atendimento");
+    else if (!r.dados.iaPodeResponder) toast.warning("Conversa com a IA, mas a IA está desligada em Inteligência artificial → Controle. Ninguém vai responder até ligar.", { duration: 8000 });
+    else toast.success(r.dados.respondendo ? "Conversa com a IA. Ela já está respondendo o cliente." : "Conversa com a IA. Ela responde a próxima mensagem do cliente.");
+    await recarregarContexto();
+    sincronizar();
+  }
+
   async function pedirEtapa(alvo: AlvoEtapa, atual: string, destino: Etapa) {
     if (destino === atual) return;
     if (destino === "perdida") return setPerda(alvo);
@@ -501,6 +513,7 @@ export function CentralConversas({
             aoApagar={apagarParaMim}
             aoConversarCom={conversarCom}
             aoAssumir={() => executarAcao(acaoAssumir(aberta))}
+            aoMudarModo={(modo) => mudarModo(aberta, modo)}
             iaDigitando={iaDigitando}
           />
         ) : aberta ? (
