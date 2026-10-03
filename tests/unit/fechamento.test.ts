@@ -3,7 +3,7 @@
    "retirar ou entrega?", e os dados vão para o vendedor confirmar. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, textoDadosRecebidos } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, textoDadosRecebidos } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -68,7 +68,17 @@ test("lista de dados: a do Milton, sem o que o cliente já disse; retirada sem e
 
 test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () => {
   assert.ok(parabens("AG08").every((p) => RX_PARABENS.test(p) && p.includes("AG08")));
-  assert.doesNotMatch(textoDadosRecebidos(true) + textoDadosRecebidos(false), /conclu[ií]d|reservad|separad/);
+  /* repasse humanizado: nome, moto e o próximo passo certo; nunca "compra concluída" nem "moto reservada" */
+  const entrega = textoDadosRecebidos({ nome: "Carlos", modelo: "AG08", modo: "entrega", lojaAberta: true }, 0);
+  assert.equal(entrega, "Perfeito, Carlos! Está tudo certinho ✅ Vou repassar seus dados pra minha equipe, que vai combinar com você o melhor horário pra entregar a sua *AG08* 🛵");
+  const fechada = textoDadosRecebidos({ nome: "Carlos", modelo: "AG08", modo: "entrega", lojaAberta: false }, 0.9);
+  assert.match(fechada, /^Show, Carlos!.*assim que a loja abrir.*melhor horário/);
+  const retirada = textoDadosRecebidos({ nome: null, modelo: null, modo: "retirada", lojaAberta: true }, 0);
+  assert.match(retirada, /^Perfeito! .*separação da sua moto e o horário que você vem buscar/);
+  for (const s of [0, 0.9]) for (const aberta of [true, false]) for (const modo of ["entrega", "retirada"] as const)
+    assert.doesNotMatch(textoDadosRecebidos({ nome: "Ana", modelo: "T1", modo, lojaAberta: aberta }, s), /conclu[ií]d|reservad|separad[ao] (pra|para) voc/);
+  assert.ok(pediuDadosDeRetirada(listaDeDados("retirada", {})));
+  assert.ok(!pediuDadosDeRetirada(listaDeDados("entrega", {})));
   assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /Não ofereça desconto/);
   assert.match(instrucaoDeFechamento("interesse", "AG08"), /O que está faltando para concluirmos/);
   assert.equal(instrucaoDeFechamento(null, null), "");

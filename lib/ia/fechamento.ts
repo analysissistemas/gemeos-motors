@@ -111,11 +111,28 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
   return `Show! Para finalizar seu pedido, me manda por aqui:\n${campos.map((c) => `• ${c}`).join("\n")}${fora}`;
 }
 
-/** Recebeu os dados: agradece e passa ao vendedor, sem repetir dado pessoal nem dizer que a compra está concluída. */
-export function textoDadosRecebidos(lojaAberta: boolean) {
-  return lojaAberta
-    ? "Recebi seus dados, obrigado! ✅ Vou passar pro nosso vendedor conferir e confirmar o seu pedido com você por aqui 🙌"
-    : "Recebi seus dados, obrigado! ✅ Nosso vendedor confere e confirma o seu pedido com você por aqui assim que a loja abrir 🙌";
+/** A lista de dados que a loja mandou era a da retirada ("que dia e horário você pretende vir")? */
+export const pediuDadosDeRetirada = (ultimaDaLoja: string) => /pretende vir/i.test(ultimaDaLoja) && !/\bCEP\b/i.test(ultimaDaLoja);
+
+/** Recebeu os dados (pedido do dono, 03/10/2026: "ele está doido por uma confirmação; o repasse tem que ser
+ *  totalmente humanizado: 'Perfeito, Carlos, está tudo certinho, vou repassar os dados para a minha equipe
+ *  combinar contigo o melhor horário de entrega'"). Com o nome, a moto e o próximo passo certo; sem repetir
+ *  dado pessoal e sem dizer que a compra está concluída. Fora do horário, a equipe chama quando a loja abrir. */
+export function textoDadosRecebidos(p: { nome?: string | null; modelo?: string | null; modo: "entrega" | "retirada"; lojaAberta: boolean }, sorte = Math.random()) {
+  const voc = p.nome ? `, ${p.nome}` : "";
+  const moto = p.modelo ? `sua *${p.modelo}*` : "sua moto";
+  const passo = p.modo === "entrega" ? `o melhor horário pra entregar a ${moto} 🛵` : `a separação da ${moto} e o horário que você vem buscar 🙌`;
+  const verbo = p.modo === "entrega" ? "combinar" : "confirmar";
+  const variantes = p.lojaAberta
+    ? [
+        `Perfeito${voc}! Está tudo certinho ✅ Vou repassar seus dados pra minha equipe, que vai ${verbo} com você ${passo}`,
+        `Show${voc}! Recebi tudo certinho ✅ Já vou repassar pra nossa equipe, que vai te chamar aqui pra ${verbo} ${passo}`,
+      ]
+    : [
+        `Perfeito${voc}! Está tudo certinho ✅ Vou repassar seus dados pra minha equipe, e assim que a loja abrir eles vão ${verbo} com você ${passo}`,
+        `Show${voc}! Recebi tudo certinho ✅ Já vou repassar pra nossa equipe, que te chama aqui assim que a loja abrir pra ${verbo} ${passo}`,
+      ];
+  return variantes[Math.min(variantes.length - 1, Math.floor(sorte * variantes.length))];
 }
 
 /** O que a IA precisa saber antes de escrever, em cada momento. */

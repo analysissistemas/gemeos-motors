@@ -32,7 +32,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { criarNegocio } from "@/lib/servicos/negocios";
@@ -736,8 +736,10 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* o cliente mandou os dados para fechar (com CPF): agradece e passa ao vendedor, que confere e confirma
        (P12/P18). O texto é fixo: não repete dado pessoal nem diz que a compra está concluída. */
     if (momento === "mandou_dados") {
-      const pipe = { ...r.ctx, texto: textoDadosRecebidos(aberta), humano: true, motivo: "modelo_pediu_transferencia" as const };
-      const motivo = `Fechamento: o cliente mandou os dados para ${/retir/i.test(ultimaDaLoja) && !/entrega/i.test(ultimaDaLoja) ? "retirada" : "o pedido"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir e confirmar com ele.`;
+      const modo = pediuDadosDeRetirada(ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
+      const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const pipe = { ...r.ctx, texto: textoDadosRecebidos({ nome, modelo: modeloDaConversa, modo, lojaAberta: aberta }), humano: true, motivo: "modelo_pediu_transferencia" as const };
+      const motivo = `Fechamento: o cliente mandou os dados para ${modo === "retirada" ? "retirar na loja" : "entrega"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir os dados e combinar com ele ${modo === "retirada" ? "a separação e o horário da retirada" : "o melhor horário da entrega"}.`;
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
     }
     /* no meio do fechamento a IA não passa ao vendedor por conta própria (o teste de 03/10 mostrou ela passando
