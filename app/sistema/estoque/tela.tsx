@@ -29,12 +29,15 @@ const nomeVeiculo = (v: VeiculoLinha) => [v.marca, v.modelo, v.versao].filter(Bo
 /* Unidades iguais (moto zero km do mesmo modelo, cor, preço e situação, sem placa nem km) viram uma
    linha só com a quantidade, pedido do dono (02/10/2026). Por dentro cada uma continua sendo um veículo.
    A mesma chave (menos preço e situação, que o ajuste muda) é conferida de novo no servidor. */
+/** Moto zero km sem placa nem km, à venda: entra na linha com quantidade (mesmo sendo uma só). */
+const ehAgrupavel = (v: VeiculoLinha) => v.status !== "vendido" && v.status !== "inativo" && !v.placa && !v.km && v.condicao === "zero_km";
+const rotuloUnidades = (n: number) => (n === 1 ? "1 unidade" : `${n} unidades`);
+
 function agrupar(veiculos: VeiculoLinha[]): VeiculoLinha[][] {
   const grupos = new Map<string, VeiculoLinha[]>();
   const saida: VeiculoLinha[][] = [];
   for (const v of veiculos) {
-    const agrupavel = v.status !== "vendido" && v.status !== "inativo" && !v.placa && !v.km && v.condicao === "zero_km";
-    if (!agrupavel) {
+    if (!ehAgrupavel(v)) {
       saida.push([v]);
       continue;
     }
@@ -113,7 +116,7 @@ function GrupoLinhas({ g, custo, editar, aberto, aoAbrir, aoEditar, aoAjustar }:
             <ChevronRight className={`mt-0.5 size-4 shrink-0 text-ink-3 transition ${aberto ? "rotate-90" : ""}`} aria-hidden />
             <span>
               <span className="flex flex-wrap items-center gap-1.5 font-semibold">
-                {nomeVeiculo(v)} <Selo tom="info">{g.length} unidades</Selo> {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
+                {nomeVeiculo(v)} <Selo tom="info">{rotuloUnidades(g.length)}</Selo> {v.teste && <Selo tom="atencao">Teste · IA</Selo>}
               </span>
               <span className="block text-[12px] text-ink-3">
                 {TIPOS_VEICULO[v.tipo as keyof typeof TIPOS_VEICULO]}
@@ -425,7 +428,7 @@ export function TelaEstoque({
                   </thead>
                   <tbody>
                     {grupos.map((g) =>
-                      g.length === 1 ? (
+                      g.length === 1 && !ehAgrupavel(g[0]) ? (
                         <LinhaVeiculo key={g[0].id} v={g[0]} custo={permissoes.custo} editar={permissoes.editar} aoEditar={setEditando} />
                       ) : (
                         <GrupoLinhas key={g[0].id} g={g} custo={permissoes.custo} editar={permissoes.editar} aberto={abertos.has(g[0].id)} aoAbrir={() => alternarGrupo(g[0].id)} aoEditar={setEditando} aoAjustar={() => setAjustando(g)} />
@@ -436,14 +439,14 @@ export function TelaEstoque({
               </div>
               <ul className="md:hidden">
                 {grupos.map((g) =>
-                  g.length === 1 ? (
+                  g.length === 1 && !ehAgrupavel(g[0]) ? (
                     <ItemVeiculo key={g[0].id} v={g[0]} custo={permissoes.custo} editar={permissoes.editar} aoEditar={setEditando} />
                   ) : (
                     <li key={g[0].id} className="border-b border-linha last:border-0">
                       <div className="flex items-start gap-2 px-4 py-3">
                         <button type="button" onClick={() => alternarGrupo(g[0].id)} aria-expanded={abertos.has(g[0].id)} className="min-w-0 flex-1 text-left">
                           <p className="flex items-center gap-1.5 truncate font-semibold">
-                            {nomeVeiculo(g[0])} <Selo tom="info">{g.length} unidades</Selo> {g[0].teste && <Selo tom="atencao">Teste · IA</Selo>}
+                            {nomeVeiculo(g[0])} <Selo tom="info">{rotuloUnidades(g.length)}</Selo> {g[0].teste && <Selo tom="atencao">Teste · IA</Selo>}
                           </p>
                           <p className="truncate text-[12.5px] text-ink-2">{[CONDICOES[g[0].condicao as keyof typeof CONDICOES], g[0].cor].filter(Boolean).join(" · ")}</p>
                           <p className="num truncate text-[12px] text-ink-3">{resumoChassis(g)}</p>
