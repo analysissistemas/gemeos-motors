@@ -32,7 +32,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PERGUNTA_USO_KM, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { criarNegocio } from "@/lib/servicos/negocios";
@@ -393,6 +393,9 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       if (kmDoCliente(c) || resposta.some((b) => /km/iu.test(b) && /\?/.test(b))) return resposta;
       return [...semPerguntas(resposta), variar(PERGUNTAS_KM)];
     }
+    case "informou_km":
+      /* a conta certa já entrou (garantirEconomia); a conversa volta para o fechamento */
+      return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
     case "escolheu_entrega":
       return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento })];
     case "escolheu_retirada":
@@ -405,7 +408,7 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
 async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
   const kmSemana = kmDoCliente(c);
   /* conta pronta quando o cliente fala de gasto/economia ou acha caro (objeção de preço) */
-  if (!kmSemana || !resposta.length || !(PERGUNTA_ECONOMIA.test(c.textoBuffer) || c.momento === "objecao_preco")) return resposta;
+  if (!kmSemana || !resposta.length || !(PERGUNTA_ECONOMIA.test(c.textoBuffer) || c.momento === "objecao_preco" || c.momento === "informou_km")) return resposta;
   /* a conta é sempre a do sistema (a IA já trocou "por mês" por "por semana"): as frases de valores dela
      saem e entra a frase pronta, com a moto, a semana e o mês. A moto escolhida olha a resposta original. */
   const respostaOriginal = resposta;
@@ -737,7 +740,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const motivo = `Fechamento: o cliente mandou os dados para ${/retir/i.test(ultimaDaLoja) && !/entrega/i.test(ultimaDaLoja) ? "retirada" : "o pedido"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir e confirmar com ele.`;
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
     }
-    return { ctx: { pipe: r.ctx, aprendido, saudacao: g.saudacao(), midia, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: ultimo?.motivoTransferencia ?? (r.ctx.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa } };
+    /* no meio do fechamento a IA não passa ao vendedor por conta própria (o teste de 03/10 mostrou ela passando
+       logo depois do "entrega"): o sistema passa quando os dados chegam. Cliente que pede uma pessoa, passa. */
+    let pipe = r.ctx;
+    const segurou = !!momento && MOMENTOS_SEM_TRANSFERIR.includes(momento) && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !!pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA && !RX_PEDE_PESSOA.test(c.textoBuffer);
+    if (segurou) pipe = { ...pipe, humano: false, motivo: null };
+    return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
   },
 
   trava_fatos: async (c) => {

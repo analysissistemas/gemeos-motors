@@ -11,7 +11,12 @@
    - escolheu_entrega / escolheu_retirada: respondeu a pergunta "retirar ou entrega?"
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
-export type Momento = "interesse" | "decidido" | "objecao_preco" | "objecao" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+export type Momento = "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+
+/** Nestes momentos a IA não passa a conversa ao vendedor por conta própria: o fechamento segue até os dados
+ *  chegarem (aí o sistema passa). Só passa antes se o cliente pedir uma pessoa. */
+export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
+export const RX_PEDE_PESSOA = /(?<![\p{L}])(atendente|humano|pessoa|vendedor|gerente|falar com (algu[eé]m|voc[eê]s|o dono)|ligar|liga pra mim)(?![\p{L}])/iu;
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -47,6 +52,8 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (entrega && !retirada) return "escolheu_entrega";
     if (retirada && !entrega) return "escolheu_retirada";
   }
+  /* respondeu quantos km roda, depois do "me fala os km que eu faço a conta da economia" */
+  if (/econom/.test(loja) && /km/.test(loja) && /(?<!\d)\d{1,4}\s*(km|quil)/.test(t)) return "informou_km";
   if (RX_PRECO_OBJ.test(t)) return "objecao_preco";
   if (RX_DUVIDA.test(t)) return "objecao";
   if (p.conheceModelo && RX_DECIDIDO.test(t)) return "decidido";
@@ -124,6 +131,9 @@ O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima
     case "objecao_preco":
       return `# MOMENTO DA COMPRA
 O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
+    case "informou_km":
+      return `# MOMENTO DA COMPRA
+O cliente disse quanto roda. A conta da economia é a CONTA DO CLIENTE que já vem pronta no catálogo: use só esses números, nunca faça conta. Termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?".`;
     case "objecao":
       return `# MOMENTO DA COMPRA
 O cliente está em dúvida. Com empatia e sem pressionar, entenda o motivo real com UMA pergunta aberta (ex.: "O que está pesando na sua decisão?") e responda a dúvida com dados do catálogo e da base. Não repita a pergunta de fechamento.`;

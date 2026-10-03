@@ -3,7 +3,7 @@
    "retirar ou entrega?", e os dados vão para o vendedor confirmar. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, parabens, RX_PARABENS, textoDadosRecebidos } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, textoDadosRecebidos } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -24,6 +24,21 @@ test("objeção de preço e outras dúvidas", () => {
   for (const t of ["vou pensar", "vou falar com minha esposa", "não sei ainda", "tô em dúvida"]) assert.equal(m(t), "objecao", t);
   /* "cara" como gíria não é objeção */
   assert.notEqual(m("cara, quero essa"), "objecao_preco");
+});
+
+test("respondeu os km depois do pedido da conta: a conta é do sistema e volta para o fechamento", () => {
+  const pedido = "Me fala quantos km você roda por dia, mais ou menos, que eu faço a conta da sua economia 💰";
+  assert.equal(m("rodo uns 20 km por dia", pedido), "informou_km");
+  /* km sem o pedido da conta não é esse momento */
+  assert.notEqual(m("rodo uns 20 km por dia", "Qual cor você prefere?"), "informou_km");
+  assert.match(instrucaoDeFechamento("informou_km", "AG08"), /nunca faça conta/);
+});
+
+test("no meio do fechamento a IA não passa ao vendedor sozinha, a não ser que o cliente peça uma pessoa", () => {
+  for (const mo of ["decidido", "escolheu_entrega", "escolheu_retirada", "dados_parciais"] as const) assert.ok(MOMENTOS_SEM_TRANSFERIR.includes(mo), mo);
+  assert.ok(!MOMENTOS_SEM_TRANSFERIR.includes("mandou_dados"));
+  assert.ok(RX_PEDE_PESSOA.test("quero falar com um atendente"));
+  assert.ok(!RX_PEDE_PESSOA.test("entrega, moro em Goiana"));
 });
 
 test("respondeu 'retirar ou entrega?'", () => {
