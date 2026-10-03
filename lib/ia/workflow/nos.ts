@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
@@ -8,7 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { validarResposta } from "@/lib/ia/validador";
-import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
+import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
@@ -32,8 +32,9 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PERGUNTA_USO_KM, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { criarNegocio } from "@/lib/servicos/negocios";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
@@ -42,7 +43,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corDaMoto, corNoTexto, formatarHistorico, RX_PERGUNTA_NOME, variar, mesclarFatos, pagamentoDoTexto, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, formatarHistorico, RX_PERGUNTA_NOME, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 
@@ -56,7 +57,6 @@ const SO_CUMPRIMENTO_COM_NOME = ["Aqui é da Gêmeos Motors 😊 Como posso te a
 const TUDO_CERTO_SEM_NOME = ["Tudo certo por aqui 😊 Com quem eu falo?", "Tudo ótimo por aqui! Qual é o seu nome? 😊", "Por aqui tudo bem 🙂 Como posso te chamar?"];
 const TUDO_CERTO_COM_NOME = ["Tudo certo por aqui 😊 Como posso te ajudar?", "Tudo ótimo por aqui! Em que posso te ajudar? 🙂", "Por aqui tudo bem 😊 Me conta, o que você precisa?"];
 const PRAZER: ((nome: string) => string)[] = [(n) => `Prazer, ${n}!`, (n) => `Prazer em te conhecer, ${n}!`, (n) => `Que bom falar com você, ${n}!`, (n) => `Muito prazer, ${n}!`];
-const FECHAMENTO_PROPOSTA = ["Posso passar para o nosso vendedor finalizar com você? 😊", "Quer que eu já chame o nosso vendedor para fechar com você? 🤝", "Posso pedir para o nosso vendedor finalizar agora? ✅"];
 const VARIANTES_FORA_HORARIO = [
   "Nossa equipe de vendas volta assim que a loja abrir, mas eu já te ajudo por aqui 😊 Pode me perguntar o que quiser sobre as motos.",
   "A loja está fechada agora, mas o atendimento continua por aqui 😊 Me conta o que você procura que eu te ajudo, e um vendedor te chama quando a loja abrir.",
@@ -104,6 +104,12 @@ export type CtxWorkflow = {
   enviados: number;
   /** foto e vídeo da moto que vão depois do texto (pedido do cliente ou 1ª vez que a moto aparece) */
   midia: PlanoMidia | null;
+  /** momento da compra (interesse, decidido, objeção, entrega/retirada, dados): conduz até o fechamento */
+  momento: Momento | null;
+  /** a moto de que a conversa trata (a última que o cliente citou) */
+  modeloDaConversa: string | null;
+  /** última mensagem da loja (IA ou vendedor), para saber a que pergunta o cliente está respondendo */
+  ultimaDaLoja: string;
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -174,53 +180,6 @@ Devolva também:
 - resumo: 1 a 3 frases sobre o atendimento até aqui (interesse e situação), para o vendedor.
 - motivoTransferencia: quando transferir for true, o motivo em uma frase; senão null.
 - saudacao: SÓ quando for o começo da conversa (histórico vazio) ou a última mensagem foi há mais de 6 horas: um cumprimento caloroso e humano, no estilo do tom de voz, usando o cumprimento certo do horário (variando a frase). Fale como a Gêmeos Motors, sem nome de pessoa. Ele vai como a primeira mensagem, sozinho; a resposta ao que o cliente perguntou continua em "mensagem". Nas outras vezes, null.`;
-
-const CORES_COMUNS = ["Preto", "Branco", "Cinza", "Prata", "Vermelho", "Azul", "Verde", "Amarelo", "Rosa", "Marrom", "Bege", "Laranja", "Roxo"];
-
-/* Proposta montada pelo sistema com o que a conversa já tem: modelo do catálogo, cor e pagamento.
-   Preço sempre o de tabela do catálogo. Falta algo (ex.: cor com mais de uma opção)? Não monta. */
-async function montarProposta(c: CtxWorkflow): Promise<string | null> {
-  const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
-  /* só o que o CLIENTE escreveu (a lista de modelos que a IA ofereceu não conta), do mais antigo ao mais novo */
-  const doCliente = [
-    fatos.interesse ?? "",
-    ...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")),
-    c.textoBuffer,
-  ].join(" \n ").toLowerCase();
-  /* pagamento: o que a IA anotou ou, se ainda não anotou, o que o cliente escreveu */
-  const pagamento = fatos.pagamento?.trim() || pagamentoDoTexto(doCliente);
-  if (!pagamento) return null;
-  const m = schema.modelos;
-  const modelos = await db.select({ id: m.id, nome: m.nome, preco: m.precoTabela }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica")));
-  /* o modelo citado por último (nome inteiro: a "AG08" não casa dentro de "AG080") */
-  const ultimaVez = (nome: string) => {
-    const rx = new RegExp(`(?<![\\p{L}\\p{N}])${nome.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "gu");
-    return Math.max(-1, ...Array.from(doCliente.matchAll(rx), (x) => x.index ?? -1));
-  };
-  const achado = modelos
-    .map((x) => ({ ...x, pos: ultimaVez(x.nome) }))
-    .filter((x) => x.pos >= 0)
-    .sort((a, b) => b.pos - a.pos || b.nome.length - a.nome.length)[0];
-  if (!achado || !achado.preco) return null;
-  const texto = doCliente;
-  /* só moto com unidade disponível (regra do dono, 02/10/2026): sem unidade, não há proposta. Valem as
-     cores das unidades; o catálogo só quando nenhuma unidade tem cor anotada. Unidade sem modelo ligado
-     conta pelo nome, como no catálogo da IA. */
-  const v = schema.veiculos;
-  const soReal = c.conversa?.demo ? undefined : eq(v.teste, false);
-  const doModelo = or(eq(v.modeloId, achado.id), and(isNull(v.modeloId), sql`lower(trim(${v.modelo})) = ${achado.nome.trim().toLowerCase()}`));
-  const unidades = await db.select({ cor: v.cor }).from(v).where(and(doModelo, eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), soReal));
-  if (!unidades.length) return null;
-  let cores = [...new Set(unidades.map((x) => x.cor?.trim()).filter((x): x is string => !!x))];
-  if (!cores.length) cores = (await db.select({ nome: schema.modeloCores.nome }).from(schema.modeloCores).where(and(eq(schema.modeloCores.modeloId, achado.id), eq(schema.modeloCores.ativo, true)))).map((x) => x.nome);
-  /* cor única só vale se o cliente não pediu outra cor */
-  const pediuCor = CORES_COMUNS.some((n) => corNoTexto(n, texto));
-  const cor = cores.find((n) => corNoTexto(n, texto)) ?? (cores.length === 1 && !pediuCor ? cores[0] : null);
-  if (!cor) return null;
-  const valor = reais(Number(achado.preco));
-  const pag = pagamento[0].toUpperCase() + pagamento.slice(1);
-  return `*Proposta Gêmeos Motors*\n• Moto: ${achado.nome} ${corDaMoto(cor)}\n• Valor: ${valor}\n• Pagamento: ${pag}\n• Entrega: Goiana e região`;
-}
 
 /* A loja ainda não falou nesta conversa (ou faz mais de 6 h): é o começo do atendimento. */
 async function primeiroContato(conversaId: number) {
@@ -303,7 +262,7 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
   }
 
   /* temperatura na triagem da conversa (a tela já mostra a "intenção de compra") */
-  const pediuProposta = /proposta\s+g[eê]meos/i.test(c.pipe?.texto ?? "") || c.pipe?.motivo === "modelo_pediu_transferencia";
+  const pediuProposta = c.pipe?.motivo === "modelo_pediu_transferencia" || ["decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais"].includes(c.momento ?? "");
   const antes = temperaturaDaIntencao(cv.triagemIa?.intencaoCompra);
   const triagem = triagemDosFatos(fatos, resumo, cv.triagemIa ?? null, { pediuProposta });
   const temperatura = temperaturaDoLead(fatos, { pediuProposta });
@@ -396,9 +355,57 @@ async function entenderPrimeiro(c: CtxWorkflow, resposta: string[], intencao: In
   return [...r, variar(PERGUNTAS_INTENCAO)];
 }
 
+/** Última mensagem da loja (IA ou vendedor) no histórico. */
+function ultimaDaLojaNoHistorico(historico: string) {
+  const blocos = (historico ?? "").split(/\n\s*\n/).filter((l) => /^(Agente IA|Vendedor):/.test(l));
+  return (blocos[blocos.length - 1] ?? "").replace(/^(Agente IA|Vendedor):\s*/, "");
+}
+
+const FRASES_RX = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu;
+/** Tira as perguntas dos blocos (a pergunta certa do momento entra no fim). */
+function semPerguntas(resposta: string[]) {
+  return resposta
+    .map((b) => (/\n/.test(b) ? b : (b.match(FRASES_RX) ?? [b]).filter((f) => !/\?/.test(f)).join("").trim()))
+    .filter((b) => /\p{L}/u.test(b) && !/\?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*$/u.test(b));
+}
+
+/* Pedido do dono (03/10/2026): o Milton conduz até o fechamento. A IA já recebe a instrução do momento;
+   aqui o sistema garante a pergunta certa no fim, mesmo que ela esqueça. Uma pergunta por resposta. */
+function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
+  const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
+  switch (c.momento) {
+    case "interesse": {
+      /* já perguntou "o que falta?" na última mensagem: não repete */
+      if (RX_JA_PERGUNTOU_FALTA.test(c.ultimaDaLoja)) return resposta;
+      const ultima = resposta[resposta.length - 1] ?? "";
+      if (RX_JA_PERGUNTOU_FALTA.test(ultima)) return resposta;
+      /* pergunta de uso/km, ou nenhuma: vira a de fechamento */
+      if (!/\?/.test(resposta.join(" ")) || RX_PERGUNTA_USO_KM.test(ultima)) return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
+      return resposta;
+    }
+    case "decidido": {
+      const corpo = semPerguntas(resposta);
+      const comParabens = corpo.some((b) => RX_PARABENS.test(b)) ? corpo : [variar(parabens(c.modeloDaConversa)), ...corpo.filter((b) => !/R\$|autonomia|km/iu.test(b))];
+      return [...comParabens, variar(PERGUNTAS_ENTREGA_OU_RETIRADA)];
+    }
+    case "objecao_preco": {
+      /* sem saber quanto ele roda, não dá para fazer a conta: pergunta os km */
+      if (kmDoCliente(c) || resposta.some((b) => /km/iu.test(b) && /\?/.test(b))) return resposta;
+      return [...semPerguntas(resposta), variar(PERGUNTAS_KM)];
+    }
+    case "escolheu_entrega":
+      return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento })];
+    case "escolheu_retirada":
+      return [listaDeDados("retirada", {})];
+    default:
+      return resposta;
+  }
+}
+
 async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<string[]> {
   const kmSemana = kmDoCliente(c);
-  if (!kmSemana || !resposta.length || !PERGUNTA_ECONOMIA.test(c.textoBuffer)) return resposta;
+  /* conta pronta quando o cliente fala de gasto/economia ou acha caro (objeção de preço) */
+  if (!kmSemana || !resposta.length || !(PERGUNTA_ECONOMIA.test(c.textoBuffer) || c.momento === "objecao_preco")) return resposta;
   /* a conta é sempre a do sistema (a IA já trocou "por mês" por "por semana"): as frases de valores dela
      saem e entra a frase pronta, com a moto, a semana e o mês. A moto escolhida olha a resposta original. */
   const respostaOriginal = resposta;
@@ -661,6 +668,11 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null });
     /* o que o cliente quer (compra, assistência ou ainda não disse): sem saber, nada de produto */
     const intencao = await intencaoDoCliente(c);
+    /* momento da compra: a que pergunta ele responde, se tem interesse, se decidiu, se tem objeção */
+    const nomesCat = (await nomesDoCatalogo()).map((nome) => ({ nome }));
+    const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
+    const ultimaDaLoja = ultimaDaLojaNoHistorico(c.memoria.historico);
+    const momento = intencao === "compra" ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -671,6 +683,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
 ${instrucaoDeIntencao(intencao)}
+
+${instrucaoDeFechamento(momento, modeloDaConversa)}
 
 ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     });
@@ -716,7 +730,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* a IA falhou: quebra o nó para o motor tentar de novo (3x, esperas crescentes); esgotou, vai pelo caminho "erro" (vendedor) */
     if (r.fim === "bloqueada" || r.fim === "erro_etapa") throw new Error(g.erro() ?? r.trilha.at(-1)?.detalhe ?? "A IA não respondeu");
     const midiaPedida = midia ? { modelo: midia.modelo?.nome ?? null, pedido: midia.pedido, vai: midia.itens.map((i) => i.tipo) } : null;
-    return { ctx: { pipe: r.ctx, aprendido, saudacao: g.saudacao(), midia, motivoTransferencia: ultimo?.motivoTransferencia ?? (r.ctx.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida } };
+    /* o cliente mandou os dados para fechar (com CPF): agradece e passa ao vendedor, que confere e confirma
+       (P12/P18). O texto é fixo: não repete dado pessoal nem diz que a compra está concluída. */
+    if (momento === "mandou_dados") {
+      const pipe = { ...r.ctx, texto: textoDadosRecebidos(aberta), humano: true, motivo: "modelo_pediu_transferencia" as const };
+      const motivo = `Fechamento: o cliente mandou os dados para ${/retir/i.test(ultimaDaLoja) && !/entrega/i.test(ultimaDaLoja) ? "retirada" : "o pedido"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir e confirmar com ele.`;
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
+    }
+    return { ctx: { pipe: r.ctx, aprendido, saudacao: g.saudacao(), midia, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: ultimo?.motivoTransferencia ?? (r.ctx.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa } };
   },
 
   trava_fatos: async (c) => {
@@ -883,19 +904,9 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
     const intencao = await intencaoDoCliente(c);
     resposta = await entenderPrimeiro(c, resposta, intencao);
-    /* a conversa já tem moto, cor e pagamento e a proposta ainda não foi: o sistema monta e envia
-       (a IA ofereceu "preparar a proposta", pediu confirmação, ou o cliente acabou de dizer cor/pagamento) */
-    const jaTemProposta = /Proposta Gêmeos Motors/u.test(c.memoria.historico ?? "") || resposta.some((b) => /Proposta Gêmeos Motors/u.test(b));
-    const ofereceu = resposta.some((b) => /proposta/iu.test(b) && /\?|posso|quer que/iu.test(b));
-    const decidiuAgora = !!pagamentoDoTexto(c.textoBuffer) || CORES_COMUNS.some((n) => corNoTexto(n, c.textoBuffer));
-    if (!jaTemProposta && (ofereceu || decidiuAgora)) {
-      const proposta = await montarProposta(c);
-      if (proposta) {
-        /* saem as perguntas (confirmar, cor, pagamento) e a oferta de proposta: a proposta responde tudo */
-        resposta = resposta.map((b) => b.split(/(?<=[.!?])\s+/u).filter((f) => !/proposta/iu.test(f) && !/\?\s*(?:\p{Extended_Pictographic}️?\s*)*$/u.test(f)).join(" ").trim()).filter((b) => /\p{L}/u.test(b));
-        resposta.push(proposta, variar(FECHAMENTO_PROPOSTA));
-      }
-    }
+    /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
+       "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */
+    if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
     /* UMA pergunta por resposta: bloco que é só mais uma pergunta, depois de outra, sai */
     let perguntou = false;
     resposta = resposta.filter((b) => {
