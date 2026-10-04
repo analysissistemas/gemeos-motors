@@ -36,6 +36,7 @@ import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRAN
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
+import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
 import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead, triagemDosFatos } from "@/lib/ia/qualificacao";
@@ -307,6 +308,92 @@ async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
     if (ligada) feito.push(`ligado à ${ligada}`);
   }
   return feito.length ? feito : null;
+}
+
+/* Dados do pedido no CRM (pedido do dono, 03/10/2026: "o objetivo da IA é pegar essas informações e
+   guardar no CRM, com o resumo, para daí em diante a equipe assumir"). O que o cliente mandou vai para o
+   cadastro dele; o resumo do pedido (sem CPF nem data de nascimento) vai para o negócio e para a conversa;
+   o que faltou fica escrito para a equipe conferir. Entrega fora de Goiana: a IA não sabe se atende nem a
+   taxa, então cria a tarefa para a equipe confirmar. Nada aqui manda mensagem ao cliente. */
+async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
+  if (!clienteId || (c.momento !== "mandou_dados" && c.momento !== "dados_parciais")) return null;
+  const d = lerDadosDoCliente(c.textoBuffer);
+  const modo = pediuDadosDeRetirada(c.ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
+  const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
+  const cidade = d.cidade ?? fatos.cidade ?? null;
+  const [cli] = await db.select().from(schema.clientes).where(eq(schema.clientes.id, clienteId)).limit(1);
+  if (!cli) return null;
+  const avisos: string[] = [];
+  const patch: Partial<typeof schema.clientes.$inferInsert> = {};
+  if (d.nomeCompleto && d.nomeCompleto.length > cli.nome.length) patch.nome = d.nomeCompleto;
+  if (d.cpf && !cli.cpf) {
+    const [outro] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(eq(schema.clientes.cpf, d.cpf), ne(schema.clientes.id, clienteId))).limit(1);
+    if (outro) avisos.push("o CPF informado já está no cadastro de outro cliente: conferir");
+    else patch.cpf = d.cpf;
+  } else if (d.cpf && cli.cpf && cli.cpf !== d.cpf) avisos.push("o CPF informado é diferente do que já está no cadastro: conferir");
+  if (d.telefone && !cli.telefone) patch.telefone = d.telefone;
+  if (d.nascimento && !cli.nascimento) patch.nascimento = d.nascimento;
+  /* endereço de entrega: o que o cliente acabou de mandar vale */
+  if (modo === "entrega") {
+    if (d.cep) patch.cep = d.cep;
+    if (d.rua) patch.endereco = d.rua;
+    if (d.numero) patch.numero = d.numero;
+    if (d.bairro) patch.bairro = d.bairro;
+    if (cidade) patch.cidade = cidade;
+  }
+  if (Object.keys(patch).length) await db.update(schema.clientes).set({ ...patch, atualizadoEm: new Date() }).where(eq(schema.clientes.id, clienteId));
+
+  const faltam = camposFaltando(d, modo, { cidade, pagamento: fatos.pagamento });
+  const linhas = [
+    `Pedido pelo WhatsApp (IA): ${c.modeloDaConversa ?? "moto"}`,
+    modo === "entrega"
+      ? `Entrega: ${enderecoDe(d, cidade) || "endereço a confirmar"}${d.referencia ? ` (referência: ${d.referencia})` : ""}${d.horario ? ` · receber até: ${d.horario}` : ""}`
+      : `Retirada na loja: ${d.horario ?? "dia e horário a confirmar"}`,
+    `Pagamento: ${d.pagamento ?? fatos.pagamento ?? "a confirmar"}`,
+    d.telefone ? "Outro telefone de contato no cadastro" : null,
+    patch.cpf || patch.nascimento ? "CPF e data de nascimento salvos no cadastro" : null,
+    faltam.length ? `Faltou: ${faltam.join(", ")}` : null,
+    ...avisos.map((a) => `Atenção: ${a}`),
+  ].filter((x): x is string => !!x);
+  const resumoIa = c.aprendido.resumo ?? c.memoria.resumo;
+  if (negocioId) {
+    const [n] = await db.select({ observacoes: schema.negocios.observacoes }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
+    const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Recife", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const bloco = `${quando} · ${linhas.join("\n")}`;
+    await db
+      .update(schema.negocios)
+      .set({ observacoes: [n?.observacoes, bloco].filter(Boolean).join("\n\n").slice(-4000), ...(resumoIa ? { triagemIa: resumoIa } : {}), atualizadoEm: new Date() })
+      .where(eq(schema.negocios.id, negocioId));
+  }
+  await mensagemSistema(db, c.conversaId, `Dados do pedido salvos no cadastro${patch.nome ? ` de ${patch.nome}` : ""}.\n${linhas.join("\n")}${resumoIa ? `\nResumo da IA: ${resumoIa}` : ""}`, { triagem: true });
+
+  /* entrega fora de Goiana: a equipe confirma se atende e a taxa (a IA não inventa) */
+  let tarefa: string | null = null;
+  if (modo === "entrega" && cidade && !/goiana/i.test(cidade.normalize("NFD").replace(/\p{M}/gu, ""))) {
+    const [ja] = await db
+      .select({ id: schema.followUps.id })
+      .from(schema.followUps)
+      .where(and(eq(schema.followUps.conversaId, c.conversaId), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "entrega")))
+      .limit(1);
+    if (!ja) {
+      const cv = await carregarConversa(c.conversaId);
+      await db.insert(schema.followUps).values({
+        conversaId: c.conversaId,
+        clienteId,
+        negocioId,
+        usuarioId: cv.responsavelId,
+        agendadoPara: new Date(),
+        notas: `Confirmar se a loja entrega em ${cidade}, a taxa e o prazo, e avisar o cliente. ${linhas.join(" · ")}`.slice(0, 1000),
+        tipo: "entrega",
+        motivo: `Entrega em ${cidade}: confirmar atendimento e taxa`,
+        origem: "ia",
+        contexto: { detectadoPor: "ia", cidade, modelo: c.modeloDaConversa },
+      });
+      await mensagemSistema(db, c.conversaId, `FOLLOW-UP PENDENTE: confirmar se a loja entrega em ${cidade} e a taxa.`);
+      tarefa = `entrega em ${cidade}`;
+    }
+  }
+  return { modo, salvos: Object.keys(patch), faltam, avisos, tarefa };
 }
 
 /** Liga o negócio a uma unidade disponível do modelo que ainda não está em outra negociação aberta. */
@@ -882,15 +969,18 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* qualificação automática: nunca pode impedir a resposta ao cliente */
     let qualificacao: unknown = null;
     let funil: unknown = null;
+    let pedido: unknown = null;
     try {
       const q = await qualificarLead(c, fatos, resumo);
       qualificacao = q;
       /* funil conectado: o card anda com a conversa (nunca pode impedir a resposta ao cliente) */
       funil = await conectarFunil(c, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
+      /* dados do pedido no cadastro, com o resumo para a equipe */
+      pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
     }
-    return { saida: { fatos, resumo, qualificacao, funil } };
+    return { saida: { fatos, resumo, qualificacao, funil, pedido } };
   },
 
   blocos: async (c) => {
