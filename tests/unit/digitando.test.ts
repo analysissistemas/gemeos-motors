@@ -111,3 +111,18 @@ test("pergunta se é robô: a apresentação fica (é a resposta), só o cumprim
   assert.equal(tirarCumprimentoRepetido("Boa tarde! Sou o assistente virtual da Gêmeos Motors 😊", true), "Sou o assistente virtual da Gêmeos Motors 😊");
   assert.equal(tirarCumprimentoRepetido("Boa tarde! Sou o assistente virtual da Gêmeos Motors. Posso ajudar?"), "Posso ajudar?");
 });
+
+test("fase 2: nome do perfil do WhatsApp só quando parece nome de pessoa", async () => {
+  const { nomeDoPerfil, saudacaoComNome, tirarCumprimentoRepetido } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(nomeDoPerfil("Carla Souza"), "Carla Souza");
+  for (const p of ["💕Lu💕", "Loja do Zé", "João 81 9999", "", null, "Gêmeos Motos Peças", "a"]) assert.equal(nomeDoPerfil(p), null, String(p));
+  assert.equal(saudacaoComNome("Boa tarde! Tudo certinho? 😊", "Carla"), "Boa tarde, Carla! Tudo certinho? 😊");
+  assert.equal(saudacaoComNome("Booa noitee! Tudo bem?", "Rui"), "Booa noitee, Rui! Tudo bem?");
+  assert.equal(saudacaoComNome("Boa tarde, Carla!", "Carla"), "Boa tarde, Carla!");
+  assert.equal(saudacaoComNome("Boa tarde!", null), "Boa tarde!");
+  /* a apresentação do Milton vai no cumprimento: na resposta ela sai */
+  assert.equal(tirarCumprimentoRepetido("Boa noite! Me chamo Milton, sou da Gêmeos Motors 😊 A T1 custa R$ 12.000."), "A T1 custa R$ 12.000.");
+  assert.equal(tirarCumprimentoRepetido("Sou o Milton, da Gêmeos Motors! A AG08 tem ré."), "A AG08 tem ré.");
+  /* perguntou se é robô: a apresentação é a resposta */
+  assert.equal(tirarCumprimentoRepetido("Boa noite! Sou o Milton, assistente virtual da Gêmeos Motors, e vou te ajudar por aqui!", true), "Sou o Milton, assistente virtual da Gêmeos Motors, e vou te ajudar por aqui!");
+});

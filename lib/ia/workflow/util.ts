@@ -41,11 +41,12 @@ export function tirarCumprimentoRepetido(texto: string, manterApresentacao = fal
     t = t.trim();
     return t ? t[0].toUpperCase() + t.slice(1) : t;
   }
-  /* cumprimento, "tudo bem?" e apresentação ("Aqui é da Gêmeos Motors", "Sou a assistente...") no começo */
+  /* cumprimento, "tudo bem?" e apresentação ("Aqui é da Gêmeos Motors", "Sou a assistente...", "Me chamo Milton...") no começo */
   const inicio = [
-    /^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])(?![\p{L}])[^.!?\n]*[.!?]+\s*/iu,
-    /^tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?\n]*[?!.]+\s*/iu,
-    /^(?:aqui\s+(?:é|e)\s+|(?:eu\s+)?sou\s+(?:a|o)\s+(?:assistente|atendente))[^.!?\n]*[.!?]+\s*/iu,
+    /^(?:bom\s+dia+|boa\s+tarde+|boa\s+noite+|ol[aá]+|oi+|e\s+a[ií])(?![\p{L}])[^.!?\n]*[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu,
+    /^tudo\s+(?:bem|certinho|certo|joia|jóia|tranquilo|bom)[^.!?\n]*[?!.]+\s*(?:\p{Extended_Pictographic}️?\s*)*/iu,
+    /* a apresentação termina na pontuação ou no emoji ("Me chamo Milton, sou da Gêmeos Motors 😊 A T1...") */
+    /^(?:aqui\s+(?:é|e)\s+|(?:eu\s+)?sou\s+(?:a|o)\s+(?:assistente|atendente|milton)|me\s+chamo\s+milton)[^.!?\n\p{Extended_Pictographic}]*(?:[.!?]+\s*(?:\p{Extended_Pictographic}️?\s*)*|(?:\p{Extended_Pictographic}️?\s*)+)/iu,
   ];
   inicio.push(/^aqui\s+na\s+g[êe]meos\s+motors\s*,\s*/iu);
   for (let volta = 0; volta < 3; volta++) for (const rx of inicio) t = t.replace(rx, "");
@@ -97,6 +98,21 @@ export function primeiroNome(nome: string | null | undefined) {
   const p = (nome ?? "").trim().split(/\s+/)[0] ?? "";
   if (!/^\p{L}{2,20}$/u.test(p)) return null;
   return p[0].toUpperCase() + p.slice(1).toLowerCase();
+}
+
+/** Nome do perfil do WhatsApp que parece nome de pessoa ("Carla Souza"); número, emoji, apelido estranho ou
+ *  nome de empresa ("Loja do Zé") não servem. Fase 2 do treinamento (P2): o Milton não pergunta o nome. */
+export function nomeDoPerfil(perfil: string | null | undefined) {
+  const n = (perfil ?? "").replace(/\s+/g, " ").trim();
+  if (!n || n.length > 40 || !/^\p{L}[\p{L}' .-]*$/u.test(n) || n.split(" ").length > 4) return null;
+  if (/(?<![\p{L}])(?:loja|motos?|store|oficina|ltda|com[eé]rcio|vendas|delivery|celulares?|im[oó]veis|distribuidora|mercadinho)(?![\p{L}])/iu.test(n)) return null;
+  return primeiroNome(n) ? n : null;
+}
+
+/** "Boa tarde! Tudo certinho?" → "Boa tarde, Carla! Tudo certinho?". Sem nome, ou já com ele, fica como está. */
+export function saudacaoComNome(saudacao: string, nome: string | null) {
+  if (!nome || new RegExp(`(?<![\\p{L}])${nome}(?![\\p{L}])`, "iu").test(saudacao)) return saudacao;
+  return saudacao.replace(/^((?:bo+m+\s+dia+|bo+a+\s+tarde+|bo+a+\s+noite+|ol[aá]+|oi+))\s*[!.,]*/iu, (_, g: string) => `${g}, ${nome}!`);
 }
 
 /** "Preto" também casa com "preta"; "Branco perolado" com "branca perolada". */
