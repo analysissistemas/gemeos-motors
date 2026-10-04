@@ -11,8 +11,15 @@ import { RX_QUER_VISITAR } from "./agenda.ts";
 
 export type Intencao = "compra" | "assistencia";
 
+/* pós-venda sem dúvida: defeito, conserto, "comprei", "minha moto"... */
 const RX_ASSISTENCIA =
-  /(?<![\p{L}])(?:assist[êe]ncia|garantia|defeito|conserto|consertar|arrumar|quebr\p{L}*|problema|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|carregador|esquentando|vazamento)(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:assist[êe]ncia|defeito|conserto|consertar|arrumar\s+(?:a\s+|minha\s+)?moto|quebr\p{L}*|problemas?|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|esquentando|vazamento|(?<!nunca\s)comprei|minha\s+(?:moto|scooter|el[ée]trica|patinete))(?![\p{L}])/iu;
+/* pode ser pergunta de quem vai comprar ("qual a garantia da T1?", "vem com carregador?"): só vale como
+   assistência quando o cliente não está falando de compra */
+const RX_ASSISTENCIA_TALVEZ = /(?<![\p{L}])(?:garantia|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|carregador)(?![\p{L}])/iu;
+/* "sem problema, pode ser terça", "tem problema se eu pagar no cartão?": não é defeito */
+const RX_SEM_PROBLEMA =
+  /(?<![\p{L}])(?:sem\s+problemas?|n[ãa]o\s+(?:tem|h[áa]|teria|vai\s+ter)\s+(?:nenhum\s+)?problemas?|nenhum\s+problema|problema\s+nenhum|tem\s+(?:algum\s+)?problema\s+(?:se|em|de|eu|pagar))(?![\p{L}])/giu;
 const RX_COMPRA =
   /(?<![\p{L}])(?:motos?|scooters?|triciclo|comprar|compra|pre[çc]os?|valor(?:es)?|quanto\s+(?:custa|[ée]|sai|fica|t[áa])|modelos?|autonomia|cores?|pronta\s+entrega|estoque|dispon[íi]ve(?:l|is)|financ\p{L}*|parcel\p{L}*|cart[ãa]o|pix|[àa]\s+vista|test\s*drive|cat[áa]logo|or[çc]amento|proposta|el[ée]tricas?|cnh|ipva|emplac\p{L}*|acess[óo]rios?|capacete|ba[úu])(?![\p{L}])/iu;
 
@@ -30,9 +37,11 @@ function citaModelo(texto: string, nomesDeModelos: string[]) {
 
 /** A intenção que o próprio texto do cliente mostra (assistência ganha de compra: "minha moto deu defeito"). */
 export function intencaoDoTexto(texto: string, nomesDeModelos: string[] = []): Intencao | null {
-  if (RX_ASSISTENCIA.test(texto)) return "assistencia";
-  if (RX_COMPRA.test(texto) || RX_QUER_VISITAR.test(texto) || citaModelo(texto, nomesDeModelos)) return "compra";
-  return null;
+  const t = texto.replace(RX_SEM_PROBLEMA, " ");
+  if (RX_ASSISTENCIA.test(t)) return "assistencia";
+  const compra = RX_COMPRA.test(t) || RX_QUER_VISITAR.test(t) || citaModelo(t, nomesDeModelos);
+  if (!compra && RX_ASSISTENCIA_TALVEZ.test(t)) return "assistencia";
+  return compra ? "compra" : null;
 }
 
 /** Pergunta aberta: o que o cliente precisa, sem empurrar produto (e sem a frase de robô "Como posso te ajudar hoje?"). */
@@ -70,3 +79,24 @@ Ainda não está claro o que o cliente quer (ele só cumprimentou ou disse o nom
 export const RX_NAO_PODE_VIR = /(?<![\p{L}])(moro longe|n[ãa]o (posso|consigo|vou|d[áa] pra|tenho como) (ir|vir|levar|perder)|sem tempo|n[ãa]o tenho tempo|longe (da|daí|dai|de vocês)|outra cidade)(?![\p{L}])/iu;
 /** Cliente irritado no pós-venda: prioriza a pessoa. */
 export const RX_IRRITADO = /(?<![\p{L}])(cansad[oa] disso|n[ãa]o resolvem|absurdo|palha[çc]ada|vergonha|procon|vou processar|p[ée]ssim[oa]|horr[íi]vel|descaso|ningu[ée]m resolve|enganad[oa])(?![\p{L}])/iu;
+/** O cliente já disse O QUE está acontecendo com a moto ("não liga", "a bateria", "barulho no motor"), não só "estou com problema". */
+export const RX_DETALHE_PROBLEMA =
+  /(?<![\p{L}])(bateria|carreg\p{L}*|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura|freia|desliga)|parou|deslig\p{L}*|freio|pneu|motor|barulho|painel|display|luz|farol|seta|buzina|roda|corrente|chave|alarme|controle|quebr\p{L}*|vaz\p{L}*|trav\p{L}*|aceler\p{L}*|velocidade|autonomia|esquent\p{L}*|fur\p{L}*|ferrug\p{L}*|molhou|[áa]gua|banco|retrovisor|guid[ãa]o|suspens[ãa]o|amortecedor)(?![\p{L}])/iu;
+
+/** Texto do sistema quando o pós-venda vai para uma pessoa (Diretrizes, 04/10/2026, cenário E): empatia, sem
+ *  discutir, sem insistir para vir à loja, sem prometer conserto nem prazo, e sem "posso te ajudar com as motos?".
+ *  `jaEncaminhou`: a loja já disse antes que o caso foi para os responsáveis (não repete a mesma frase). */
+export function textoPosVenda(p: { nome: string | null; lojaAberta: boolean; jaEncaminhou: boolean; naoPodeVir: boolean; irritado: boolean; semDetalhe: boolean }): string {
+  const n = p.nome ? `, ${p.nome}` : "";
+  const abre = p.irritado || p.naoPodeVir ? (p.jaEncaminhou ? `Entendo${n}, e peço desculpas por isso 🙏` : `Entendo${n}, e sinto muito pelo transtorno 🙏`) : `Entendi${n} 🙏`;
+  const longe = p.naoPodeVir ? " Sei que fica difícil vir até a loja." : "";
+  const caso = p.jaEncaminhou
+    ? p.lojaAberta
+      ? " O seu caso já está com os responsáveis da assistência: eles vão avaliar a melhor forma de te atender e combinar os próximos passos com você por aqui."
+      : " O seu caso já está anotado, com prioridade, para os responsáveis da assistência: assim que a loja abrir, eles avaliam a melhor forma de te atender e combinam os próximos passos com você por aqui."
+    : p.lojaAberta
+      ? " Vou passar o seu caso agora para os responsáveis da assistência: eles avaliam a melhor forma de te atender e combinam os próximos passos com você por aqui."
+      : " Já deixei o seu caso anotado, com prioridade, para os responsáveis da assistência: assim que a loja abrir, eles avaliam a melhor forma de te atender e combinam os próximos passos com você por aqui.";
+  const conta = p.semDetalhe ? "\nSe quiser, já me conta aqui o que está acontecendo com a moto, que fica tudo registrado para eles." : "";
+  return `${abre}${longe}${caso}${conta}`;
+}

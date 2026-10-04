@@ -32,6 +32,29 @@ test("a IA é avisada antes de escrever", () => {
   assert.equal(instrucaoDeIntencao("compra"), "");
 });
 
+test("frase comum de quem está comprando não vira assistência", () => {
+  for (const t of ["sem problema, pode ser terça", "tem problema se eu pagar no cartão?", "qual a garantia da T1?", "vem com carregador? quanto custa a AG08?", "e a revisão da moto, como funciona?", "não tem problema nenhum"])
+    assert.notEqual(intencaoDoTexto(t, NOMES), "assistencia", t);
+  for (const t of ["comprei uma moto aí, a garantia ainda vale?", "a garantia da minha moto", "estou com problema na T1"]) assert.equal(intencaoDoTexto(t, NOMES), "assistencia", t);
+});
+
+test("pós-venda que vai para uma pessoa: empatia, sem insistir, sem oferecer moto", async () => {
+  const { textoPosVenda, RX_DETALHE_PROBLEMA } = await import("../../lib/ia/intencao.ts");
+  const fechada = textoPosVenda({ nome: null, lojaAberta: false, jaEncaminhou: false, naoPodeVir: false, irritado: true, semDetalhe: true });
+  assert.match(fechada, /^Entendo, e sinto muito pelo transtorno/);
+  assert.match(fechada, /assim que a loja abrir/);
+  assert.match(fechada, /me conta aqui o que está acontecendo/);
+  assert.doesNotMatch(fechada, /motos\?|seu nome|alguma coisa/);
+  const longe = textoPosVenda({ nome: "Marcos", lojaAberta: true, jaEncaminhou: true, naoPodeVir: true, irritado: true, semDetalhe: false });
+  assert.match(longe, /^Entendo, Marcos, e peço desculpas/);
+  assert.match(longe, /difícil vir até a loja/);
+  assert.match(longe, /já está com os responsáveis/);
+  assert.doesNotMatch(longe, /me conta/);
+  assert.ok(longe.split("\n").length <= 12);
+  assert.ok(RX_DETALHE_PROBLEMA.test("a bateria não segura carga"));
+  assert.ok(!RX_DETALHE_PROBLEMA.test("comprei uma moto aí e estou com problema"));
+});
+
 test("pós-venda: não pode vir à loja ou está irritado → passa para uma pessoa", async () => {
   const { RX_NAO_PODE_VIR, RX_IRRITADO } = await import("../../lib/ia/intencao.ts");
   for (const t of ["eu moro longe e não vou perder um dia", "não consigo ir aí", "não posso levar a moto"]) assert.ok(RX_NAO_PODE_VIR.test(t), t);

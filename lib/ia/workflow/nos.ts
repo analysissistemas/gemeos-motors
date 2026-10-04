@@ -36,7 +36,7 @@ import {
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_IRRITADO, RX_NAO_PODE_VIR, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, textoPosVenda, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -56,6 +56,7 @@ import { ETAPAS_ABERTAS } from "@/lib/dominio";
 /* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
 const TEXTO_CONFIRMAR = "Quero te responder isso certinho, então vou confirmar com a equipe e te retorno assim que a loja abrir 🙏 Enquanto isso, posso te ajudar com mais alguma coisa sobre as motos?";
 /* Variações das frases prontas (pedido do dono, 27/09/2026: "não deixar tanto na cara que é IA, variando as mensagens") */
+const semPontoFinal = (s: string) => s.trim().replace(/[.\s]+$/u, "");
 const PERGUNTAS_NOME = ["Com quem eu falo? 😊", "Qual é o seu nome? 😊", "Como posso te chamar? 🙂"];
 const SO_CUMPRIMENTO_SEM_NOME = ["Aqui é da Gêmeos Motors 😊 Com quem eu falo?", "Que bom te ver por aqui! Aqui é da Gêmeos Motors 🛵 Qual é o seu nome?", "Seja bem-vindo à Gêmeos Motors 😊 Como posso te chamar?"];
 const SO_CUMPRIMENTO_COM_NOME = ["Aqui é da Gêmeos Motors 😊 Como posso te ajudar?", "Que bom te ver por aqui! Em que posso te ajudar hoje? 🛵", "Me conta, o que você está procurando? 😊"];
@@ -276,7 +277,8 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
   }
 
   /* temperatura na triagem da conversa (a tela já mostra a "intenção de compra") */
-  const pediuProposta = c.pipe?.motivo === "modelo_pediu_transferencia" || ["decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais"].includes(c.momento ?? "");
+  /* reclamação de pós-venda que vai para uma pessoa não é "lead quente" (teste de 04/10/2026) */
+  const pediuProposta = c.intencao !== "assistencia" && (c.pipe?.motivo === "modelo_pediu_transferencia" || ["decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais"].includes(c.momento ?? ""));
   const antes = temperaturaDaIntencao(cv.triagemIa?.intencaoCompra);
   const triagem = triagemDosFatos(fatos, resumo, cv.triagemIa ?? null, { pediuProposta });
   const temperatura = temperaturaDoLead(fatos, { pediuProposta });
@@ -935,7 +937,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        ela reescreve uma vez com o motivo nas instruções; só se barrar de novo sai o texto padrão. */
     let correcao = r.ctx.texto && !r.ctx.humano ? await motivoDoBloqueio(r.ctx) : null;
     /* 1º contato e a IA não sabe o nome: a resposta tem que terminar pedindo o nome (e só isso de pergunta) */
-    if (!correcao && r.ctx.texto && !r.ctx.humano && !(c.memoria.fatos.nome || g.ultimo()?.fatos?.nome) && (await primeiroContato(c.conversaId))) {
+    if (!correcao && intencao !== "assistencia" && r.ctx.texto && !r.ctx.humano && !(c.memoria.fatos.nome || g.ultimo()?.fatos?.nome) && (await primeiroContato(c.conversaId))) {
       const perguntas = (r.ctx.texto.match(/\?/g) ?? []).length;
       const pedeNome = RX_PERGUNTA_NOME.test(r.ctx.texto);
       if (!pedeNome || perguntas > 1)
@@ -977,10 +979,23 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        atendendo. Faltou um dos dois e a loja ainda não perguntou só por ele: pergunta. */
     /* pós-venda (Diretrizes, 04/10/2026): não pode vir à loja ou está muito irritado → não insistir, passar
        para uma pessoa com o relato. A IA já foi instruída; aqui o sistema garante, se ela esquecer. */
-    if (intencao === "assistencia" && !r.ctx.humano && r.ctx.texto && (RX_NAO_PODE_VIR.test(c.textoBuffer) || RX_IRRITADO.test(c.textoBuffer))) {
-      const relato = (ultimo?.resumo ?? c.textoBuffer).slice(0, 300);
-      const pipe = { ...r.ctx, humano: true, motivo: "modelo_pediu_transferencia" as const };
-      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `Pós-venda: ${relato}` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, posVenda: "passa para uma pessoa (não pode vir à loja ou está irritado)" } };
+    /* O teste de 04/10 mostrou a IA pedindo a transferência sozinha e o cliente recebendo "vou confirmar com a
+       equipe... quer saber mais alguma coisa?": no pós-venda o texto é do sistema, com empatia e sem insistir. */
+    const naoPodeVir = RX_NAO_PODE_VIR.test(c.textoBuffer);
+    const irritado = RX_IRRITADO.test(c.textoBuffer);
+    if (intencao === "assistencia" && r.ctx.texto && (r.ctx.humano || naoPodeVir || irritado)) {
+      const doCliente = textoDoCliente(c);
+      const relato = doCliente.replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
+      const texto = textoPosVenda({
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
+        lojaAberta: aberta,
+        jaEncaminhou: /respons[áa]veis da assist[êe]ncia/i.test(c.memoria.historico ?? ""),
+        naoPodeVir: naoPodeVir || RX_NAO_PODE_VIR.test(doCliente),
+        irritado: irritado || RX_IRRITADO.test(doCliente),
+        semDetalhe: !RX_DETALHE_PROBLEMA.test(doCliente),
+      });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `Pós-venda. O cliente escreveu: "${relato}"` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, posVenda: "passa para uma pessoa (pós-venda)" } };
     }
     if (momento === "pediu_simulacao") {
       const recentes = leadAntes.split("\n").slice(-2).join("\n");
@@ -1065,7 +1080,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
     if (!lojaAberta(await lerHorario())) {
       await db.update(schema.conversas).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
-      await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, um vendedor deve assumir. Motivo: ${c.motivoTransferencia ?? "não informado"}. Resumo: ${resumo}`, { triagem: true });
+      await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, ${c.intencao === "assistencia" ? "a equipe da assistência" : "um vendedor"} deve assumir. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "não informado")}. Resumo: ${resumo}`, { triagem: true });
       /* fora do horário ninguém vai continuar agora: nada de "já estou te encaminhando" */
       const emAndamento = !!c.memoria.historico?.includes("Agente IA:") || !!c.memoria.historico?.includes("Vendedor:");
       const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : emAndamento ? TEXTO_CONFIRMAR : TEXTO_FORA_HORARIO;
@@ -1080,8 +1095,9 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     let negocioId = cv.negocioId;
     await db.transaction(async (tx) => {
       await tx.update(schema.conversas).set({ modo: "humano", prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
-      await mensagemSistema(tx, c.conversaId, `Transferido para atendimento humano pela IA. Motivo: ${c.motivoTransferencia ?? "não informado"}. Resumo: ${resumo}`, { triagem: true });
-      if (cv.clienteId && !negocioId) {
+      await mensagemSistema(tx, c.conversaId, `Transferido para atendimento humano pela IA. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "não informado")}. Resumo: ${resumo}`, { triagem: true });
+      /* pós-venda não abre negócio de venda no funil */
+      if (cv.clienteId && !negocioId && c.intencao !== "assistencia") {
         const f = { ...c.memoria.fatos, ...c.aprendido.fatos };
         negocioId = await criarNegocio(null, { clienteId: cv.clienteId, veiculoInteresse: f.interesse ?? null, origem: "whatsapp", temTroca: !!f.troca, trocaDescricao: f.troca ?? null, responsavelId: null }, { demo: cv.demo, triagemIa: resumo }, tx);
         if (negocioId) await tx.update(schema.conversas).set({ negocioId }).where(eq(schema.conversas.id, c.conversaId));
@@ -1131,8 +1147,16 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const cumprimento = c.saudacao ? soCumprimento(c.saudacao) : "";
     const padrao = saudacaoDoHorario();
     const arrumar = (s: string) => { const x = s.trim(); return x ? `${x[0].toUpperCase()}${x.slice(1)}${/[.!?]$|\p{Extended_Pictographic}\uFE0F?$/u.test(x) ? "" : "!"}` : x; };
-    const saudacao = jaConversou ? null : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! ${variar(["Tudo certinho?", "Tudo bem?", "Tudo bem por aí?", "Como vai?"])}`;
-    const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome);
+    const intencao = await intencaoDoCliente(c);
+    /* cliente irritado no pós-venda: só o "Bom dia!", sem "Tudo bem por aí?" (teste de 04/10/2026) */
+    const reclamando = intencao === "assistencia" && RX_IRRITADO.test(textoDoCliente(c));
+    const saudacao = jaConversou
+      ? null
+      : reclamando
+        ? `${padrao[0].toUpperCase()}${padrao.slice(1)}!`
+        : arrumar(cumprimento) || `${padrao[0].toUpperCase()}${padrao.slice(1)}! ${variar(["Tudo certinho?", "Tudo bem?", "Tudo bem por aí?", "Como vai?"])}`;
+    /* no pós-venda o cliente conta o problema primeiro; o nome não é a pergunta (Diretrizes, 04/10/2026) */
+    const nomeConhecido = !!(c.memoria.fatos.nome || c.aprendido.fatos.nome) || intencao === "assistencia";
     /* o cumprimento sai sempre certo para o horário de Recife, mesmo que a IA erre */
     const textoBase = c.pipe?.texto === TEXTO_FORA_HORARIO ? variar(VARIANTES_FORA_HORARIO) : c.pipe?.texto === TEXTO_CONFIRMAR ? variar(VARIANTES_CONFIRMAR) : (c.pipe?.texto ?? "");
     let resposta = quebrarEmBlocos(organizarTexto(textoBase), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
@@ -1196,7 +1220,6 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
     /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
-    const intencao = await intencaoDoCliente(c);
     resposta = await entenderPrimeiro(c, resposta, intencao);
     /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
        "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */

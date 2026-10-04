@@ -70,15 +70,16 @@ export function planejarPedido(p: { modelos: ModeloComMidia[]; textoCliente: str
 }
 
 /** Sem pedido: a moto que o cliente citou agora (ou a única que a resposta apresenta) e que ainda não
- *  foi mostrada nesta conversa ganha foto e vídeo. `jaEnviadas` = endereços já mandados na conversa. */
+ *  foi apresentada nesta conversa ganha foto e vídeo. `jaEnviadas` = endereços já mandados na conversa.
+ *  A foto já foi entre as opções (cliente pesquisando) e o vídeo não: vai só o que falta (teste de 04/10/2026). */
 export function planejarApresentacao(p: { modelos: ModeloComMidia[]; textoCliente: string; resposta: string; jaEnviadas: string[] }): PlanoMidia | null {
   const doCliente = ultimaCitada(p.modelos, p.textoCliente);
   const naResposta = p.modelos.filter((m) => ultimaCitada([m], p.resposta));
   const modelo = doCliente ?? (naResposta.length === 1 ? naResposta[0] : null);
   if (!modelo) return null;
   const ja = new Set(p.jaEnviadas);
-  if (modelo.fotos.some((f) => ja.has(f.url)) || (modelo.videoUrl && ja.has(modelo.videoUrl))) return null;
-  const itens = itensDe(modelo, ["foto", "video"]);
+  if (modelo.videoUrl && ja.has(modelo.videoUrl)) return null;
+  const itens = itensDe(modelo, ["foto", "video"]).filter((i) => !ja.has(i.url));
   return itens.length ? { modelo, pedido: [], itens } : null;
 }
 

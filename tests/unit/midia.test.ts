@@ -52,6 +52,13 @@ test("apresentação: 1ª vez que a moto aparece leva foto e vídeo; depois não
   assert.equal(planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "quais motos?", resposta: "Temos a AG08 e a TANK AG11.", jaEnviadas: [] }), null);
 });
 
+test("apresentação depois das opções: a foto já foi, então vai só o vídeo", () => {
+  const p = planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "gostei da AG08", resposta: "", jaEnviadas: [AG08.fotos[0].url, TANK.fotos[0].url] });
+  assert.deepEqual(p?.itens.map((i) => i.tipo), ["video"]);
+  /* sem vídeo cadastrado e a foto já foi: nada repete */
+  assert.equal(planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "e a tank?", resposta: "", jaEnviadas: [TANK.fotos[0].url] }), null);
+});
+
 test("sem mídia: a frase que promete foto/vídeo sai, o resto fica", () => {
   assert.equal(tirarPromessaDeMidia("A AG08 anda até 45 km. Segue a foto dela! Quer saber o preço?"), "A AG08 anda até 45 km. Quer saber o preço?");
   assert.equal(tirarPromessaDeMidia("Vou te mandar o vídeo agora."), "");
