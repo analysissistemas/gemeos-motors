@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validarResposta } from "../../lib/ia/validador.ts";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, simulacaoPedida, textoDadosRecebidos, textoSimulacao } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, PERGUNTA_PARCELAS, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoDadosRecebidos, textoSimulacao, tirarPropostaAntiga, ultimaFalaDaLoja } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -99,9 +99,9 @@ test("parcelamento: quer parcelar, depois parcelas e bandeira viram simulação 
   assert.deepEqual(simulacaoPedida("em 10 vezes no mastercard"), { parcelas: 10, bandeira: "Mastercard" });
   assert.deepEqual(simulacaoPedida("hiper"), { parcelas: null, bandeira: "Hipercard" });
   const t = textoSimulacao({ parcelas: 12, bandeira: "Visa", modelo: "AG08" });
-  assert.match(t, /^Perfeito! Já passei pro nosso vendedor fazer a simulação de 12x no Visa pra \*AG08\*/);
+  assert.match(t, /^Perfeito! Já passei pro nosso vendedor fazer a simulação em 12 vezes no Visa pra \*AG08\*/);
   assert.doesNotMatch(t, /R\$|juros|taxa de/);
-  assert.match(textoSimulacao({ parcelas: 30, bandeira: null, modelo: null }), /em até 21x/);
+  assert.match(textoSimulacao({ parcelas: 30, bandeira: null, modelo: null }), /em até 21 vezes/);
 });
 
 test("mensagens do sistema passam no validador (teste de 04/10: 'Margem' do endereço e lista longa foram barradas)", () => {
@@ -111,4 +111,33 @@ test("mensagens do sistema passam no validador (teste de 04/10: 'Margem' do ende
     assert.deepEqual(validarResposta(t).violacoes, [], t);
   /* "margem" de lucro continua barrada */
   assert.ok(validarResposta("Nossa margem nessa moto é pequena").violacoes.some((v) => v.regra === "interno"));
+});
+
+test("toda mensagem pronta do sistema passa no validador (teste de 04/10: '10x' foi barrado)", () => {
+  const prontas = [
+    ...[1, 5, 10, 12, 21, 30].flatMap((n) => [textoSimulacao({ parcelas: n, bandeira: "Visa", modelo: "T1" }), textoSimulacao({ parcelas: n, bandeira: null, modelo: null })]),
+    ...[0, 0.9].flatMap((s) => (["entrega", "retirada"] as const).flatMap((modo) => [true, false].map((aberta) => textoDadosRecebidos({ nome: "Bruno", modelo: "T1", modo, lojaAberta: aberta }, s)))),
+    ...parabens("T1"),
+    ...parabens(null),
+    PERGUNTA_PARCELAS,
+    ...PERGUNTAS_FALTA,
+    ...PERGUNTAS_ENTREGA_OU_RETIRADA,
+    ...PERGUNTAS_KM,
+    ...PERGUNTAS_VISITA,
+  ];
+  for (const t of prontas) assert.deepEqual(validarResposta(t).violacoes, [], t);
+});
+
+test("a última fala da loja junta os balões depois da última mensagem do cliente", () => {
+  const h = "Lead: entrega, moro em Itambé\n\nAgente IA: Show! Para finalizar seu pedido, me manda por aqui:\n• Nome completo\n• CPF\n\nAgente IA: Sobre a entrega em Itambé, a nossa equipe confirma se atende aí";
+  const fala = ultimaFalaDaLoja(h);
+  assert.match(fala, /Nome completo/);
+  assert.match(fala, /Itambé, a nossa equipe/);
+  assert.doesNotMatch(fala, /moro em Itambé/);
+  assert.equal(m("Bruno Souza\n529.982.247-25\nRua Projetada, 45", fala), "mandou_dados");
+});
+
+test("a proposta antiga sai da resposta da IA", () => {
+  const r = tirarPropostaAntiga(["Perfeito, Bruno! Recebemos seus dados. Vou montar a proposta para você:", "*Proposta Gêmeos Motors*\n• Moto: T1\n• Entrega: Itambé e região", "Quer mais alguma coisa?"]);
+  assert.deepEqual(r, ["Perfeito, Bruno! Recebemos seus dados.", "Quer mais alguma coisa?"]);
 });

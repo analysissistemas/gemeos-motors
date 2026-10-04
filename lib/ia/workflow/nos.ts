@@ -35,7 +35,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -580,11 +580,6 @@ async function entenderPrimeiro(c: CtxWorkflow, resposta: string[], intencao: In
   return [...r, variar(PERGUNTAS_INTENCAO)];
 }
 
-/** Última mensagem da loja (IA ou vendedor) no histórico. */
-function ultimaDaLojaNoHistorico(historico: string) {
-  const blocos = (historico ?? "").split(/\n\s*\n/).filter((l) => /^(Agente IA|Vendedor):/.test(l));
-  return (blocos[blocos.length - 1] ?? "").replace(/^(Agente IA|Vendedor):\s*/, "");
-}
 
 const FRASES_RX = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu;
 /** Tira as perguntas dos blocos (a pergunta certa do momento entra no fim). */
@@ -905,7 +900,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     /* momento da compra: a que pergunta ele responde, se tem interesse, se decidiu, se tem objeção */
     const nomesCat = (await nomesDoCatalogo()).map((nome) => ({ nome }));
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
-    const ultimaDaLoja = ultimaDaLojaNoHistorico(c.memoria.historico);
+    const ultimaDaLoja = ultimaFalaDaLoja(c.memoria.historico);
     const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja);
     const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa }) : null;
     const horario = await lerHorario();
@@ -1182,6 +1177,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     resposta = await entenderPrimeiro(c, resposta, intencao);
     /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
        "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */
+    /* a proposta automática saiu (P20); se a IA ainda escrever uma (prompt antigo), ela sai da resposta */
+    resposta = tirarPropostaAntiga(resposta);
     if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
     /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
     if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {

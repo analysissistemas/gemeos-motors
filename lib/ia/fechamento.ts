@@ -104,7 +104,8 @@ export function simulacaoPedida(texto: string): { parcelas: number | null; bande
 export const PERGUNTA_PARCELAS = "Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊";
 /** Confirmação da simulação, depois que o sistema avisou o vendedor (nunca com valores). */
 export function textoSimulacao(p: { parcelas: number | null; bandeira: string | null; modelo: string | null }) {
-  const vezes = p.parcelas ? (p.parcelas > 21 ? "em até 21x" : `de ${p.parcelas}x`) : "";
+  /* "em 10 vezes", não "10x": o validador só aceita "Nx" que esteja escrito na base (teste de 04/10/2026) */
+  const vezes = p.parcelas ? (p.parcelas > 21 ? "em até 21 vezes" : `em ${p.parcelas} ${p.parcelas === 1 ? "vez" : "vezes"}`) : "";
   const no = p.bandeira ? ` no ${p.bandeira}` : "";
   const moto = p.modelo ? ` pra *${p.modelo}*` : "";
   return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa da moto?`;
@@ -154,6 +155,26 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
 /** Entrega fora de Goiana: a IA não sabe se atende nem a taxa; avisa que a equipe confirma (balão separado). */
 export function notaDeEntrega(cidade: string | null | undefined) {
   return cidade?.trim() && !/goiana/i.test(semAcento(cidade)) ? `Sobre a entrega em ${cidade.trim()}, a nossa equipe confirma se atende aí e te fala certinho 😊` : null;
+}
+
+/** A última fala da loja: todas as mensagens da IA ou do vendedor depois da última mensagem do cliente
+ *  (a lista de dados e o aviso de entrega vão em balões separados; olhar só o último perdia a lista). */
+export function ultimaFalaDaLoja(historico: string) {
+  const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  const fala: string[] = [];
+  for (let i = blocos.length - 1; i >= 0; i--) {
+    if (/^Lead:/.test(blocos[i])) break;
+    if (/^(Agente IA|Vendedor):/.test(blocos[i])) fala.unshift(blocos[i].replace(/^(Agente IA|Vendedor):\s*/, ""));
+  }
+  return fala.join("\n\n");
+}
+
+/** Proposta antiga (saiu na decisão P20): se a IA ainda escrever, a frase/bloco sai da resposta. */
+export function tirarPropostaAntiga(resposta: string[]) {
+  return resposta
+    .filter((b) => !/proposta\s+g[eê]meos\s+motors/iu.test(b))
+    .map((b) => (/\n/.test(b) ? b : b.split(/(?<=[.!?:])\s+/u).filter((f) => !/(mont\w*|prepar\w*|segue|vou (te )?(mandar|enviar)) (a |uma |sua )?proposta/iu.test(f)).join(" ").trim()))
+    .filter((b) => /\p{L}/u.test(b));
 }
 
 /** A lista de dados que a loja mandou era a da retirada ("que dia e horário você pretende vir")? */
