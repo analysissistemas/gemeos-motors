@@ -3,6 +3,7 @@ import { autonomiaMinima, comGasolinaDaRegiao, lerParametrosEconomia, textoEcono
 import { gasolinaPara, type GasolinaDoCliente } from "./gasolina";
 import { and, asc, desc, eq, inArray, max } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { TIPOS_ELETRICOS } from "@/lib/dominio";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
 import { normalizarHorario, textoHorario, type HorarioLoja } from "./horario";
 
@@ -113,13 +114,13 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     db
       .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao })
       .from(m)
-      .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, ["moto_eletrica", "acessorio"])))
+      .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_ELETRICOS, "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
     db.select({ modeloId: schema.modeloCores.modeloId, nome: schema.modeloCores.nome }).from(schema.modeloCores).where(eq(schema.modeloCores.ativo, true)).orderBy(asc(schema.modeloCores.ordem)),
     db
       .select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor })
       .from(v)
-      .where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
+      .where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   /* conta de economia × gasolina com os números da base (preço da gasolina, km/l, custo da carga) */
@@ -151,15 +152,15 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     const autonomia = autonomiaMinima(f.autonomia);
     const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia, opcoes.kmSemana)}` : "";
     const detalhes = l.descricao?.trim() ? ` | detalhes: ${l.descricao.trim()}` : "";
-    itens.push(`• ${nome}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
+    itens.push(`• ${nome}${l.tipo === "patinete" ? " (patinete elétrico)" : ""}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
   }
   const avisoSem = semEstoque.length
     ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.`
     : "";
   const nenhuma = comEstoque.length ? "" : "\nNENHUMA moto elétrica com unidade disponível agora: não ofereça modelo; diga que a equipe confirma o que chegou e já te retorna.";
   const texto = `# CATÁLOGO DA LOJA E ESTOQUE AGORA
-Só motos ELÉTRICAS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com moto elétrica).
-Só ofereça as motos listadas abaixo (todas têm unidade no estoque): nome, preço de tabela, ficha e as cores dela. Nunca invente cor, versão nem modelo.${nenhuma}${avisoSem}
+Só motos e patinetes ELÉTRICOS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com mobilidade elétrica). Item marcado "(patinete elétrico)" é patinete: chame de patinete, nunca de moto.
+Só ofereça as motos e patinetes listados abaixo (todas têm unidade no estoque): nome, preço de tabela, ficha e as cores dela. Nunca invente cor, versão nem modelo.${nenhuma}${avisoSem}
 ${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro${economia.origemGasolina ? ` (${economia.origemGasolina}, pesquisa semanal da ANP; diga isso ao cliente)` : ""} e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta: ${opcoes.kmSemana ? `o cliente roda uns ${opcoes.kmSemana} km por semana, use a CONTA DO CLIENTE (semana e mês)` : "o cliente ainda não disse quanto roda: pergunte, ou use o cenário de km por semana mais perto do que ele contou"}.
 ` : ""}${itens.join("\n")}`;
   return {

@@ -12,6 +12,7 @@
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
+import { artigo } from "./estoque-tipos.ts";
 
 export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
@@ -113,7 +114,7 @@ export function textoSimulacao(p: { parcelas: number | null; bandeira: string | 
   const vezes = p.parcelas ? (p.parcelas > 21 ? "em até 21 vezes" : `em ${p.parcelas} ${p.parcelas === 1 ? "vez" : "vezes"}`) : "";
   const no = p.bandeira ? ` no ${p.bandeira}` : "";
   const moto = p.modelo ? ` pra *${p.modelo}*` : "";
-  return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa da moto?`;
+  return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa ${artigo(p.modelo) === "o" ? "do patinete" : "da moto"}?`;
 }
 
 export const PERGUNTA_TEM_MODELO = "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções? 😊";
@@ -127,8 +128,9 @@ export const PERGUNTAS_KM = [
   "Me fala quantos km você roda por dia, mais ou menos, que eu faço a conta da sua economia 💰",
 ];
 export const parabens = (modelo: string | null) => {
-  const m = modelo ? `a *${modelo}*` : "essa moto";
-  const M = modelo ? `A *${modelo}*` : "Essa moto";
+  const a = artigo(modelo);
+  const m = modelo ? `${a} *${modelo}*` : "essa moto";
+  const M = modelo ? `${a.toUpperCase()} *${modelo}*` : "Essa moto";
   return [
     `Parabéns pela escolha! 🎉 ${M} é uma ótima aquisição: você vai ter economia de verdade no dia a dia, sem gastar com gasolina, IPVA nem emplacamento.`,
     `Que ótima escolha! 🙌 Com ${m} você ganha economia e conforto no dia a dia, e nunca mais gasta com gasolina.`,
@@ -193,8 +195,9 @@ export const pediuDadosDeRetirada = (ultimaDaLoja: string) => /pretende vir/i.te
  *  dado pessoal e sem dizer que a compra está concluída. Fora do horário, a equipe chama quando a loja abrir. */
 export function textoDadosRecebidos(p: { nome?: string | null; modelo?: string | null; modo: "entrega" | "retirada"; lojaAberta: boolean }, sorte = Math.random()) {
   const voc = p.nome ? `, ${p.nome}` : "";
-  const moto = p.modelo ? `sua *${p.modelo}*` : "sua moto";
-  const passo = p.modo === "entrega" ? `o melhor horário pra entregar a ${moto} 🛵` : `a separação da ${moto} e o horário que você vem buscar 🙌`;
+  const a = artigo(p.modelo);
+  const moto = p.modelo ? `${a === "o" ? "seu" : "sua"} *${p.modelo}*` : "sua moto";
+  const passo = p.modo === "entrega" ? `o melhor horário pra entregar ${a} ${moto} 🛵` : `a separação d${a} ${moto} e o horário que você vem buscar 🙌`;
   const verbo = p.modo === "entrega" ? "combinar" : "confirmar";
   const variantes = p.lojaAberta
     ? [
@@ -210,7 +213,7 @@ export function textoDadosRecebidos(p: { nome?: string | null; modelo?: string |
 
 /** O que a IA precisa saber antes de escrever, em cada momento. */
 export function instrucaoDeFechamento(momento: Momento | null, modelo: string | null): string {
-  const m = modelo ? `a ${modelo}` : "a moto";
+  const m = modelo ? `${artigo(modelo)} ${modelo}` : "a moto";
   switch (momento) {
     case "interesse":
       return `# MOMENTO DA COMPRA

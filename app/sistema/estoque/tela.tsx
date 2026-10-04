@@ -568,7 +568,7 @@ function FormularioVeiculo({
 }) {
   /* entrada nova abre na rápida (moto elétrica do catálogo); editar e "outro veículo" usam o formulário completo */
   const [modo, setModo] = useState<"rapida" | "completa">("rapida");
-  const temEletrica = modelos.some((m) => m.tipo === "moto_eletrica");
+  const temEletrica = modelos.some((m) => ehEletrico(m.tipo));
   const rapida = !inicial.id && temEletrica && modo === "rapida";
   return (
     <Dialogo
@@ -589,7 +589,7 @@ function FormularioVeiculo({
         <Abas
           className="mb-4"
           abas={[
-            { id: "rapida", rotulo: "Moto elétrica nova" },
+            { id: "rapida", rotulo: "Moto ou patinete elétrico novo" },
             { id: "completa", rotulo: "Outro veículo (usado, a combustão, carro)" },
           ]}
           atual={modo}
@@ -598,7 +598,7 @@ function FormularioVeiculo({
       )}
       {aberto &&
         (rapida ? (
-          <EntradaRapida modelos={modelos.filter((m) => m.tipo === "moto_eletrica")} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
+          <EntradaRapida modelos={modelos.filter((m) => ehEletrico(m.tipo))} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
         ) : (
           <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
         ))}
@@ -801,7 +801,7 @@ function EntradaRapida({
             </fieldset>
 
             <Campo
-              rotulo="Chassi (opcional)"
+              rotulo={modelo?.tipo === "patinete" ? "Número de série (opcional)" : "Chassi (opcional)"}
               erro={erros.chassis}
               dica={`Um por linha, ou cole a lista. ${listaChassis.length ? `${listaChassis.length} de ${quantidade} preenchido(s); o resto você completa depois.` : "Pode deixar para depois."}`}
             >
@@ -876,7 +876,7 @@ function EntradaRapida({
           Cancelar
         </Botao>
         <Botao variante="primario" carregando={pendente} onClick={salvar} disabled={!modelo}>
-          {quantidade > 1 ? `Cadastrar ${quantidade} motos` : "Cadastrar moto"}
+          {modelo?.tipo === "patinete" ? (quantidade > 1 ? `Cadastrar ${quantidade} patinetes` : "Cadastrar patinete") : quantidade > 1 ? `Cadastrar ${quantidade} motos` : "Cadastrar moto"}
         </Botao>
       </RodapeDialogo>
     </>
@@ -1006,7 +1006,7 @@ function CorpoVeiculo({
             </Campo>
           </>
         )}
-        <Campo rotulo="Chassi" erro={erros.chassi} className={eletrico ? "sm:col-span-4" : "sm:col-span-3"}>
+        <Campo rotulo={f.tipo === "patinete" ? "Número de série" : "Chassi"} erro={erros.chassi} className={eletrico ? "sm:col-span-4" : "sm:col-span-3"}>
           <Entrada value={f.chassi ?? ""} onChange={(e) => set("chassi", e.target.value.toUpperCase())} invalido={!!erros.chassi} />
         </Campo>
         <Campo rotulo="Valor anunciado" erro={erros.valorAnunciado} className="sm:col-span-2">

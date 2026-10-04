@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
-import { CAMPOS_FICHA, DISPONIBILIDADES, TIPOS_CATALOGO, valorFichaVazio } from "@/lib/dominio";
+import { CAMPOS_FICHA, DISPONIBILIDADES, TIPOS_CATALOGO, ehEletrico, valorFichaVazio } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
 import { apagarFotoCatalogo } from "@/lib/fotos";
 
@@ -70,7 +70,7 @@ export const esquemaModelo = z
     /* acessório não tem ficha técnica; frase de lançamento só existe em lançamento */
     ficha: d.tipo === "acessorio" ? null : d.ficha,
     lancamentoTexto: d.lancamento ? d.lancamentoTexto : null,
-    eletrico: d.tipo === "moto_eletrica",
+    eletrico: ehEletrico(d.tipo),
   }));
 export type DadosModelo = z.infer<typeof esquemaModelo>;
 

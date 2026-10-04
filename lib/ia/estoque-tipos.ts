@@ -60,3 +60,7 @@ export function decidirEstoque(linhas: ItemEstoque[], termo: string): ResultadoE
   if (disponiveis.length > 0) return { estado: "CONFIRMADO_DISPONIVEL", confirmado: true, itens: disponiveis.slice(0, MAX_ITENS_ESTOQUE) };
   return { estado: "CONFIRMADO_INDISPONIVEL", confirmado: true, itens: certas.slice(0, MAX_ITENS_ESTOQUE) };
 }
+
+/** Artigo do produto pelo nome, para as frases prontas: "o Patinete 350W", "a T1" (moto). O tipo não chega até
+ *  essas frases, então vale o nome (patinete cadastrado com "Patinete" no nome, 04/10/2026). */
+export const artigo = (nome: string | null | undefined) => (/^\s*patinete/iu.test(nome ?? "") ? "o" : "a");

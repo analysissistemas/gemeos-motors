@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
@@ -39,6 +39,7 @@ import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, textoPosVenda, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { artigo } from "@/lib/ia/estoque-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
 import { registrarLog } from "@/lib/logs";
@@ -51,7 +52,7 @@ import type { ImplNo } from "./motor";
 import { corNoTexto, formatarHistorico, nomeDoPerfil, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
-import { ETAPAS_ABERTAS } from "@/lib/dominio";
+import { ETAPAS_ABERTAS, TIPOS_ELETRICOS } from "@/lib/dominio";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 /* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
@@ -383,7 +384,7 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
     throw e;
   }
   const quem = p.nome ? `, ${p.nome}` : "";
-  const moto = p.modelo ? ` A *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
+  const moto = p.modelo ? ` ${artigo(p.modelo).toUpperCase()} *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
   return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}`, quando };
 }
 
@@ -645,8 +646,8 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
   const m = schema.modelos;
   const v = schema.veiculos;
   const [modelos, unidades, base] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), eq(m.tipo, "moto_eletrica"))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   const pBase = lerParametrosEconomia(base.map((b) => b.conteudo));
@@ -672,7 +673,7 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
   const ultimo = r[r.length - 1];
   const clienteEscolheu = !!citado(doCliente);
   /* pergunta de cor antes da escolha da moto vira convite para conhecer a moto da conta */
-  if (!clienteEscolheu && /\bcor(?:es)?\b[^?]*\?/iu.test(ultimo)) r[r.length - 1] = `Quer conhecer melhor a *${escolhida.nome}*? 😊`;
+  if (!clienteEscolheu && /\bcor(?:es)?\b[^?]*\?/iu.test(ultimo)) r[r.length - 1] = `Quer conhecer melhor ${artigo(escolhida.nome)} *${escolhida.nome}*? 😊`;
   if (/\?/u.test(r[r.length - 1])) r = [...r.slice(0, -1), frase, r[r.length - 1]];
   else r.push(frase);
   return r;
@@ -698,8 +699,8 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   const v = schema.veiculos;
   const k = schema.modeloCores;
   const [modelos, unidades, cores] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, fotoWhatsappUrl: m.fotoWhatsappUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_eletrica"))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), eq(v.tipo, "moto_eletrica"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, fotoWhatsappUrl: m.fotoWhatsappUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ modeloId: k.modeloId, nome: k.nome, fotoUrl: k.fotoUrl }).from(k),
   ]);
   return modelos.flatMap((x) => {
@@ -1181,7 +1182,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
     if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {
       const [m] = await db.select({ preco: schema.modelos.precoTabela }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${c.modeloDaConversa.toLowerCase()}`).limit(1);
-      if (m?.preco) resposta = [`A *${c.modeloDaConversa}* sai por *${reais(Number(m.preco))}*.`, ...resposta];
+      if (m?.preco) resposta = [`${artigo(c.modeloDaConversa).toUpperCase()} *${c.modeloDaConversa}* sai por *${reais(Number(m.preco))}*.`, ...resposta];
     }
     /* UMA pergunta por resposta: bloco que é só mais uma pergunta, depois de outra, sai */
     let perguntou = false;

@@ -148,3 +148,14 @@ test("sem modelo: pediu opções (pesquisando) ou só quer comprar (pergunta se 
   assert.match(instrucaoDeFechamento("pesquisando", null), /2 a 3 opções/);
   assert.deepEqual(validarResposta(PERGUNTA_TEM_MODELO).violacoes, []);
 });
+
+test("patinete: as frases prontas usam o artigo certo (o patinete, a moto)", async () => {
+  const { parabens, textoDadosRecebidos, textoSimulacao } = await import("../../lib/ia/fechamento.ts");
+  const { artigo } = await import("../../lib/ia/estoque-tipos.ts");
+  assert.equal(artigo("Patinete 350W"), "o");
+  assert.equal(artigo("T1"), "a");
+  assert.ok(parabens("Patinete 350W").every((t) => !/\ba \*Patinete|\bA \*Patinete/.test(t)));
+  assert.match(textoDadosRecebidos({ nome: "Ana", modelo: "Patinete 350W", modo: "entrega", lojaAberta: true }, 0), /entregar o seu \*Patinete 350W\*/);
+  assert.match(textoDadosRecebidos({ nome: "Ana", modelo: "T1", modo: "retirada", lojaAberta: true }, 0), /separação da sua \*T1\*/);
+  assert.match(textoSimulacao({ parcelas: 10, bandeira: "Visa", modelo: "Patinete 350W" }), /do patinete\?$/);
+});

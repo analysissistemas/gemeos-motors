@@ -15,7 +15,18 @@
 (function(){
   const TEMPO_LIMITE = 3000;
   const DISPONIBILIDADES = {pronta_entrega:"Pronta entrega", sob_encomenda:"Sob encomenda", consultar:"Consulte disponibilidade"};
-  const TIPOS = {moto_eletrica:"Moto elétrica", moto_combustao:"Moto a combustão", carro:"Carro", acessorio:"Acessório"};
+  const TIPOS = {moto_eletrica:"Moto elétrica", patinete:"Patinete elétrico", moto_combustao:"Moto a combustão", carro:"Carro", acessorio:"Acessório"};
+  /* Patinete (04/10/2026): linha própria no site, logo depois das motos. Mora aqui, e não no estoque.js,
+     porque o patinete só existe no catálogo do sistema: sem patinete cadastrado, a seção nem aparece. */
+  const CAT_PATI = {};
+  function garantirLinhaPatinetes(){
+    if(typeof CATEGORIAS === "undefined" || CATEGORIAS.some(c => c.nome === "Patinetes")) return;
+    const i = CATEGORIAS.findIndex(c => c.nome === "Motos elétricas");
+    CATEGORIAS.splice(i + 1, 0, {nome:"Patinetes", titulo:"Patinetes elétricos",
+      sub:"Sem CNH, sem emplacamento e sem IPVA. Prático para o dia a dia e carrega na tomada de casa.", catalogo:CAT_PATI, campoVar:"var"});
+    /* as cores do patinete (cores-sistema.js) procuram o modelo nesta lista */
+    if(typeof _CATALOGOS !== "undefined" && !_CATALOGOS.includes(CAT_PATI)) _CATALOGOS.push(CAT_PATI);
+  }
   let promessa = null;
   const fotoPrincipal = {};   // modelo -> foto principal cadastrada no sistema
 
@@ -86,7 +97,9 @@
     let proximo = PRODUTOS.reduce((m, p) => Math.max(m, p.id), 0) + 1;
     for(const m of lista){
       const aces = m.tipo === "acessorio";
-      const catalogo = aces ? CAT_ACES : CATALOGO;
+      const pati = m.tipo === "patinete";
+      if(pati) garantirLinhaPatinetes();
+      const catalogo = aces ? CAT_ACES : pati ? CAT_PATI : CATALOGO;
       const novo = !catalogo[m.nome];
       const info = catalogo[m.nome] || (catalogo[m.nome] = {var:["Única"], cor:[""], base:null});
       info.base = m.preco;
@@ -107,8 +120,8 @@
           reserva:false, disponivelEm:null, qtd:1, venda:m.preco, descricao:m.descricao,
           entrada:null, vendido:false, naVitrine:true, porQuantidade:true
         } : {
-          id: proximo++, categoria:"Motos elétricas", modelo:m.nome, tipo:TIPOS[m.tipo],
-          eletrico: m.tipo === "moto_eletrica", genero:"f",
+          id: proximo++, categoria: pati ? "Patinetes" : "Motos elétricas", modelo:m.nome, tipo:TIPOS[m.tipo],
+          eletrico: m.tipo === "moto_eletrica" || pati, genero: pati ? "m" : "f",
           arm:"Única", cor:info.cor[0], cond:"Zero km", km:0, avarias:[], chassi:"", placa:null, ano:null, renavam:null,
           ficha:m.ficha, video:null, reserva:false, disponivelEm:null,
           venda:m.preco, entrada:null, vendido:false, naVitrine:true

@@ -8,7 +8,7 @@
    - O cliente pediu foto/vídeo: manda o que pediu (e a IA sabe ANTES de escrever, para não prometer
      o que não vai). Sem pedido: a primeira vez que a moto aparece na conversa, manda foto e vídeo;
      depois não repete. */
-import { norm } from "./estoque-tipos.ts";
+import { artigo, norm } from "./estoque-tipos.ts";
 
 export type TipoMidiaIa = "foto" | "video";
 export type FotoDaMoto = { url: string; cor: string | null };
@@ -54,7 +54,7 @@ function itensDe(m: ModeloComMidia, tipos: TipoMidiaIa[]): ItemMidia[] {
   const itens: ItemMidia[] = [];
   if (tipos.includes("foto"))
     for (const f of m.fotos.slice(0, 3)) itens.push({ tipo: "foto", url: f.url, legenda: `*${m.nome}*${f.cor ? ` na cor ${f.cor}` : ""}` });
-  if (tipos.includes("video") && m.videoUrl) itens.push({ tipo: "video", url: m.videoUrl, legenda: `Vídeo da *${m.nome}*` });
+  if (tipos.includes("video") && m.videoUrl) itens.push({ tipo: "video", url: m.videoUrl, legenda: `Vídeo d${artigo(m.nome)} *${m.nome}*` });
   return itens;
 }
 

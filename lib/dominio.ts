@@ -98,18 +98,23 @@ export const ORIGENS = {
 /* ---------- veículos ---------- */
 export const TIPOS_VEICULO = {
   moto_eletrica: "Moto elétrica",
+  /* patinete (04/10/2026, P21 do treinamento): uma unidade por patinete, com cor, número de série e situação, como a moto */
+  patinete: "Patinete elétrico",
   moto_combustao: "Moto a combustão",
   carro: "Carro",
 } as const;
 export type TipoVeiculo = keyof typeof TIPOS_VEICULO;
+/** Os tipos da linha elétrica que a IA oferece e o site mostra (sem CNH, sem emplacamento, sem IPVA). */
+export const TIPOS_ELETRICOS = ["moto_eletrica", "patinete"] as const;
 /* "triciclo_eletrico" saiu em 26/09/2026 (virou moto elétrica); segue aceito aqui por segurança */
-export const ehEletrico = (t: string) => t === "moto_eletrica" || t === "triciclo_eletrico";
+export const ehEletrico = (t: string) => t === "moto_eletrica" || t === "patinete" || t === "triciclo_eletrico";
 
 /* ---------- catálogo (o que o site mostra) ----------
    Acessório é item do catálogo, mas não é veículo do estoque: por isso fica
    fora de TIPOS_VEICULO. */
 export const TIPOS_CATALOGO = {
   moto_eletrica: "Moto elétrica",
+  patinete: "Patinete elétrico",
   moto_combustao: "Moto a combustão",
   carro: "Carro",
   acessorio: "Acessório",
