@@ -576,6 +576,8 @@ async function entenderPrimeiro(resposta: string[], intencao: Intencao | null): 
   r = r
     .map((b) => (b.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*/gu) ?? [b]).filter((f) => !/\?/.test(f)).join("").trim())
     .filter((b) => /\p{L}/u.test(b));
+  /* a resposta já convida o cliente a contar ("Me conta o que você precisa."): não repete a pergunta (teste de 04/10/2026) */
+  if (r.some((b) => /me\s+conta\s+o\s+que\s+(?:você|vc)\s+precisa|me\s+diz\s+o\s+que\s+(?:você|vc)\s+precisa/iu.test(b))) return r;
   return [...r, variar(PERGUNTAS_INTENCAO)];
 }
 
