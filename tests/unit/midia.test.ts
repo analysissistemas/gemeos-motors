@@ -2,7 +2,7 @@
    nem WhatsApp. Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia } from "../../lib/ia/midia-tipos.ts";
+import { instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia } from "../../lib/ia/midia-tipos.ts";
 
 const AG08: ModeloComMidia = { id: 5, nome: "AG08", fotos: [{ url: "/api/vitrine/foto/modelo-5-a.webp", cor: "Cinza" }], videoUrl: "/api/midia/chat/video-AG08-x.mp4" };
 const TANK: ModeloComMidia = { id: 1, nome: "TANK AG11", fotos: [{ url: "/api/vitrine/foto/modelo-1-b.webp", cor: "Preta" }], videoUrl: null };
@@ -56,4 +56,13 @@ test("sem mídia: a frase que promete foto/vídeo sai, o resto fica", () => {
   assert.equal(tirarPromessaDeMidia("A AG08 anda até 45 km. Segue a foto dela! Quer saber o preço?"), "A AG08 anda até 45 km. Quer saber o preço?");
   assert.equal(tirarPromessaDeMidia("Vou te mandar o vídeo agora."), "");
   assert.equal(tirarPromessaDeMidia("A AG08 tem banco plano."), "A AG08 tem banco plano.");
+});
+
+test("pesquisando: a resposta com 2 ou 3 motos leva uma foto de cada, sem vídeo e sem repetir", () => {
+  const p = planejarOpcoes({ modelos: [AG08, TANK, DF17], resposta: "Temos a AG08 por R$ 8.999,90 e a TANK AG11 por R$ 11.990.", jaEnviadas: [] });
+  assert.deepEqual(p?.itens.map((i) => i.legenda), ["*AG08* na cor Cinza", "*TANK AG11* na cor Preta"]);
+  assert.ok(p?.itens.every((i) => i.tipo === "foto"));
+  /* uma moto só não é "opções"; foto já mandada não repete */
+  assert.equal(planejarOpcoes({ modelos: [AG08, TANK], resposta: "A AG08 custa R$ 8.999,90.", jaEnviadas: [] }), null);
+  assert.deepEqual(planejarOpcoes({ modelos: [AG08, TANK], resposta: "AG08 e TANK AG11", jaEnviadas: [AG08.fotos[0].url] })?.itens.map((i) => i.legenda), ["*TANK AG11* na cor Preta"]);
 });

@@ -31,3 +31,12 @@ test("a IA é avisada antes de escrever", () => {
   assert.match(instrucaoDeIntencao("assistencia"), /NÃO ofereça moto/);
   assert.equal(instrucaoDeIntencao("compra"), "");
 });
+
+test("pós-venda: não pode vir à loja ou está irritado → passa para uma pessoa", async () => {
+  const { RX_NAO_PODE_VIR, RX_IRRITADO } = await import("../../lib/ia/intencao.ts");
+  for (const t of ["eu moro longe e não vou perder um dia", "não consigo ir aí", "não posso levar a moto"]) assert.ok(RX_NAO_PODE_VIR.test(t), t);
+  for (const t of ["Vocês não resolvem nada!", "já estou cansado disso", "vou no procon"]) assert.ok(RX_IRRITADO.test(t), t);
+  assert.ok(!RX_NAO_PODE_VIR.test("posso ir sábado"));
+  assert.match(instrucaoDeIntencao("assistencia"), /convide UMA vez/);
+  assert.match(instrucaoDeIntencao("assistencia"), /NÃO insista/);
+});

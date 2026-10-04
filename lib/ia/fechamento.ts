@@ -13,11 +13,11 @@
 
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
 
-export type Momento = "quer_parcelar" | "pediu_simulacao" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
 /** Nestes momentos a IA não passa a conversa ao vendedor por conta própria: o fechamento segue até os dados
  *  chegarem (aí o sistema passa). Só passa antes se o cliente pedir uma pessoa. */
-export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["quer_parcelar", "pediu_simulacao", "quer_visitar", "informou_visita", "interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
+export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["pesquisando", "sem_modelo", "quer_parcelar", "pediu_simulacao", "quer_visitar", "informou_visita", "interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
 export const RX_PEDE_PESSOA = /(?<![\p{L}])(atendente|humano|pessoa|vendedor|gerente|falar com (algu[eé]m|voc[eê]s|o dono)|ligar|liga pra mim)(?![\p{L}])/iu;
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -36,6 +36,8 @@ const RX_PRECO_OBJ =
   /(?<![a-z])((achei|ta|esta|muito|meio|bem|bastante|um pouco|mt|mto|que) car[oa]|carissim[oa]|salgad[oa]|puxad[oa]|pesad[oa] (no bolso|pra mim)|(nao|n) (tenho|to com|estou com) (esse |todo esse )?(dinheiro|grana|valor)|sem (dinheiro|grana)|desconto|abaix(a|ar|ou) (o preco|o valor|pra|para|um pouco)|faz (por|mais barato)|ta alto|valor alto|fora do (meu )?orcamento|nao cabe no|muito dinheiro)(?![a-z])/;
 const RX_DUVIDA =
   /(?<![a-z])(vou pensar|deixa eu (ver|pensar)|preciso pensar|vou ver|depois (eu )?(vejo|falo|volto|decido)|nao sei|to em duvida|estou em duvida|indecis\w*|medo|receio|sera que|(falar|conversar|ver) com (a |o )?(minha |meu )?(esposa|marido|mulher|namorad[oa]|pai|mae|familia)|nao tenho certeza|ainda nao)(?![a-z])/;
+const RX_OPCOES = /(?<![a-z])(quais (modelos|motos|opcoes|voces tem)|que (modelos|motos)|(mais|menor|o mais) (barat\w*|em conta|acessive\w*)|opcoes|catalogo|o que voces tem|tem o que|mostra (as|os) (motos|modelos)|estou pesquisando|to pesquisando|so pesquisando|comparar)(?![a-z])/;
+const RX_QUER_COMPRAR = /(?<![a-z])(quero (comprar|uma moto|um patinete|adquirir)|procurando (uma )?(moto|patinete)|queria (comprar|uma moto)|pensando em comprar)(?![a-z])/;
 const RX_INTERESSE = /(?<![a-z])(quero|queria|interess\w*|comprar|compra|preco|valor|quanto|condic\w*|pagamento|parcel\w*|a vista|pix|cartao|disponivel|tem (a|o|essa|esse))(?![a-z])/;
 
 /** Em que momento da compra o cliente está, pela mensagem dele e pela última mensagem da loja. */
@@ -68,6 +70,9 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (RX_PRECO_OBJ.test(t)) return "objecao_preco";
   if (RX_DUVIDA.test(t)) return "objecao";
   if (p.conheceModelo && RX_DECIDIDO.test(t)) return "decidido";
+  /* sem modelo: pediu opções ("quais motos", "as mais baratas") ou só disse que quer comprar */
+  if (!p.conheceModelo && RX_OPCOES.test(t)) return "pesquisando";
+  if (!p.conheceModelo && RX_QUER_COMPRAR.test(t)) return "sem_modelo";
   if (p.conheceModelo && RX_INTERESSE.test(t)) return "interesse";
   return null;
 }
@@ -110,6 +115,8 @@ export function textoSimulacao(p: { parcelas: number | null; bandeira: string | 
   const moto = p.modelo ? ` pra *${p.modelo}*` : "";
   return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa da moto?`;
 }
+
+export const PERGUNTA_TEM_MODELO = "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções? 😊";
 
 export const PERGUNTAS_VISITA = [
   "Qual dia e horário fica melhor pra você vir? 😊",
@@ -207,13 +214,19 @@ export function instrucaoDeFechamento(momento: Momento | null, modelo: string | 
   switch (momento) {
     case "interesse":
       return `# MOMENTO DA COMPRA
-O cliente tem interesse em ${m}. Responda o que ele perguntou (ficha e preço do catálogo) e termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?". Não pergunte uso nem km agora.`;
+O cliente tem interesse em ${m}. Responda SÓ o que ele perguntou, com os dados do catálogo: perguntou o preço, diga o preço, a cor e que tem a pronta entrega; perguntou autonomia, bateria ou garantia, responda isso. Não despeje a ficha inteira de uma vez (a foto e o vídeo vão junto). Termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?". Não pergunte uso nem km agora.`;
     case "decidido":
       return `# MOMENTO DA COMPRA
 O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima aquisição: economia no dia a dia, sem gasolina, sem IPVA nem emplacamento, conforto) e pergunte só: "Você prefere retirar aqui na loja ou receber por entrega?".`;
     case "objecao_preco":
       return `# MOMENTO DA COMPRA
 O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
+    case "pesquisando":
+      return `# MOMENTO DA COMPRA
+O cliente ainda não escolheu e quer conhecer as opções. Apresente de 2 a 3 opções do CATÁLOGO (todas têm estoque), da mais barata para a mais cara quando ele falar em preço: nome, preço e o essencial de cada, em lista curta. O sistema manda uma foto de cada. Depois faça UMA pergunta para afunilar (ex.: se procura algo mais compacto ou um modelo maior, ou uma faixa de preço). Para "compacto" ou "maior", use só o que estiver na ficha e na descrição; sem esse dado, não invente.`;
+    case "sem_modelo":
+      return `# MOMENTO DA COMPRA
+O cliente quer comprar, mas ainda não falou de um modelo. Pergunte só: "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções?".`;
     case "quer_parcelar":
       return `# MOMENTO DA COMPRA
 O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros, não liste bandeiras e nunca peça número do cartão, código ou senha.`;

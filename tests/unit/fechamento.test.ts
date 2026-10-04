@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validarResposta } from "../../lib/ia/validador.ts";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, PERGUNTA_PARCELAS, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoDadosRecebidos, textoSimulacao, tirarPropostaAntiga, ultimaFalaDaLoja } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoDadosRecebidos, textoSimulacao, tirarPropostaAntiga, ultimaFalaDaLoja } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -12,8 +12,8 @@ test("interesse: cita o modelo e fala em comprar ou preço", () => {
   assert.equal(m("Quero comprar uma moto. Quanto custa a AG08?"), "interesse");
   assert.equal(m("Vi no site a Tank, tenho interesse"), "interesse");
   assert.equal(m("a T1 está disponível?"), "interesse");
-  /* sem modelo conhecido ainda não é momento de fechamento */
-  assert.equal(m("quero comprar uma moto", "", false), null);
+  /* sem modelo conhecido ainda não é momento de fechamento: o Milton pergunta se já tem modelo em mente */
+  assert.equal(m("quero comprar uma moto", "", false), "sem_modelo");
 });
 
 test("decidido: vou querer, fechado, quero essa", () => {
@@ -140,4 +140,11 @@ test("a última fala da loja junta os balões depois da última mensagem do clie
 test("a proposta antiga sai da resposta da IA", () => {
   const r = tirarPropostaAntiga(["Perfeito, Bruno! Recebemos seus dados. Vou montar a proposta para você:", "*Proposta Gêmeos Motors*\n• Moto: T1\n• Entrega: Itambé e região", "Quer mais alguma coisa?"]);
   assert.deepEqual(r, ["Perfeito, Bruno! Recebemos seus dados.", "Quer mais alguma coisa?"]);
+});
+
+test("sem modelo: pediu opções (pesquisando) ou só quer comprar (pergunta se já tem modelo em mente)", () => {
+  for (const t of ["quais motos vocês têm?", "quais são as mais baratas?", "tô pesquisando", "me mostra as opções"]) assert.equal(m(t, "", false), "pesquisando", t);
+  assert.equal(m("quero comprar uma moto", "", false), "sem_modelo");
+  assert.match(instrucaoDeFechamento("pesquisando", null), /2 a 3 opções/);
+  assert.deepEqual(validarResposta(PERGUNTA_TEM_MODELO).violacoes, []);
 });

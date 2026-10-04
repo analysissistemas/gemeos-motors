@@ -82,6 +82,22 @@ export function planejarApresentacao(p: { modelos: ModeloComMidia[]; textoClient
   return itens.length ? { modelo, pedido: [], itens } : null;
 }
 
+/** Cliente pesquisando (Diretrizes do Milton, 04/10/2026: "apresente de duas a três opções relevantes, com
+ *  foto, nome, preço"): a resposta apresenta 2 ou 3 motos do estoque; vai uma foto de cada, ainda não mandada.
+ *  Sem vídeo, para não encher a conversa: o vídeo vai quando ele escolher uma. */
+export function planejarOpcoes(p: { modelos: ModeloComMidia[]; resposta: string; jaEnviadas: string[] }): PlanoMidia | null {
+  const ja = new Set(p.jaEnviadas);
+  const citados = p.modelos.filter((m) => ultimaCitada([m], p.resposta));
+  if (citados.length < 2) return null;
+  const itens: ItemMidia[] = citados
+    .slice(0, 3)
+    .map((m) => ({ m, f: m.fotos.find((x) => !ja.has(x.url)) }))
+    .filter((x): x is { m: ModeloComMidia; f: FotoDaMoto } => !!x.f && !m_jaMostrada(x.m, ja))
+    .map(({ m, f }) => ({ tipo: "foto" as const, url: f.url, legenda: `*${m.nome}*${f.cor ? ` na cor ${f.cor}` : ""}` }));
+  return itens.length ? { modelo: null, pedido: [], itens } : null;
+}
+const m_jaMostrada = (m: ModeloComMidia, ja: Set<string>) => m.fotos.some((f) => ja.has(f.url));
+
 /** O que a IA precisa saber antes de escrever, para o texto bater com o que vai (ou não) junto. */
 export function instrucaoDeMidia(plano: PlanoMidia | null): string {
   const base = "Você não manda arquivo nem link: a foto e o vídeo da moto quem manda é o sistema, logo depois do seu texto.";

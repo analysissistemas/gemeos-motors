@@ -61,7 +61,12 @@ export function instrucaoDeIntencao(intencao: Intencao | null): string {
   if (intencao === "compra") return "";
   if (intencao === "assistencia")
     return `# O QUE O CLIENTE QUER
-O cliente fala de assistência, garantia, defeito ou peça. NÃO ofereça moto, preço nem foto. Mostre empatia, entenda o problema (o que está acontecendo, qual é a moto e quando comprou — uma pergunta por vez) e diga que a assistência técnica da própria loja vai cuidar. Quando já souber o problema, coloque transferir como true com o motivo "assistência: <resumo do problema>".`;
+O cliente fala de assistência, garantia, defeito, peça ou reclamação. A venda para aqui: NÃO ofereça moto, preço nem foto. Deixe o cliente contar, mostre empatia de verdade, não discuta, não culpe o cliente e não use frase pronta. Entenda o problema (o que está acontecendo, qual é a moto e quando comprou — uma pergunta por vez). Quando entender, convide UMA vez a trazer a moto à loja para a assistência técnica avaliar (endereço e horário da base de conhecimento). Se ele disser que não pode vir ou mora longe, NÃO insista: diga que vai encaminhar o caso aos responsáveis para avaliarem a melhor forma de atendimento e combinarem os próximos passos com ele, e coloque transferir como true com o motivo "pós-venda: <resumo fiel do relato>". Cliente muito irritado: priorize passar para uma pessoa. Nunca prometa conserto, troca, reembolso ou prazo.`;
   return `# O QUE O CLIENTE QUER
 Ainda não está claro o que o cliente quer (ele só cumprimentou ou disse o nome). NÃO fale de moto, modelo, preço, estoque nem foto. Primeiro entenda o que ele precisa: pode ser comprar uma moto, assistência técnica, garantia, um defeito, peça ou acessório. Faça UMA pergunta aberta sobre isso (se ainda não sabe o nome, a pergunta é o nome).`;
 }
+
+/** No pós-venda, o cliente disse que não pode vir à loja: não insistir, passar para uma pessoa (Diretrizes, 04/10/2026). */
+export const RX_NAO_PODE_VIR = /(?<![\p{L}])(moro longe|n[ãa]o (posso|consigo|vou|d[áa] pra|tenho como) (ir|vir|levar|perder)|sem tempo|n[ãa]o tenho tempo|longe (da|daí|dai|de vocês)|outra cidade)(?![\p{L}])/iu;
+/** Cliente irritado no pós-venda: prioriza a pessoa. */
+export const RX_IRRITADO = /(?<![\p{L}])(cansad[oa] disso|n[ãa]o resolvem|absurdo|palha[çc]ada|vergonha|procon|vou processar|p[ée]ssim[oa]|horr[íi]vel|descaso|ningu[ée]m resolve|enganad[oa])(?![\p{L}])/iu;

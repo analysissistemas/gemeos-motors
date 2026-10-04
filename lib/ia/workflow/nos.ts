@@ -35,9 +35,9 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_IRRITADO, RX_NAO_PODE_VIR, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
 import { registrarLog } from "@/lib/logs";
@@ -256,7 +256,8 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
       negocioId = aberto?.id ?? null;
     }
     const troca = temTroca(fatos.troca);
-    if (!negocioId) {
+    /* pós-venda não é venda: não abre negócio no funil (Diretrizes, 04/10/2026) */
+    if (!negocioId && c.intencao !== "assistencia") {
       negocioId = await criarNegocio(
         null,
         { clienteId, veiculoInteresse: fatos.interesse?.trim() || null, origem: "whatsapp", temTroca: !!troca, trocaDescricao: troca ? fatos.troca : null, responsavelId: null },
@@ -450,32 +451,40 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
   await mensagemSistema(db, c.conversaId, `Dados do pedido salvos no cadastro${patch.nome ? ` de ${patch.nome}` : ""}.\n${linhas.join("\n")}${resumoIa ? `\nResumo da IA: ${resumoIa}` : ""}`, { triagem: true });
 
   /* entrega fora de Goiana: a equipe confirma se atende e a taxa (a IA não inventa) */
-  let tarefa: string | null = null;
-  if (modo === "entrega" && cidade && !/goiana/i.test(cidade.normalize("NFD").replace(/\p{M}/gu, ""))) {
-    const [ja] = await db
-      .select({ id: schema.followUps.id })
-      .from(schema.followUps)
-      .where(and(eq(schema.followUps.conversaId, c.conversaId), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "entrega")))
-      .limit(1);
-    if (!ja) {
-      const cv = await carregarConversa(c.conversaId);
-      await db.insert(schema.followUps).values({
-        conversaId: c.conversaId,
-        clienteId,
-        negocioId,
-        usuarioId: cv.responsavelId,
-        agendadoPara: new Date(),
-        notas: `Confirmar se a loja entrega em ${cidade}, a taxa e o prazo, e avisar o cliente. ${linhas.join(" · ")}`.slice(0, 1000),
-        tipo: "entrega",
-        motivo: `Entrega em ${cidade}: confirmar atendimento e taxa`,
-        origem: "ia",
-        contexto: { detectadoPor: "ia", cidade, modelo: c.modeloDaConversa },
-      });
-      await mensagemSistema(db, c.conversaId, `FOLLOW-UP PENDENTE: confirmar se a loja entrega em ${cidade} e a taxa.`);
-      tarefa = `entrega em ${cidade}`;
-    }
-  }
+  const tarefa = modo === "entrega" && cidade ? await tarefaEntregaFora(c, clienteId, negocioId, cidade, linhas.join(" · ")) : null;
   return { modo, salvos: Object.keys(patch), faltam, avisos, tarefa };
+}
+
+/** "moro em Itambé", "entrega em Itambé" → "Itambé" (o que o cliente escreveu, com a primeira letra maiúscula). */
+function cidadeDoTexto(texto: string) {
+  const m = /\b(?:moro em|moro no|moro na|sou de|entrega(?:r)? (?:em|no|na|pra|para)|receber em|aqui em)\s+([\p{L}][\p{L}' -]{1,40}?)(?=[,.!?\n]|$)/iu.exec(texto);
+  return m ? m[1].trim().replace(/^\p{L}/u, (l) => l.toUpperCase()) : null;
+}
+
+/** Follow-up para a equipe confirmar entrega fora de Goiana (cidade, taxa e prazo). Um por conversa. */
+async function tarefaEntregaFora(c: CtxWorkflow, clienteId: number | null, negocioId: number | null, cidade: string, detalhe: string) {
+  if (/goiana/i.test(cidade.normalize("NFD").replace(/\p{M}/gu, ""))) return null;
+  const [ja] = await db
+    .select({ id: schema.followUps.id })
+    .from(schema.followUps)
+    .where(and(eq(schema.followUps.conversaId, c.conversaId), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "entrega")))
+    .limit(1);
+  if (ja) return null;
+  const cv = await carregarConversa(c.conversaId);
+  await db.insert(schema.followUps).values({
+    conversaId: c.conversaId,
+    clienteId: clienteId ?? cv.clienteId,
+    negocioId: negocioId ?? cv.negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: new Date(),
+    notas: `Confirmar se a loja entrega em ${cidade}, a taxa e o prazo, e avisar o cliente. ${detalhe}`.slice(0, 1000),
+    tipo: "entrega",
+    motivo: `Entrega em ${cidade}: confirmar atendimento e taxa`,
+    origem: "ia",
+    contexto: { detectadoPor: "ia", cidade, modelo: c.modeloDaConversa },
+  });
+  await mensagemSistema(db, c.conversaId, `FOLLOW-UP PENDENTE: confirmar se a loja entrega em ${cidade} e a taxa.`);
+  return `entrega em ${cidade}`;
 }
 
 /** Liga o negócio a uma unidade disponível do modelo que ainda não está em outra negociação aberta. */
@@ -618,6 +627,8 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
     case "quer_visitar":
       return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
+    case "sem_modelo":
+      return [...semPerguntas(resposta), PERGUNTA_TEM_MODELO];
     case "quer_parcelar":
       return [...semPerguntas(resposta), PERGUNTA_PARCELAS];
     case "escolheu_entrega": {
@@ -964,6 +975,13 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        (P12/P18). O texto é fixo: não repete dado pessoal nem diz que a compra está concluída. */
     /* simulação do cartão (P5/P19): com parcelas e bandeira, o vendedor recebe a tarefa e o Milton segue
        atendendo. Faltou um dos dois e a loja ainda não perguntou só por ele: pergunta. */
+    /* pós-venda (Diretrizes, 04/10/2026): não pode vir à loja ou está muito irritado → não insistir, passar
+       para uma pessoa com o relato. A IA já foi instruída; aqui o sistema garante, se ela esquecer. */
+    if (intencao === "assistencia" && !r.ctx.humano && r.ctx.texto && (RX_NAO_PODE_VIR.test(c.textoBuffer) || RX_IRRITADO.test(c.textoBuffer))) {
+      const relato = (ultimo?.resumo ?? c.textoBuffer).slice(0, 300);
+      const pipe = { ...r.ctx, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `Pós-venda: ${relato}` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, posVenda: "passa para uma pessoa (não pode vir à loja ou está irritado)" } };
+    }
     if (momento === "pediu_simulacao") {
       const recentes = leadAntes.split("\n").slice(-2).join("\n");
       const agora = simulacaoPedida(c.textoBuffer);
@@ -1086,6 +1104,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       qualificacao = q;
       /* funil conectado: o card anda com a conversa (nunca pode impedir a resposta ao cliente) */
       funil = await conectarFunil(c, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
+      /* entrega fora de Goiana: a equipe começa a confirmar já na escolha (Diretrizes, 04/10/2026) */
+      if (c.momento === "escolheu_entrega") {
+        const cidade = c.aprendido.fatos.cidade || c.memoria.fatos.cidade || cidadeDoTexto(c.textoBuffer);
+        if (cidade) await tarefaEntregaFora(c, q.clienteId, q.negocioId, cidade, `Cliente quer receber${c.modeloDaConversa ? ` a ${c.modeloDaConversa}` : ""} em ${cidade}.`).catch(() => null);
+      }
       /* dados do pedido no cadastro, com o resumo para a equipe */
       pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
     } catch (e) {
@@ -1200,7 +1223,13 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     let midia: PlanoMidia | null = intencao === "compra" ? c.midia : null;
     if (!midia && intencao === "compra" && respostaDaIa && resposta.length) {
       try {
-        midia = planejarApresentacao({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas: await midiasJaEnviadas(c.conversaId) });
+        const modelos = await motosComMidia(c);
+        const jaEnviadas = await midiasJaEnviadas(c.conversaId);
+        /* pesquisando: 2 ou 3 opções, uma foto de cada (Diretrizes do Milton, 04/10/2026) */
+        midia =
+          c.momento === "pesquisando"
+            ? planejarOpcoes({ modelos, resposta: resposta.join("\n"), jaEnviadas })
+            : planejarApresentacao({ modelos, textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas });
       } catch {
         midia = null;
       }
