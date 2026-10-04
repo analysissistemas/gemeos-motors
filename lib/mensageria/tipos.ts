@@ -47,6 +47,8 @@ export type PedidoEnvio = {
   modelo?: { nome: string; idioma: string; componentes: unknown[] } | null;
   /** bytes já prontos para subir (ex.: foto do catálogo convertida para JPEG); sem isso, lê de `midia.url` */
   arquivo?: { bytes: Uint8Array; mime: string; nome: string } | null;
+  /** pino do mapa (tipo "localizacao") */
+  localizacao?: { latitude: number; longitude: number; nome?: string; endereco?: string } | null;
 };
 
 export type ResultadoEnvio = { externoId: string | null; status: "sent" | "failed"; erro?: string };

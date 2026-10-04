@@ -119,3 +119,26 @@ export async function enviarMidiaDaIa(p: { conversaId: number; telefone: string;
   await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: `[${p.tipo === "foto" ? "foto" : "vídeo"}] ${p.legenda}`, aprovada: true, enviada, motivo: enviada ? null : "falha_envio", violacoes: [], promptVersoes: await versoesEmUso(), modelo: MODELO_IA });
   return { enviada, explicacao: erro };
 }
+
+/* Pino do mapa da loja, depois de a IA marcar a visita (pedido do usuário, 03/10/2026: link do Google Maps
+   da loja). Mesmas travas do texto; conversa simulada fica só no chat. */
+export async function enviarLocalizacaoDaIa(p: { conversaId: number; telefone: string; local: { latitude: number; longitude: number; nome: string; endereco: string }; origem: string; simulado?: boolean }): Promise<{ enviada: boolean; explicacao: string | null }> {
+  const controle = await lerControle();
+  if (!controle.ligada || !controle.permissoes.enviarMensagem) return { enviada: false, explicacao: "a IA não tem permissão de envio" };
+  const [cv] = await db.select({ demo: schema.conversas.demo }).from(schema.conversas).where(eq(schema.conversas.id, p.conversaId)).limit(1);
+  const simulado = !!p.simulado || !!cv?.demo;
+  let externoId: string | null = null;
+  let erro: string | null = null;
+  if (!simulado) {
+    const env = await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "localizacao", localizacao: p.local });
+    externoId = env.externoId;
+    if (env.status === "failed") erro = env.erro ?? "o WhatsApp recusou o envio";
+  }
+  const conteudo = `${p.local.nome} — ${p.local.endereco}`;
+  if (!erro) {
+    await db.insert(schema.mensagens).values({ conversaId: p.conversaId, direcao: "outgoing", autor: "ia", tipo: "localizacao", conteudo, status: "sent", externoId, metadados: { latitude: p.local.latitude, longitude: p.local.longitude } });
+    await db.update(schema.conversas).set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: `Localização: ${p.local.nome}`, ultimaMensagemDirecao: "outgoing" }).where(eq(schema.conversas.id, p.conversaId));
+  }
+  await db.insert(schema.iaExecucoes).values({ conversaId: p.conversaId, origem: p.origem, texto: `[localização] ${conteudo}`, aprovada: true, enviada: !erro, motivo: erro ? "falha_envio" : null, violacoes: [], promptVersoes: await versoesEmUso(), modelo: MODELO_IA });
+  return { enviada: !erro, explicacao: erro };
+}

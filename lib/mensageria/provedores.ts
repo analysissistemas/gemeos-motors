@@ -122,6 +122,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       else if (pedido.tipo === "video") Object.assign(corpo, { type: "video", video: { id: up.id, caption: pedido.conteudo ?? undefined } });
       else Object.assign(corpo, { type: "document", document: { id: up.id, filename: pedido.midia?.nome ?? pedido.arquivo?.nome ?? undefined, caption: pedido.conteudo ?? undefined } });
     }
+    else if (pedido.tipo === "localizacao" && pedido.localizacao)
+      Object.assign(corpo, { type: "location", location: { latitude: pedido.localizacao.latitude, longitude: pedido.localizacao.longitude, name: pedido.localizacao.nome, address: pedido.localizacao.endereco } });
     else return { externoId: null, status: "failed", erro: `Tipo ${pedido.tipo} ainda não suportado no envio real` };
 
     const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {

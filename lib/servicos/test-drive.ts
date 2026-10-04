@@ -104,15 +104,16 @@ async function buscar(tx: Tx | typeof db, testDriveId: number) {
 }
 
 /* Anota no chat e na linha do tempo do negócio, quando o test drive tem os dois. */
-async function anotar(tx: Tx, td: { conversaId: number | null; negocioId: number | null }, u: Quem, texto: string) {
+async function anotar(tx: Tx, td: { conversaId: number | null; negocioId: number | null }, u: Quem | null, texto: string) {
   if (td.conversaId) {
-    await mensagemSistema(tx, td.conversaId, `${texto} (por ${u.nome})`);
+    await mensagemSistema(tx, td.conversaId, `${texto} (${u ? `por ${u.nome}` : "pela IA"})`);
     await tx.update(schema.conversas).set({ atualizadoEm: new Date() }).where(eq(schema.conversas.id, td.conversaId));
   }
-  if (td.negocioId) await tx.insert(schema.negocioEventos).values({ negocioId: td.negocioId, tipo: "test_drive", descricao: texto, usuarioId: u.id });
+  if (td.negocioId) await tx.insert(schema.negocioEventos).values({ negocioId: td.negocioId, tipo: "test_drive", descricao: texto, usuarioId: u?.id ?? null });
 }
 
-export async function criarTestDrive(u: Quem, entrada: unknown) {
+/** `u` null = agendado pela IA no WhatsApp (pedido do dono, 03/10/2026), com a mesma regra de conflito da equipe. */
+export async function criarTestDrive(u: Quem | null, entrada: unknown) {
   const d = esquemaTestDrive.parse(entrada);
   conferirFuturo(d.agendadoPara);
 
@@ -180,9 +181,9 @@ export async function criarTestDrive(u: Quem, entrada: unknown) {
         veiculoId: d.veiculoId,
         veiculoDescricao: descricao,
         agendadoPara: d.agendadoPara,
-        responsavelId: responsavelId ?? u.id,
+        responsavelId: responsavelId ?? u?.id ?? null,
         observacoes: d.observacoes,
-        criadoPor: u.id,
+        criadoPor: u?.id ?? null,
       })
       .returning({ id: schema.testDrives.id });
     await anotar(tx, { conversaId: d.conversaId, negocioId }, u, `Test drive agendado: ${descricao}, ${dataHora(d.agendadoPara)}`);

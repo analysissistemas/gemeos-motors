@@ -7,6 +7,8 @@
    - compra: falou de moto, modelo, preço, pagamento, estoque. Aí sim a IA apresenta as motos.
    - null: só cumprimentou ou só disse o nome. A IA pergunta o que ele precisa, sem falar de produto. */
 
+import { RX_QUER_VISITAR } from "./agenda.ts";
+
 export type Intencao = "compra" | "assistencia";
 
 const RX_ASSISTENCIA =
@@ -29,7 +31,7 @@ function citaModelo(texto: string, nomesDeModelos: string[]) {
 /** A intenção que o próprio texto do cliente mostra (assistência ganha de compra: "minha moto deu defeito"). */
 export function intencaoDoTexto(texto: string, nomesDeModelos: string[] = []): Intencao | null {
   if (RX_ASSISTENCIA.test(texto)) return "assistencia";
-  if (RX_COMPRA.test(texto) || citaModelo(texto, nomesDeModelos)) return "compra";
+  if (RX_COMPRA.test(texto) || RX_QUER_VISITAR.test(texto) || citaModelo(texto, nomesDeModelos)) return "compra";
   return null;
 }
 

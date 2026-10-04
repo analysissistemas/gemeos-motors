@@ -11,11 +11,13 @@
    - escolheu_entrega / escolheu_retirada: respondeu a pergunta "retirar ou entrega?"
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
-export type Momento = "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
+
+export type Momento = "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
 /** Nestes momentos a IA não passa a conversa ao vendedor por conta própria: o fechamento segue até os dados
  *  chegarem (aí o sistema passa). Só passa antes se o cliente pedir uma pessoa. */
-export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
+export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["quer_visitar", "informou_visita", "interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
 export const RX_PEDE_PESSOA = /(?<![\p{L}])(atendente|humano|pessoa|vendedor|gerente|falar com (algu[eé]m|voc[eê]s|o dono)|ligar|liga pra mim)(?![\p{L}])/iu;
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -37,7 +39,7 @@ const RX_DUVIDA =
 const RX_INTERESSE = /(?<![a-z])(quero|queria|interess\w*|comprar|compra|preco|valor|quanto|condic\w*|pagamento|parcel\w*|a vista|pix|cartao|disponivel|tem (a|o|essa|esse))(?![a-z])/;
 
 /** Em que momento da compra o cliente está, pela mensagem dele e pela última mensagem da loja. */
-export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean }): Momento | null {
+export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
   /* respondendo a lista de dados */
@@ -52,6 +54,10 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (entrega && !retirada) return "escolheu_entrega";
     if (retirada && !entrega) return "escolheu_retirada";
   }
+  /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
+  const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
+  if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
+  if (RX_QUER_VISITAR.test(p.textoCliente)) return dh.temDia && dh.temHora ? "informou_visita" : "quer_visitar";
   /* respondeu quantos km roda, depois do "me fala os km que eu faço a conta da economia" */
   if (/econom/.test(loja) && /km/.test(loja) && /(?<!\d)\d{1,4}\s*(km|quil)/.test(t)) return "informou_km";
   if (RX_PRECO_OBJ.test(t)) return "objecao_preco";
@@ -70,6 +76,10 @@ export const PERGUNTAS_FALTA = [
 export const PERGUNTAS_ENTREGA_OU_RETIRADA = [
   "Você prefere retirar aqui na loja ou receber por entrega? 😊",
   "Prefere vir buscar aqui na loja ou que a gente entregue pra você? 🛵",
+];
+export const PERGUNTAS_VISITA = [
+  "Qual dia e horário fica melhor pra você vir? 😊",
+  "Que dia e horário fica bom pra você vir aqui na loja? 🛵",
 ];
 export const PERGUNTAS_KM = [
   "Quantos km você roda por dia, mais ou menos? Assim te mostro quanto você vai economizar 💰",
@@ -148,6 +158,12 @@ O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima
     case "objecao_preco":
       return `# MOMENTO DA COMPRA
 O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
+    case "quer_visitar":
+      return `# MOMENTO DA COMPRA
+O cliente quer vir à loja (visita ou test drive). Ótimo! Responda com entusiasmo e pergunte só qual dia e horário fica melhor para ele vir. Não diga que já agendou: o sistema agenda quando ele responder.`;
+    case "informou_visita":
+      return `# MOMENTO DA COMPRA
+O cliente disse quando vem à loja. O sistema agenda e confirma: escreva só uma frase curta e calorosa, sem perguntas e sem dizer o horário.`;
     case "informou_km":
       return `# MOMENTO DA COMPRA
 O cliente disse quanto roda. A conta da economia é a CONTA DO CLIENTE que já vem pronta no catálogo: use só esses números, nunca faça conta. Termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?".`;

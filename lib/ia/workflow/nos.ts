@@ -6,12 +6,15 @@ import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
 import { consultarEstoque } from "@/lib/ia/estoque";
 import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
-import { enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
+import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
+import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { criarTestDrive } from "@/lib/servicos/test-drive";
+import { ErroRegra } from "@/lib/acao";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
-import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario } from "@/lib/ia/horario";
+import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario, textoHorario, type HorarioLoja } from "@/lib/ia/horario";
 import { fatosDoEstoque, INSTRUCOES_INTERPRETAR, INSTRUCOES_REDIGIR, montarEntrada } from "@/lib/ia/modelo-openai";
 import { executarFluxo } from "@/lib/ia/fluxo";
 import {
@@ -32,7 +35,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -114,6 +117,10 @@ export type CtxWorkflow = {
   intencao: Intencao | null;
   /** a conversa passou (ou vai passar, ao abrir a loja) para a equipe: o card vai para Aguardando equipe */
   aguardaEquipe: boolean;
+  /** visita/test drive que a IA acabou de marcar (o card vai para Visita / test drive) */
+  visitaAgendada: Date | null;
+  /** manda o pino do mapa da loja depois do texto */
+  mandarLocal: boolean;
   /** última mensagem da loja (IA ou vendedor), para saber a que pergunta o cliente está respondendo */
   ultimaDaLoja: string;
 };
@@ -294,6 +301,9 @@ async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
     const motivo = c.momento === "mandou_dados" ? `o cliente mandou os dados para fechar${modelo ? ` a ${modelo}` : ""}` : (c.motivoTransferencia ?? "a conversa passou para a equipe");
     const r = await avancarEtapaPelaIa(negocioId, "equipe", motivo.slice(0, 200));
     if (r.mudou) feito.push("Aguardando equipe");
+  } else if (c.visitaAgendada) {
+    const r = await avancarEtapaPelaIa(negocioId, "visita", `${modelo ? `test drive da ${modelo}` : "visita à loja"} marcado para ${quandoPorExtenso(c.visitaAgendada)}`);
+    if (r.mudou) feito.push("Visita / test drive");
   } else if (c.intencao === "compra" && modelo) {
     const r = await avancarEtapaPelaIa(negocioId, "interessado", `interesse na ${modelo}`);
     if (r.mudou) feito.push("Interessado");
@@ -308,6 +318,51 @@ async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
     if (ligada) feito.push(`ligado à ${ligada}`);
   }
   return feito.length ? feito : null;
+}
+
+/** "segunda a sábado, das 8h às 18h" a partir do horário da loja (tela da IA). */
+function horarioCurto(h: HorarioLoja) {
+  return textoHorario(h)
+    .split("\n")
+    .map((l) => /^(.+?): das (.+?) às (.+?) \(/.exec(l))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => `${m[1].toLowerCase()}, das ${m[2]} às ${m[3]}`)
+    .join(" e ");
+}
+
+/* Visita / test drive marcado pela IA (pedido do dono, 03/10/2026). Usa o mesmo serviço da equipe (conflito
+   de horário, histórico, conversa). Nunca diz que marcou sem ter marcado: falta dia ou hora, horário fora
+   do funcionamento ou ocupado, ele pergunta de novo. */
+async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; nome: string | null; horario: HorarioLoja }): Promise<{ texto: string; quando: Date | null; erro?: string }> {
+  const dh = dataHoraDaVisita(c.textoBuffer);
+  const funciona = horarioCurto(p.horario);
+  if (!dh.temDia) return { texto: `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
+  if (!dh.temHora || !dh.quando) return { texto: `Show! E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
+  const quando = dh.quando;
+  if (quando.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou 😅 Qual outro dia e horário fica bom pra você?", quando: null };
+  /* a loja precisa estar aberta na hora marcada e meia hora depois */
+  if (!lojaAberta(p.horario, quando) || !lojaAberta(p.horario, new Date(quando.getTime() + 30 * 60_000)))
+    return { texto: `Nesse horário a loja está fechada 😕 Funcionamos ${funciona}. Qual outro horário fica bom pra você?`, quando: null };
+  let modeloId: number | null = null;
+  if (p.modelo) {
+    const [m] = await db.select({ id: schema.modelos.id }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${p.modelo.toLowerCase()}`).limit(1);
+    modeloId = m?.id ?? null;
+  }
+  try {
+    await criarTestDrive(null, {
+      conversaId: c.conversaId,
+      modeloId,
+      veiculoDescricao: modeloId ? undefined : p.modelo ?? "Visita à loja",
+      agendadoPara: quando,
+      observacoes: "Marcado pela IA no WhatsApp.",
+    });
+  } catch (e) {
+    if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado 😕 Pode ser um pouco antes ou depois?", quando: null, erro: e.message };
+    throw e;
+  }
+  const quem = p.nome ? `, ${p.nome}` : "";
+  const moto = p.modelo ? ` A *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
+  return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}`, quando };
 }
 
 /* Dados do pedido no CRM (pedido do dono, 03/10/2026: "o objetivo da IA é pegar essas informações e
@@ -539,6 +594,8 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
     case "informou_km":
       /* a conta certa já entrou (garantirEconomia); a conversa volta para o fechamento */
       return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
+    case "quer_visitar":
+      return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
     case "escolheu_entrega":
       return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento })];
     case "escolheu_retirada":
@@ -818,7 +875,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const nomesCat = (await nomesDoCatalogo()).map((nome) => ({ nome }));
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
     const ultimaDaLoja = ultimaDaLojaNoHistorico(c.memoria.historico);
-    const momento = intencao === "compra" ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa }) : null;
+    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja);
+    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -878,6 +936,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const midiaPedida = midia ? { modelo: midia.modelo?.nome ?? null, pedido: midia.pedido, vai: midia.itens.map((i) => i.tipo) } : null;
     /* o cliente mandou os dados para fechar (com CPF): agradece e passa ao vendedor, que confere e confirma
        (P12/P18). O texto é fixo: não repete dado pessoal nem diz que a compra está concluída. */
+    /* o cliente disse quando vem à loja: o sistema marca na agenda de test drive (mesma regra de conflito
+       da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
+    if (momento === "informou_visita") {
+      const v = await agendarVisitaPelaIa(c, { modelo: modeloDaConversa, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), horario });
+      /* texto do sistema, com endereço oficial: isento da trava de fatos como o texto do catálogo */
+      const pipe = { ...r.ctx, texto: v.texto, textoCatalogo: v.texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, visitaAgendada: v.quando, mandarLocal: !!v.quando, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, visita: v } };
+    }
     if (momento === "mandou_dados") {
       const modo = pediuDadosDeRetirada(ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
@@ -1133,7 +1199,18 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const falhas = midias.filter((x) => !x.enviada);
       if (falhas.length) await mensagemSistema(db, c.conversaId, `A IA não conseguiu mandar ${falhas.map((x) => (x.tipo === "foto" ? "a foto" : "o vídeo")).join(" e ")} da ${c.midia.modelo?.nome ?? "moto"} (${falhas[0].erro ?? "erro"}). Mande à mão, se o cliente ainda quiser.`);
     }
-    return { ctx: { indice: c.indice + 1, enviados: c.enviados + 1 }, entrada: { texto }, saida: { enviada: true, citou: c.indice === c.citar, simulado: c.simulado, ...(midias.length ? { midias } : {}) } };
+    /* visita marcada: depois do texto, o pino do mapa da loja */
+    let local: { enviada: boolean; erro: string | null } | null = null;
+    if (c.indice === c.blocos.length - 1 && c.mandarLocal) {
+      try {
+        const l = await enviarLocalizacaoDaIa({ conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, local: LOCAL_LOJA, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo });
+        local = { enviada: l.enviada, erro: l.explicacao };
+      } catch (e) {
+        local = { enviada: false, erro: e instanceof Error ? e.message : String(e) };
+      }
+      if (!local.enviada) await mensagemSistema(db, c.conversaId, `A IA não conseguiu mandar a localização da loja (${local.erro ?? "erro"}). Mande à mão, se precisar.`);
+    }
+    return { ctx: { indice: c.indice + 1, enviados: c.enviados + 1 }, entrada: { texto }, saida: { enviada: true, citou: c.indice === c.citar, simulado: c.simulado, ...(midias.length ? { midias } : {}), ...(local ? { localizacao: local } : {}) } };
   },
 
   final: (c) => ({ fim: "sucesso", detalhe: c.enviados ? `${c.enviados} mensagem(ns) enviada(s)` : "Nada a enviar", saida: { enviados: c.enviados, transferida: !!c.pipe?.humano } }),
