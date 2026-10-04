@@ -6,7 +6,7 @@ import { autorizar } from "@/lib/auth/dal";
 import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { esquemaVeiculo } from "@/lib/validacao";
-import { ehEletrico, pode, STATUS_VEICULO } from "@/lib/dominio";
+import { ehEletrico, ETAPAS_ABERTAS, pode, STATUS_VEICULO } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
 import { dispararFollowUpsDeEstoque } from "@/lib/servicos/interesses";
 
@@ -189,7 +189,7 @@ export async function ajustarGrupoVeiculos(entrada: { ids: number[]; quantidade:
     const abertos = await db
       .select({ veiculoId: schema.negocios.veiculoId })
       .from(schema.negocios)
-      .where(and(inArray(schema.negocios.veiculoId, ids), inArray(schema.negocios.etapa, ["whatsapp", "proposta", "negociando"])));
+      .where(and(inArray(schema.negocios.veiculoId, ids), inArray(schema.negocios.etapa, ETAPAS_ABERTAS)));
     const comNegocio = new Set(abertos.map((a) => a.veiculoId));
     /* sai primeiro: sem negociação, sem chassi, a mais nova */
     const ordemSaida = [...linhas].sort((a, b) => Number(comNegocio.has(a.id)) - Number(comNegocio.has(b.id)) || Number(!!a.chassi) - Number(!!b.chassi) || b.id - a.id);

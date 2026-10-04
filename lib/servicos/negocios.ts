@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, schema, type Tx } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
-import { ETAPAS_ABERTAS, FORMAS_PAGAMENTO, MOTIVOS_PERDA, rotuloEtapa, type Etapa } from "@/lib/dominio";
+import { ETAPAS_ABERTAS, ETAPAS_DA_IA, FORMAS_PAGAMENTO, iaPodeAvancar, MOTIVOS_PERDA, rotuloEtapa, type Etapa } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
 import { esquemaNegocio, esquemaPagamento, esquemaPerda } from "@/lib/validacao";
 import { diagnosticarPerda } from "@/lib/ia/diagnosticos";
@@ -51,7 +51,7 @@ export async function criarNegocio(u: Quem | null, entrada: unknown, extra?: { d
         triagemIa: extra?.triagemIa ?? null,
       })
       .returning({ id: schema.negocios.id });
-    await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "criado", descricao: extra?.evento ?? (u ? "Negócio criado em \"Chegou no WhatsApp\"" : "Negócio criado pela triagem da IA"), usuarioId: u?.id ?? null });
+    await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "criado", descricao: extra?.evento ?? (u ? "Negócio criado em \"Novo contato\"" : "Negócio criado pela triagem da IA"), usuarioId: u?.id ?? null });
     if (d.valorProposta)
       await tx.insert(schema.negocioEventos).values({ negocioId: novo.id, tipo: "proposta", descricao: `Proposta registrada: ${brl(d.valorProposta)}`, usuarioId: u?.id ?? null });
     await registrarLog(u, { acao: "negocio.criado", entidade: "negocio", entidadeId: novo.id, descricao: `Criou o negócio "${cli.nome}"` }, tx);
@@ -115,6 +115,25 @@ export async function moverEtapa(u: Quem, id: number, etapa: Etapa) {
     const nome = await nomeNegocio(tx, id);
     await registrarLog(u, { acao: "negocio.movido", entidade: "negocio", entidadeId: id, descricao: `Moveu o negócio "${nome}" de "${rotuloEtapa(antes.etapa)}" para "${rotuloEtapa(etapa)}"`, dados: { de: antes.etapa, para: etapa } }, tx);
     await anotarNegocioNaConversa(tx, id, `Negócio: ${rotuloEtapa(antes.etapa)} → ${rotuloEtapa(etapa)} (por ${u.nome})`);
+    return { mudou: true };
+  });
+}
+
+/* A IA move o card sozinha (pedido do dono, 03/10/2026: "o card do cliente interessado que a IA consegue
+   mover sozinha"). Só para frente e só entre as colunas dela (ETAPAS_DA_IA: Novo contato → Interessado →
+   Visita / test drive → Aguardando equipe). Card que a equipe já levou adiante, ou fechado/perdido, ela não
+   mexe. Fica no histórico do negócio, no log e na conversa, com o motivo. */
+export async function avancarEtapaPelaIa(negocioId: number, destino: Etapa, motivo: string) {
+  if (!ETAPAS_DA_IA.includes(destino)) return { mudou: false };
+  return db.transaction(async (tx) => {
+    const [antes] = await tx.select({ etapa: schema.negocios.etapa }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
+    if (!antes || !iaPodeAvancar(antes.etapa, destino)) return { mudou: false };
+    await tx.update(schema.negocios).set({ etapa: destino, etapaDesde: new Date(), atualizadoEm: new Date() }).where(eq(schema.negocios.id, negocioId));
+    const texto = `Movido de "${rotuloEtapa(antes.etapa)}" para "${rotuloEtapa(destino)}" pela IA: ${motivo}`;
+    await tx.insert(schema.negocioEventos).values({ negocioId, tipo: "etapa", descricao: texto, usuarioId: null, dados: { de: antes.etapa, para: destino, ia: true } });
+    const nome = await nomeNegocio(tx, negocioId);
+    await registrarLog(null, { acao: "negocio.movido", entidade: "negocio", entidadeId: negocioId, descricao: `A IA moveu o negócio "${nome}" de "${rotuloEtapa(antes.etapa)}" para "${rotuloEtapa(destino)}" (${motivo})` }, tx);
+    await anotarNegocioNaConversa(tx, negocioId, `Negócio: ${rotuloEtapa(antes.etapa)} → ${rotuloEtapa(destino)} (pela IA: ${motivo})`);
     return { mudou: true };
   });
 }

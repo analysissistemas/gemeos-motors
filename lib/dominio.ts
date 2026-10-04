@@ -49,15 +49,28 @@ export function pode(papel: string | undefined, p: Permissao) {
 }
 
 /* ---------- funil ---------- */
+/* Funil (03/10/2026): as 4 primeiras colunas a IA move sozinha, só para frente (ETAPAS_DA_IA);
+   daí em diante quem move é a equipe. "whatsapp" continua sendo o id da primeira, agora "Novo contato". */
 export const ETAPAS = [
-  { id: "whatsapp", rotulo: "Chegou no WhatsApp", curto: "WhatsApp" },
+  { id: "whatsapp", rotulo: "Novo contato", curto: "Novo" },
+  { id: "interessado", rotulo: "Interessado", curto: "Interessado" },
+  { id: "visita", rotulo: "Visita / test drive", curto: "Visita" },
+  { id: "equipe", rotulo: "Aguardando equipe", curto: "Equipe" },
   { id: "proposta", rotulo: "Proposta enviada", curto: "Proposta" },
   { id: "negociando", rotulo: "Negociando / troca", curto: "Negociando" },
   { id: "fechada", rotulo: "Venda fechada", curto: "Fechada" },
   { id: "perdida", rotulo: "Venda perdida", curto: "Perdida" },
 ] as const;
 export type Etapa = (typeof ETAPAS)[number]["id"];
-export const ETAPAS_ABERTAS: Etapa[] = ["whatsapp", "proposta", "negociando"];
+export const ETAPAS_ABERTAS: Etapa[] = ["whatsapp", "interessado", "visita", "equipe", "proposta", "negociando"];
+/** Colunas que a IA move sozinha, sempre para frente; card que a equipe levou além delas, a IA não mexe. */
+export const ETAPAS_DA_IA: Etapa[] = ["whatsapp", "interessado", "visita", "equipe"];
+/** A IA pode levar o card de `atual` para `destino`? Só para frente e só entre as colunas dela. */
+export function iaPodeAvancar(atual: string, destino: Etapa) {
+  const de = ETAPAS_DA_IA.indexOf(atual as Etapa);
+  const para = ETAPAS_DA_IA.indexOf(destino);
+  return de >= 0 && para > de;
+}
 export const rotuloEtapa = (e: string) => ETAPAS.find((x) => x.id === e)?.rotulo ?? e;
 
 export const MOTIVOS_PERDA = {

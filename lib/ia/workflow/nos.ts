@@ -35,7 +35,7 @@ import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
-import { criarNegocio } from "@/lib/servicos/negocios";
+import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
 import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead, triagemDosFatos } from "@/lib/ia/qualificacao";
@@ -46,6 +46,7 @@ import type { ImplNo } from "./motor";
 import { corNoTexto, formatarHistorico, RX_PERGUNTA_NOME, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
+import { ETAPAS_ABERTAS } from "@/lib/dominio";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 /* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
@@ -108,6 +109,10 @@ export type CtxWorkflow = {
   momento: Momento | null;
   /** a moto de que a conversa trata (a última que o cliente citou) */
   modeloDaConversa: string | null;
+  /** o que o cliente quer: compra, assistência ou ainda não disse */
+  intencao: Intencao | null;
+  /** a conversa passou (ou vai passar, ao abrir a loja) para a equipe: o card vai para Aguardando equipe */
+  aguardaEquipe: boolean;
   /** última mensagem da loja (IA ou vendedor), para saber a que pergunta o cliente está respondendo */
   ultimaDaLoja: string;
 };
@@ -237,7 +242,7 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
       const [aberto] = await db
         .select({ id: schema.negocios.id })
         .from(schema.negocios)
-        .where(and(eq(schema.negocios.clienteId, clienteId), sql`${schema.negocios.etapa} in ('whatsapp','proposta','negociando')`))
+        .where(and(eq(schema.negocios.clienteId, clienteId), sql`${schema.negocios.etapa} in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)})`))
         .orderBy(desc(schema.negocios.criadoEm))
         .limit(1);
       negocioId = aberto?.id ?? null;
@@ -274,6 +279,57 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
   if (virouQuente) feito.push("marcou o lead como quente");
   if (feito.length) await mensagemSistema(db, cv.id, `A IA ${feito.join(", ")}${virouQuente ? "" : ` (lead ${ROTULO_TEMPERATURA[temperatura].toLowerCase()})`}.`, { triagem: true });
   return { clienteId, negocioId, temperatura, feito };
+}
+
+/* Funil conectado à IA (pedido do dono, 03/10/2026): o card anda sozinho com a conversa, só para frente e
+   só nas colunas da IA (avancarEtapaPelaIa confere). Interesse num modelo → Interessado; dados enviados
+   para fechar → Aguardando equipe. Quem decide comprar tem o negócio ligado a uma unidade do estoque
+   (sem reservar: quem separa é a equipe). */
+async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
+  if (!negocioId) return null;
+  const feito: string[] = [];
+  const modelo = c.modeloDaConversa;
+  if (c.momento === "mandou_dados" || c.aguardaEquipe) {
+    const motivo = c.momento === "mandou_dados" ? `o cliente mandou os dados para fechar${modelo ? ` a ${modelo}` : ""}` : (c.motivoTransferencia ?? "a conversa passou para a equipe");
+    const r = await avancarEtapaPelaIa(negocioId, "equipe", motivo.slice(0, 200));
+    if (r.mudou) feito.push("Aguardando equipe");
+  } else if (c.intencao === "compra" && modelo) {
+    const r = await avancarEtapaPelaIa(negocioId, "interessado", `interesse na ${modelo}`);
+    if (r.mudou) feito.push("Interessado");
+  }
+  if (modelo) {
+    const [n] = await db.select({ veiculoInteresse: schema.negocios.veiculoInteresse }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
+    if (n && !n.veiculoInteresse) await db.update(schema.negocios).set({ veiculoInteresse: modelo }).where(eq(schema.negocios.id, negocioId));
+  }
+  const decidiu = ["decidido", "escolheu_entrega", "escolheu_retirada", "dados_parciais", "mandou_dados"].includes(c.momento ?? "");
+  if (decidiu && modelo && !c.conversa?.demo) {
+    const ligada = await ligarMotoDoEstoque(negocioId, modelo);
+    if (ligada) feito.push(`ligado à ${ligada}`);
+  }
+  return feito.length ? feito : null;
+}
+
+/** Liga o negócio a uma unidade disponível do modelo que ainda não está em outra negociação aberta. */
+async function ligarMotoDoEstoque(negocioId: number, modeloNome: string) {
+  const [neg] = await db.select({ veiculoId: schema.negocios.veiculoId, valorAnunciado: schema.negocios.valorAnunciado }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
+  if (!neg || neg.veiculoId) return null;
+  const v = schema.veiculos;
+  const [mod] = await db.select({ id: schema.modelos.id }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${modeloNome.toLowerCase()}`).limit(1);
+  const doModelo = mod ? sql`(${v.modeloId} = ${mod.id} or (${v.modeloId} is null and lower(trim(${v.modelo})) = ${modeloNome.toLowerCase()}))` : sql`lower(trim(${v.modelo})) = ${modeloNome.toLowerCase()}`;
+  const unidades = await db
+    .select({ id: v.id, cor: v.cor, valor: v.valorAnunciado })
+    .from(v)
+    .where(and(eq(v.status, "disponivel"), eq(v.teste, false), doModelo, sql`not exists (select 1 from negocios n where n.veiculo_id = ${v.id} and n.id <> ${negocioId} and n.etapa in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)}))`))
+    .orderBy(v.id)
+    .limit(1);
+  const livre = unidades[0];
+  if (!livre) return null;
+  const descricao = `${modeloNome}${livre.cor ? ` ${livre.cor}` : ""}`;
+  await db.transaction(async (tx) => {
+    await tx.update(schema.negocios).set({ veiculoId: livre.id, valorAnunciado: neg.valorAnunciado ?? livre.valor, atualizadoEm: new Date() }).where(eq(schema.negocios.id, negocioId));
+    await tx.insert(schema.negocioEventos).values({ negocioId, tipo: "veiculo", descricao: `A IA ligou o negócio à unidade ${descricao} do estoque (sem reservar)`, usuarioId: null, dados: { veiculoId: livre.id, ia: true } });
+  });
+  return descricao;
 }
 
 /* Roda a trava de fatos e o validador sobre a resposta; se barrariam, devolve a instrução de correção. */
@@ -740,14 +796,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
       const pipe = { ...r.ctx, texto: textoDadosRecebidos({ nome, modelo: modeloDaConversa, modo, lojaAberta: aberta }), humano: true, motivo: "modelo_pediu_transferencia" as const };
       const motivo = `Fechamento: o cliente mandou os dados para ${modo === "retirada" ? "retirar na loja" : "entrega"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir os dados e combinar com ele ${modo === "retirada" ? "a separação e o horário da retirada" : "o melhor horário da entrega"}.`;
-      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
     }
     /* no meio do fechamento a IA não passa ao vendedor por conta própria (o teste de 03/10 mostrou ela passando
        logo depois do "entrega"): o sistema passa quando os dados chegam. Cliente que pede uma pessoa, passa. */
     let pipe = r.ctx;
     const segurou = !!momento && MOMENTOS_SEM_TRANSFERIR.includes(momento) && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !!pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA && !RX_PEDE_PESSOA.test(c.textoBuffer);
     if (segurou) pipe = { ...pipe, humano: false, motivo: null };
-    return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
+    return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
   },
 
   trava_fatos: async (c) => {
@@ -797,12 +853,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       /* fora do horário ninguém vai continuar agora: nada de "já estou te encaminhando" */
       const emAndamento = !!c.memoria.historico?.includes("Agente IA:") || !!c.memoria.historico?.includes("Vendedor:");
       const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : emAndamento ? TEXTO_CONFIRMAR : TEXTO_FORA_HORARIO;
-      return { ctx: { pipe: { ...pipe, texto, humano: false } }, saida: { transferida: false, motivo: "fora do horário: a IA segue e a equipe assume ao abrir", avisoAoCliente: texto } };
+      return { ctx: { pipe: { ...pipe, texto, humano: false }, aguardaEquipe: true }, saida: { transferida: false, motivo: "fora do horário: a IA segue e a equipe assume ao abrir", avisoAoCliente: texto } };
     }
     /* trava de segurança sempre passa para humano; pedido da IA só com a permissão marcada */
     if (pedidoDaIa && !controle.permissoes.transferirHumano) {
       await mensagemSistema(db, c.conversaId, `A IA sugere passar para um vendedor: ${c.motivoTransferencia ?? "sinal de fechamento"}. (Permissão "Transferir para um vendedor" desligada.)`);
-      return { saida: { transferida: false, motivo: "permissão de transferência desligada; ficou só o aviso" } };
+      return { ctx: { aguardaEquipe: true }, saida: { transferida: false, motivo: "permissão de transferência desligada; ficou só o aviso" } };
     }
     const cv = c.conversa!;
     let negocioId = cv.negocioId;
@@ -816,7 +872,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       }
     });
     const texto = pipe.texto ?? (pedidoDaIa ? TEXTO_TRANSFERENCIA : null);
-    return { ctx: { pipe: { ...pipe, texto } }, saida: { transferida: true, status: "HUMANO", motivo: c.motivoTransferencia, resumo, negocio: negocioId, avisoAoCliente: texto } };
+    return { ctx: { pipe: { ...pipe, texto }, aguardaEquipe: true }, saida: { transferida: true, status: "HUMANO", motivo: c.motivoTransferencia, resumo, negocio: negocioId, avisoAoCliente: texto } };
   },
 
   memoria_salva: async (c) => {
@@ -825,12 +881,16 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     await gravarMemoria(c.conversaId, { fatos, resumo });
     /* qualificação automática: nunca pode impedir a resposta ao cliente */
     let qualificacao: unknown = null;
+    let funil: unknown = null;
     try {
-      qualificacao = await qualificarLead(c, fatos, resumo);
+      const q = await qualificarLead(c, fatos, resumo);
+      qualificacao = q;
+      /* funil conectado: o card anda com a conversa (nunca pode impedir a resposta ao cliente) */
+      funil = await conectarFunil(c, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
     }
-    return { saida: { fatos, resumo, qualificacao } };
+    return { saida: { fatos, resumo, qualificacao, funil } };
   },
 
   blocos: async (c) => {

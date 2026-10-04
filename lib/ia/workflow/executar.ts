@@ -45,6 +45,8 @@ export async function rodarWorkflowAtendimento(p: { conversaId: number; mensagem
     enviados: 0,
     midia: null,
     momento: null,
+    intencao: null,
+    aguardaEquipe: false,
     modeloDaConversa: null,
     ultimaDaLoja: "",
   };

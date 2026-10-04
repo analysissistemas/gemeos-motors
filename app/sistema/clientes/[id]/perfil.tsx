@@ -12,6 +12,7 @@ import {
   STATUS_CONVERSA,
   STATUS_VENDA,
   TIPOS_OS,
+  ETAPAS_ABERTAS,
   rotuloEtapa,
   rotuloStatusOs,
 } from "@/lib/dominio";
@@ -42,7 +43,7 @@ export function PerfilClienteTela({
   const [interacao, setInteracao] = useState(false);
   const router = useRouter();
 
-  const abertos = perfil.negocios.filter((n) => ["whatsapp", "proposta", "negociando"].includes(n.etapa));
+  const abertos = perfil.negocios.filter((n) => (ETAPAS_ABERTAS as string[]).includes(n.etapa));
   const vendasFinal = perfil.vendas.filter((v) => v.status === "finalizada");
   const totalComprado = vendasFinal.reduce((s, v) => s + (v.valorVendido ?? 0), 0);
   const osAbertas = perfil.ordens.filter((o) => !["entregue", "cancelada"].includes(o.status));

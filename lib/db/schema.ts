@@ -221,7 +221,7 @@ export const negocios = pgTable(
     veiculoId: integer().references(() => veiculos.id, { onDelete: "set null" }),
     veiculoInteresse: text(),
     responsavelId: integer().references(() => usuarios.id, { onDelete: "set null" }),
-    etapa: text().notNull().default("whatsapp"), // whatsapp | proposta | negociando | fechada | perdida
+    etapa: text().notNull().default("whatsapp"), // whatsapp (Novo contato) | interessado | visita | equipe | proposta | negociando | fechada | perdida
     origem: text(),
     valorAnunciado: dinheiro(),
     valorProposta: dinheiro(),

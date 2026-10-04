@@ -54,7 +54,7 @@ export function FormularioNegocio({
       aberto={!!inicial}
       aoMudar={aoMudar}
       titulo={inicial?.id ? "Editar negócio" : "Novo negócio"}
-      descricao={inicial?.id ? "Mudança no valor da proposta fica no histórico." : "Entra na etapa “Chegou no WhatsApp”."}
+      descricao={inicial?.id ? "Mudança no valor da proposta fica no histórico." : "Entra na etapa “Novo contato”."}
       largura="lg"
     >
       {inicial && (

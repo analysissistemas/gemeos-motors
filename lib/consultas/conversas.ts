@@ -6,6 +6,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { lerConfigWorkflow } from "@/lib/ia/workflow/config";
 
 import type { FiltroConversa } from "./conversas.tipos";
+import { ETAPAS_ABERTAS } from "@/lib/dominio";
 export { FILTROS_CONVERSA, type FiltroConversa } from "./conversas.tipos";
 
 const POR_PAGINA = 40;
@@ -62,7 +63,7 @@ export async function listarConversas(f: { filtro?: FiltroConversa; q?: string; 
     case "em_atendimento": filtros.push(inArray(c.status, ["nova", "em_atendimento"])); break;
     case "aguardando_cliente": filtros.push(eq(c.status, "aguardando_cliente")); break;
     case "follow_up": filtros.push(sql`exists (select 1 from follow_ups f where f.conversa_id = ${c.id} and f.status = 'pendente')`); break;
-    case "negociando": filtros.push(inArray(n.etapa, ["whatsapp", "proposta", "negociando"])); break;
+    case "negociando": filtros.push(inArray(n.etapa, ETAPAS_ABERTAS)); break;
     case "fechada": filtros.push(eq(n.etapa, "fechada")); break;
     case "perdida": filtros.push(eq(n.etapa, "perdida")); break;
   }

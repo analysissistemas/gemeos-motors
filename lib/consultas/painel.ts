@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { FUSO } from "@/lib/formato";
+import { ETAPAS_ABERTAS } from "@/lib/dominio";
 
 export type Periodo = "hoje" | "7d" | "30d" | "mes" | "custom";
 
@@ -53,7 +54,7 @@ export async function carregarPainel(inicio: Date, fim: Date, verLucro: boolean)
     `),
     q<{ qtd: number; valor: number }>(sql`
       select count(*)::int as qtd, coalesce(sum(coalesce(valor_proposta, valor_anunciado)),0)::float as valor
-      from negocios where demo = false and etapa in ('whatsapp','proposta','negociando')
+      from negocios where demo = false and etapa in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)})
     `),
     q<{ periodo: string; vendas: number; faturamento: number }>(sql`
       with base as (
@@ -81,7 +82,7 @@ export async function carregarPainel(inicio: Date, fim: Date, verLucro: boolean)
     `),
     q<{ etapa: string; qtd: number }>(sql`
       select etapa, count(*)::int as qtd from negocios
-      where demo = false and (etapa in ('whatsapp','proposta','negociando') or (etapa = 'fechada' and fechado_em >= ${ini} and fechado_em < ${fi}) or (etapa = 'perdida' and perdido_em >= ${ini} and perdido_em < ${fi}))
+      where demo = false and (etapa in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)}) or (etapa = 'fechada' and fechado_em >= ${ini} and fechado_em < ${fi}) or (etapa = 'perdida' and perdido_em >= ${ini} and perdido_em < ${fi}))
       group by etapa
     `),
     q<{ motivo: string; qtd: number }>(sql`

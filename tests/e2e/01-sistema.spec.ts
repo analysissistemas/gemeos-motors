@@ -167,7 +167,7 @@ test("funil: cria negócio, arrasta de etapa e a mudança fica gravada", async (
   await expect(aviso(page, /criado/i)).toBeVisible();
   await page.keyboard.press("Escape");
 
-  const origem = page.getByRole("region", { name: "Chegou no WhatsApp" });
+  const origem = page.getByRole("region", { name: "Novo contato" });
   const destino = page.getByRole("region", { name: "Proposta enviada" });
   const cartao = origem.locator("article", { hasText: estado.veiculo });
   await expect(cartao).toBeVisible();

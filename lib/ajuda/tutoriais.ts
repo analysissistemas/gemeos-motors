@@ -107,7 +107,7 @@ export const TUTORIAIS: Tutorial[] = [
     tela: "/sistema/funil",
     resumo: "Criar negócio, mudar de etapa, fechar ou perder a venda.",
     passos: [
-      { texto: "Toque em \"Funil de vendas\". Cada coluna é uma etapa: Chegou no WhatsApp, Proposta enviada, Negociando / troca, Venda fechada e Venda perdida.", imagem: img("funil", 1), legenda: "Quadro do funil por etapa" },
+      { texto: "Toque em \"Funil de vendas\". Cada coluna é uma etapa: Novo contato, Interessado, Visita / test drive e Aguardando equipe (essas quatro a IA move sozinha, sempre para frente), depois Proposta enviada, Negociando / troca, Venda fechada e Venda perdida.", imagem: img("funil", 1), legenda: "Quadro do funil por etapa" },
       { texto: "Para criar, toque em \"Novo negócio\": escolha o cliente, o veículo de interesse, o valor anunciado e, se tiver, o valor da proposta e o veículo da troca. Salve." },
       { texto: "Para mudar de etapa no computador, arraste o cartão para outra coluna. No celular, toque no negócio e troque a \"Etapa\".", imagem: img("funil", 2), legenda: "Janela do negócio com a etapa" },
       { texto: "Levar para \"Venda fechada\" abre a janela \"Fechar venda\": escolha o veículo, confira o valor vendido e toque em \"Registrar venda\". Depois continue na tela da venda.", imagem: img("funil", 3), legenda: "Janela Fechar venda" },

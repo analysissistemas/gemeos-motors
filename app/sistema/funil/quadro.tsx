@@ -31,7 +31,7 @@ import { acaoMoverNegocio } from "./acoes";
 type Alvo = { id: number; cliente: string; responsavelId: number | null; veiculoId: number | null; valorAnunciado: number | null; valorProposta: number | null };
 
 /* quanto tempo parado numa etapa já pede atenção */
-const LIMITE_DIAS: Partial<Record<Etapa, number>> = { whatsapp: 1, proposta: 3, negociando: 7 };
+const LIMITE_DIAS: Partial<Record<Etapa, number>> = { whatsapp: 1, interessado: 2, visita: 3, equipe: 1, proposta: 3, negociando: 7 };
 
 export function QuadroFunil({
   cards,

@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db, schema, type Tx } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
-import { STATUS_CONVERSA, type StatusConversa } from "@/lib/dominio";
+import { ETAPAS_ABERTAS, STATUS_CONVERSA, type StatusConversa } from "@/lib/dominio";
 import { dataHora, formatarTelefone, soDigitos } from "@/lib/formato";
 import { triarConversa } from "@/lib/ia/diagnosticos";
 import { IaIndisponivel } from "@/lib/ia/cliente";
@@ -59,7 +59,7 @@ async function negocioAbertoDoCliente(tx: Tx | typeof db, clienteId: number) {
   const [n] = await tx
     .select({ id: schema.negocios.id })
     .from(schema.negocios)
-    .where(and(eq(schema.negocios.clienteId, clienteId), inArray(schema.negocios.etapa, ["whatsapp", "proposta", "negociando"])))
+    .where(and(eq(schema.negocios.clienteId, clienteId), inArray(schema.negocios.etapa, ETAPAS_ABERTAS)))
     .orderBy(desc(schema.negocios.criadoEm))
     .limit(1);
   return n?.id ?? null;
@@ -532,7 +532,7 @@ export async function criarNegocioDaConversa(u: Quem, conversaId: number, dados:
       tx,
     );
     await tx.update(schema.conversas).set({ negocioId: id, atualizadoEm: new Date() }).where(eq(schema.conversas.id, conversaId));
-    await mensagemSistema(tx, conversaId, `Negócio criado no funil em "Chegou no WhatsApp" (por ${u.nome})`);
+    await mensagemSistema(tx, conversaId, `Negócio criado no funil em "Novo contato" (por ${u.nome})`);
     return id;
   });
 }

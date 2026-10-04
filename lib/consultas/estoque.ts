@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, schema } from "@/lib/db";
+import { ETAPAS_ABERTAS } from "@/lib/dominio";
 
 export async function listarVeiculos(f: { q?: string; status?: string; tipo?: string; verCusto: boolean; verTeste?: boolean }) {
   const v = schema.veiculos;
@@ -33,7 +34,7 @@ export async function listarVeiculos(f: { q?: string; status?: string; tipo?: st
       observacoes: v.observacoes,
       entradaEm: v.entradaEm,
       vendidoEm: v.vendidoEm,
-      negociosAbertos: sql<number>`(select count(*)::int from negocios n where n.veiculo_id = ${v.id} and n.etapa in ('whatsapp','proposta','negociando'))`,
+      negociosAbertos: sql<number>`(select count(*)::int from negocios n where n.veiculo_id = ${v.id} and n.etapa in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)}))`,
     })
     .from(v)
     .leftJoin(un, eq(un.id, v.unidadeId))

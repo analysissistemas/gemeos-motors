@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, schema } from "@/lib/db";
+import { ETAPAS_ABERTAS } from "@/lib/dominio";
 
 export async function listarNegociosFunil(f: { responsavelId?: number; q?: string; diasEncerrados?: number }) {
   const n = schema.negocios;
@@ -43,7 +44,7 @@ export async function listarNegociosFunil(f: { responsavelId?: number; q?: strin
     .leftJoin(u, eq(u.id, n.responsavelId))
     .where(
       and(
-        or(sql`${n.etapa} in ('whatsapp','proposta','negociando')`, gt(n.etapaDesde, sql`now() - make_interval(days => ${dias})`)),
+        or(sql`${n.etapa} in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)})`, gt(n.etapaDesde, sql`now() - make_interval(days => ${dias})`)),
         f.responsavelId ? eq(n.responsavelId, f.responsavelId) : undefined,
         termo
           ? or(
