@@ -3,7 +3,7 @@
    "retirar ou entrega?", e os dados vão para o vendedor confirmar. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, textoDadosRecebidos } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, simulacaoPedida, textoDadosRecebidos, textoSimulacao } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -82,4 +82,21 @@ test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () =>
   assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /Não ofereça desconto/);
   assert.match(instrucaoDeFechamento("interesse", "AG08"), /O que está faltando para concluirmos/);
   assert.equal(instrucaoDeFechamento(null, null), "");
+});
+
+test("parcelamento: quer parcelar, depois parcelas e bandeira viram simulação para o vendedor", () => {
+  assert.equal(m("dá pra parcelar?", "", true), "quer_parcelar");
+  assert.equal(m("quero dividir no cartão", "", true), "quer_parcelar");
+  const pergunta = "Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊";
+  assert.equal(m("12x no Visa", pergunta), "pediu_simulacao");
+  assert.equal(m("master", pergunta), "pediu_simulacao");
+  /* com os dois numa mensagem só, mesmo sem a pergunta */
+  assert.equal(m("quero parcelar em 10 vezes no elo"), "pediu_simulacao");
+  assert.deepEqual(simulacaoPedida("12x no Visa"), { parcelas: 12, bandeira: "Visa" });
+  assert.deepEqual(simulacaoPedida("em 10 vezes no mastercard"), { parcelas: 10, bandeira: "Mastercard" });
+  assert.deepEqual(simulacaoPedida("hiper"), { parcelas: null, bandeira: "Hipercard" });
+  const t = textoSimulacao({ parcelas: 12, bandeira: "Visa", modelo: "AG08" });
+  assert.match(t, /^Perfeito! Já passei pro nosso vendedor fazer a simulação de 12x no Visa pra \*AG08\*/);
+  assert.doesNotMatch(t, /R\$|juros|taxa de/);
+  assert.match(textoSimulacao({ parcelas: 30, bandeira: null, modelo: null }), /em até 21x/);
 });

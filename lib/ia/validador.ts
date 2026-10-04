@@ -41,6 +41,7 @@ export const REGRAS: Record<string, string> = {
   interno: "Dado interno ou sensível",
   dados_pessoais: "Dado pessoal (e-mail, telefone, CPF ou CNPJ)",
   finge_humano: "Diz que é pessoa ou nega ser assistente virtual",
+  dados_cartao: "Pede número do cartão, código de segurança ou senha",
   vazamento_prompt: "Repete trecho das instruções internas",
 };
 
@@ -69,6 +70,8 @@ const RX = {
     "iu",
   ),
   finge_humano: palavra("sou (?:uma )?(?:pessoa|humano|humana|atendente humano)|n[aã]o sou (?:um |uma )?(?:rob[ôo]|ia|bot|assistente virtual)"),
+  /* regra do dono (03/10/2026): nunca pedir número do cartão, código de segurança ou senha pelo chat */
+  dados_cartao: palavra("n[uú]mero (?:completo )?do (?:seu )?cart[aã]o|c[oó]digo de seguran[cç]a|cvv|cvc|senha do (?:seu )?cart[aã]o|validade do (?:seu )?cart[aã]o|(?:os )?(?:16 )?d[ií]gitos do cart[aã]o"),
 };
 
 const CHECAGENS = (Object.keys(RX) as (keyof typeof RX)[]).map((regra) => ({ regra: regra as string }));

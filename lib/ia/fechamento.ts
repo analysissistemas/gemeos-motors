@@ -13,11 +13,11 @@
 
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
 
-export type Momento = "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+export type Momento = "quer_parcelar" | "pediu_simulacao" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
 /** Nestes momentos a IA não passa a conversa ao vendedor por conta própria: o fechamento segue até os dados
  *  chegarem (aí o sistema passa). Só passa antes se o cliente pedir uma pessoa. */
-export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["quer_visitar", "informou_visita", "interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
+export const MOMENTOS_SEM_TRANSFERIR: Momento[] = ["quer_parcelar", "pediu_simulacao", "quer_visitar", "informou_visita", "interesse", "decidido", "objecao_preco", "objecao", "informou_km", "escolheu_entrega", "escolheu_retirada", "dados_parciais"];
 export const RX_PEDE_PESSOA = /(?<![\p{L}])(atendente|humano|pessoa|vendedor|gerente|falar com (algu[eé]m|voc[eê]s|o dono)|ligar|liga pra mim)(?![\p{L}])/iu;
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -54,6 +54,11 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (entrega && !retirada) return "escolheu_entrega";
     if (retirada && !entrega) return "escolheu_retirada";
   }
+  /* parcelamento: respondeu "em quantas vezes / qual a bandeira", ou já disse os dois */
+  const sim = simulacaoPedida(p.textoCliente);
+  if (RX_PEDIU_PARCELAS.test(loja) && (sim.parcelas || sim.bandeira)) return "pediu_simulacao";
+  if (sim.parcelas && sim.bandeira) return "pediu_simulacao";
+  if (RX_QUER_PARCELAR.test(t)) return "quer_parcelar";
   /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
   if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
@@ -77,6 +82,34 @@ export const PERGUNTAS_ENTREGA_OU_RETIRADA = [
   "Você prefere retirar aqui na loja ou receber por entrega? 😊",
   "Prefere vir buscar aqui na loja ou que a gente entregue pra você? 🛵",
 ];
+/* ---------- parcelamento no cartão (simulação feita pelo vendedor, P5/P19) ---------- */
+const RX_QUER_PARCELAR = /(?<![a-z])(parcel\w*|divid\w*|dividir|em quantas vezes|quantas vezes|no cartao|cartao de credito|credito|vezes no cartao|simula\w*)(?![a-z])/;
+const RX_PEDIU_PARCELAS = /quantas vezes|bandeira/;
+const BANDEIRAS: [RegExp, string][] = [
+  [/\bvisa\b/, "Visa"],
+  [/\bmaster(card)?\b/, "Mastercard"],
+  [/\belo\b/, "Elo"],
+  [/\bhiper(card)?\b/, "Hipercard"],
+  [/\bamex\b|american express/, "American Express"],
+  [/\bdiners\b/, "Diners"],
+];
+/** Parcelas e bandeira que o cliente escreveu ("12x no Visa", "em 10 vezes", "master"). */
+export function simulacaoPedida(texto: string): { parcelas: number | null; bandeira: string | null } {
+  const t = semAcento(texto);
+  const p = /(?<!\d)(\d{1,2})\s*(?:x|vezes|parcelas)(?![a-z])/.exec(t);
+  const parcelas = p ? Number(p[1]) : null;
+  const bandeira = BANDEIRAS.find(([rx]) => rx.test(t))?.[1] ?? null;
+  return { parcelas: parcelas && parcelas >= 1 && parcelas <= 36 ? parcelas : null, bandeira };
+}
+export const PERGUNTA_PARCELAS = "Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊";
+/** Confirmação da simulação, depois que o sistema avisou o vendedor (nunca com valores). */
+export function textoSimulacao(p: { parcelas: number | null; bandeira: string | null; modelo: string | null }) {
+  const vezes = p.parcelas ? (p.parcelas > 21 ? "em até 21x" : `de ${p.parcelas}x`) : "";
+  const no = p.bandeira ? ` no ${p.bandeira}` : "";
+  const moto = p.modelo ? ` pra *${p.modelo}*` : "";
+  return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa da moto?`;
+}
+
 export const PERGUNTAS_VISITA = [
   "Qual dia e horário fica melhor pra você vir? 😊",
   "Que dia e horário fica bom pra você vir aqui na loja? 🛵",
@@ -158,6 +191,12 @@ O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima
     case "objecao_preco":
       return `# MOMENTO DA COMPRA
 O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
+    case "quer_parcelar":
+      return `# MOMENTO DA COMPRA
+O cliente quer parcelar. Diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros, não liste bandeiras e nunca peça número do cartão, código ou senha.`;
+    case "pediu_simulacao":
+      return `# MOMENTO DA COMPRA
+O cliente passou os dados da simulação. O sistema avisa o vendedor e confirma: escreva só uma frase curta, sem valores.`;
     case "quer_visitar":
       return `# MOMENTO DA COMPRA
 O cliente quer vir à loja (visita ou test drive). Ótimo! Responda com entusiasmo e pergunte só qual dia e horário fica melhor para ele vir. Não diga que já agendou: o sistema agenda quando ele responder.`;

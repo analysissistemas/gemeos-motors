@@ -98,3 +98,11 @@ test("acumula várias violações", () => {
   const ids = r.violacoes.map((v) => v.regra);
   for (const esperado of ["preco", "parcelamento", "link", "emoji"]) assert.ok(ids.includes(esperado), esperado);
 });
+
+test("reprova pedir número do cartão, código de segurança ou senha (regra do dono, 03/10/2026)", () => {
+  for (const t of ["Me passa o número do cartão pra eu simular?", "Qual o código de segurança?", "Manda a senha do cartão", "Preciso do CVV"]) {
+    const r = validarResposta(t);
+    assert.ok(r.violacoes.some((v) => v.regra === "dados_cartao"), t);
+  }
+  assert.ok(validarResposta("Qual é a bandeira do cartão? 😊").aprovada);
+});

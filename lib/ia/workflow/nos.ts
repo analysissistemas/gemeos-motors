@@ -11,7 +11,7 @@ import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { validarResposta } from "@/lib/ia/validador";
-import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema } from "@/lib/ia/prompt";
+import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario, textoHorario, type HorarioLoja } from "@/lib/ia/horario";
@@ -35,7 +35,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -320,6 +320,33 @@ async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
   return feito.length ? feito : null;
 }
 
+/* Tarefa de simulação para o vendedor (P5/P19): modelo, preço de tabela, parcelas e bandeira. A IA nunca
+   calcula parcela; quem manda os valores é o vendedor, na mesma conversa. */
+async function criarTarefaSimulacao(c: CtxWorkflow, sim: { parcelas: number | null; bandeira: string | null }, modelo: string | null) {
+  const cv = await carregarConversa(c.conversaId);
+  let preco: string | null = null;
+  if (modelo) {
+    const [m] = await db.select({ preco: schema.modelos.precoTabela }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${modelo.toLowerCase()}`).limit(1);
+    if (m?.preco) preco = reais(Number(m.preco));
+  }
+  const pedido = [sim.parcelas ? `${sim.parcelas}x` : "parcelas a confirmar", sim.bandeira ? `no ${sim.bandeira}` : "bandeira a confirmar", modelo, preco].filter(Boolean).join(" · ");
+  const nome = primeiroNome(c.aprendido.fatos.nome || c.memoria.fatos.nome) ?? cv.contatoNome ?? "cliente";
+  await db.insert(schema.followUps).values({
+    conversaId: c.conversaId,
+    clienteId: cv.clienteId,
+    negocioId: cv.negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: new Date(),
+    notas: `Fazer a simulação no cartão para ${nome}: ${pedido}. Mandar os valores na conversa (a IA não calcula parcela).`,
+    tipo: "simulacao",
+    motivo: `Simulação no cartão: ${pedido}`,
+    origem: "ia",
+    modeloId: null,
+    contexto: { detectadoPor: "ia", parcelas: sim.parcelas, bandeira: sim.bandeira, modelo },
+  });
+  await mensagemSistema(db, c.conversaId, `SIMULAÇÃO PARA O VENDEDOR: ${pedido}. Mande os valores ao cliente nesta conversa.`, { triagem: true });
+}
+
 /** "segunda a sábado, das 8h às 18h" a partir do horário da loja (tela da IA). */
 function horarioCurto(h: HorarioLoja) {
   return textoHorario(h)
@@ -596,6 +623,8 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
     case "quer_visitar":
       return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
+    case "quer_parcelar":
+      return [...semPerguntas(resposta), PERGUNTA_PARCELAS];
     case "escolheu_entrega":
       return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento })];
     case "escolheu_retirada":
@@ -936,6 +965,25 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const midiaPedida = midia ? { modelo: midia.modelo?.nome ?? null, pedido: midia.pedido, vai: midia.itens.map((i) => i.tipo) } : null;
     /* o cliente mandou os dados para fechar (com CPF): agradece e passa ao vendedor, que confere e confirma
        (P12/P18). O texto é fixo: não repete dado pessoal nem diz que a compra está concluída. */
+    /* simulação do cartão (P5/P19): com parcelas e bandeira, o vendedor recebe a tarefa e o Milton segue
+       atendendo. Faltou um dos dois e a loja ainda não perguntou só por ele: pergunta. */
+    if (momento === "pediu_simulacao") {
+      const recentes = leadAntes.split("\n").slice(-2).join("\n");
+      const agora = simulacaoPedida(c.textoBuffer);
+      const antes = simulacaoPedida(recentes);
+      const sim = { parcelas: agora.parcelas ?? antes.parcelas, bandeira: agora.bandeira ?? antes.bandeira };
+      const jaPerguntouOQueFalta = /E qual é a bandeira|E em quantas vezes/i.test(ultimaDaLoja);
+      let texto: string;
+      let tarefa = false;
+      if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? "E em quantas vezes você gostaria de dividir? 😊" : "E qual é a bandeira do cartão? 😊";
+      else {
+        await criarTarefaSimulacao(c, sim, modeloDaConversa);
+        tarefa = true;
+        texto = textoSimulacao({ ...sim, modelo: modeloDaConversa });
+      }
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, simulacao: { ...sim, tarefa } } };
+    }
     /* o cliente disse quando vem à loja: o sistema marca na agenda de test drive (mesma regra de conflito
        da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
     if (momento === "informou_visita") {
