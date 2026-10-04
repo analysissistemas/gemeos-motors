@@ -35,7 +35,7 @@ import {
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -625,8 +625,10 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
     case "quer_parcelar":
       return [...semPerguntas(resposta), PERGUNTA_PARCELAS];
-    case "escolheu_entrega":
-      return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento })];
+    case "escolheu_entrega": {
+      const nota = notaDeEntrega(fatos.cidade);
+      return [listaDeDados("entrega", { cidade: fatos.cidade, pagamento: fatos.pagamento }), ...(nota ? [nota] : [])];
+    }
     case "escolheu_retirada":
       return [listaDeDados("retirada", {})];
     default:
@@ -1181,6 +1183,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
        "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */
     if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
+    /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
+    if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {
+      const [m] = await db.select({ preco: schema.modelos.precoTabela }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${c.modeloDaConversa.toLowerCase()}`).limit(1);
+      if (m?.preco) resposta = [`A *${c.modeloDaConversa}* sai por *${reais(Number(m.preco))}*.`, ...resposta];
+    }
     /* UMA pergunta por resposta: bloco que é só mais uma pergunta, depois de outra, sai */
     let perguntou = false;
     resposta = resposta.filter((b) => {

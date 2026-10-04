@@ -62,7 +62,8 @@ const RX = {
   desconto: palavra("desconto|abatimento|aprova[cç][aã]o garantida|financiamento garantido"),
   bastidor: palavra("prompt|instru[cç][õo]es do sistema|system message|ferramentas?|banco de dados|api|json|crm|funil|est[aá]gio|qualificad[oa]|webhook"),
   interno: new RegExp(
-    String.raw`${I}(?:custo|margem|lucro|comiss[aã]o)${F}|(?<![\p{N}])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\p{N}])|${I}sk-[A-Za-z0-9_-]{10,}|${I}EAA[A-Za-z0-9]{20,}|${I}gm_[0-9a-f]{20,}`,
+    /* "Rodovia Margem da PE-75" é o endereço da loja, não margem de lucro (teste de 04/10/2026) */
+    String.raw`${I}(?:custo|margem(?!\s+da\s+pe)|lucro|comiss[aã]o)${F}|(?<![\p{N}])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\p{N}])|${I}sk-[A-Za-z0-9_-]{10,}|${I}EAA[A-Za-z0-9]{20,}|${I}gm_[0-9a-f]{20,}`,
     "iu",
   ),
   dados_pessoais: new RegExp(

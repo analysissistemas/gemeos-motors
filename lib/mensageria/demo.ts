@@ -238,6 +238,8 @@ export async function carregarDemonstracao(u: Quem) {
 
 export async function limparDemonstracao(u: Quem) {
   return db.transaction(async (tx) => {
+    /* test drive marcado pela IA numa conversa simulada não pode ficar na agenda de verdade */
+    await tx.delete(schema.testDrives).where(inArray(schema.testDrives.conversaId, tx.select({ id: schema.conversas.id }).from(schema.conversas).where(eq(schema.conversas.demo, true))));
     const convs = await tx.delete(schema.conversas).where(eq(schema.conversas.demo, true)).returning({ id: schema.conversas.id });
     const negs = await tx
       .delete(schema.negocios)

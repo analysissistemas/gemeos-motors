@@ -3,7 +3,8 @@
    "retirar ou entrega?", e os dados vão para o vendedor confirmar. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, simulacaoPedida, textoDadosRecebidos, textoSimulacao } from "../../lib/ia/fechamento.ts";
+import { validarResposta } from "../../lib/ia/validador.ts";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, RX_PARABENS, RX_PEDE_PESSOA, pediuDadosDeRetirada, simulacaoPedida, textoDadosRecebidos, textoSimulacao } from "../../lib/ia/fechamento.ts";
 
 const m = (textoCliente: string, ultimaDaLoja = "", conheceModelo = true) => detectarMomento({ textoCliente, ultimaDaLoja, conheceModelo });
 
@@ -60,7 +61,9 @@ test("lista de dados: a do Milton, sem o que o cliente já disse; retirada sem e
   const entrega = listaDeDados("entrega", { cidade: "Goiana", pagamento: "pix" });
   assert.match(entrega, /• Nome completo[\s\S]*• CPF[\s\S]*• Data de nascimento[\s\S]*• Ponto de referência/);
   assert.doesNotMatch(entrega, /• Cidade|• Forma de pagamento/);
-  assert.match(listaDeDados("entrega", { cidade: "Itambé" }), /equipe confirma se atende/);
+  assert.match(listaDeDados("entrega", {}), /• Cidade e CEP/);
+  assert.equal(notaDeEntrega("Itambé"), "Sobre a entrega em Itambé, a nossa equipe confirma se atende aí e te fala certinho 😊");
+  assert.equal(notaDeEntrega("Goiana"), null);
   const retirada = listaDeDados("retirada", {});
   assert.match(retirada, /• CPF/);
   assert.doesNotMatch(retirada, /CEP|Rua|Bairro/);
@@ -99,4 +102,13 @@ test("parcelamento: quer parcelar, depois parcelas e bandeira viram simulação 
   assert.match(t, /^Perfeito! Já passei pro nosso vendedor fazer a simulação de 12x no Visa pra \*AG08\*/);
   assert.doesNotMatch(t, /R\$|juros|taxa de/);
   assert.match(textoSimulacao({ parcelas: 30, bandeira: null, modelo: null }), /em até 21x/);
+});
+
+test("mensagens do sistema passam no validador (teste de 04/10: 'Margem' do endereço e lista longa foram barradas)", () => {
+  const visita = "Agendado ✅ Te esperamos segunda, 05/10, às 10h, Rafael, aqui na loja: Rodovia Margem da PE-75, nº 1418, Goiana — PE. A *T1* vai estar te esperando pro test drive 🛵";
+  assert.deepEqual(validarResposta(visita).violacoes, []);
+  for (const t of [listaDeDados("entrega", {}), listaDeDados("entrega", { cidade: "Itambé", pagamento: null }), listaDeDados("retirada", {}), notaDeEntrega("Itambé")!])
+    assert.deepEqual(validarResposta(t).violacoes, [], t);
+  /* "margem" de lucro continua barrada */
+  assert.ok(validarResposta("Nossa margem nessa moto é pequena").violacoes.some((v) => v.regra === "interno"));
 });

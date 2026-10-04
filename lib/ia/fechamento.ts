@@ -136,22 +136,24 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
   if (modo === "retirada") {
     return `Combinado! Para registrar sua compra e a equipe separar a moto pra você, me manda por aqui:\n• Nome completo\n• CPF\n• Que dia e horário você pretende vir?`;
   }
+  /* os mesmos campos da lista do Milton, agrupados para caber numa mensagem (o validador limita a 12 linhas) */
   const campos = [
     "Nome completo",
     "CPF",
     "Número para contato",
     "Data de nascimento",
-    ...(ja.cidade?.trim() ? [] : ["Cidade"]),
-    "CEP",
-    "Rua",
-    "Bairro",
-    "Número",
+    ja.cidade?.trim() ? "CEP" : "Cidade e CEP",
+    "Rua, número e bairro",
     "Ponto de referência",
     "Até que horas você pode receber?",
     ...(ja.pagamento?.trim() ? [] : ["Forma de pagamento"]),
   ];
-  const fora = ja.cidade?.trim() && !/goiana/i.test(semAcento(ja.cidade)) ? `\n\nSobre a entrega em ${ja.cidade.trim()}, a nossa equipe confirma se atende aí 😊` : "";
-  return `Show! Para finalizar seu pedido, me manda por aqui:\n${campos.map((c) => `• ${c}`).join("\n")}${fora}`;
+  return `Show! Para finalizar seu pedido, me manda por aqui:\n${campos.map((c) => `• ${c}`).join("\n")}`;
+}
+
+/** Entrega fora de Goiana: a IA não sabe se atende nem a taxa; avisa que a equipe confirma (balão separado). */
+export function notaDeEntrega(cidade: string | null | undefined) {
+  return cidade?.trim() && !/goiana/i.test(semAcento(cidade)) ? `Sobre a entrega em ${cidade.trim()}, a nossa equipe confirma se atende aí e te fala certinho 😊` : null;
 }
 
 /** A lista de dados que a loja mandou era a da retirada ("que dia e horário você pretende vir")? */
@@ -193,7 +195,7 @@ O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima
 O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
     case "quer_parcelar":
       return `# MOMENTO DA COMPRA
-O cliente quer parcelar. Diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros, não liste bandeiras e nunca peça número do cartão, código ou senha.`;
+O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros, não liste bandeiras e nunca peça número do cartão, código ou senha.`;
     case "pediu_simulacao":
       return `# MOMENTO DA COMPRA
 O cliente passou os dados da simulação. O sistema avisa o vendedor e confirma: escreva só uma frase curta, sem valores.`;
