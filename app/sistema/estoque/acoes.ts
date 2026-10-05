@@ -260,3 +260,22 @@ export async function mudarStatusVeiculo(id: number, status: "disponivel" | "res
     return null;
   }, "Situação atualizada");
 }
+
+/* Entrada de acessório (pedido de 05/10/2026: "capacete, baú não aparece para dar entrada no estoque").
+   Acessório não vira veículo: a quantidade fica no item do catálogo e a entrada SOMA ao que já tem. */
+export async function darEntradaAcessorio(entrada: { modeloId: number; quantidade: number }) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const quantidade = Math.trunc(Number(entrada.quantidade));
+    if (!(quantidade >= 1 && quantidade <= 999)) throw new ErroRegra("Quantidade de 1 a 999 por vez.", { quantidade: "De 1 a 999" });
+    const [m] = await db.select().from(schema.modelos).where(eq(schema.modelos.id, Number(entrada.modeloId))).limit(1);
+    if (!m || !m.ativo || m.tipo !== "acessorio") throw new ErroRegra("Escolha um acessório do catálogo.", { modeloId: "Escolha o acessório" });
+    const total = (m.quantidade ?? 0) + quantidade;
+    await db.transaction(async (tx) => {
+      await tx.update(schema.modelos).set({ quantidade: total }).where(eq(schema.modelos.id, m.id));
+      await registrarLog(u, { acao: "modelo.estoque", entidade: "modelo", entidadeId: m.id, descricao: `Deu entrada em ${quantidade} ${m.nome} (agora ${total} em estoque)` }, tx);
+    });
+    revalidatePath("/sistema/estoque");
+    return { total };
+  }, `Entrada registrada: ${Math.trunc(Number(entrada.quantidade))} unidade(s)`);
+}

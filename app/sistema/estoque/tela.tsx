@@ -11,7 +11,7 @@ import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
-import { ajustarGrupoVeiculos, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
+import { ajustarGrupoVeiculos, darEntradaAcessorio, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
 import { Catalogo } from "./catalogo";
 
@@ -337,7 +337,7 @@ export function TelaEstoque({
         acoes={
           permissoes.editar && (
             <Botao variante="primario" onClick={() => setEditando({})}>
-              <Plus className="size-4" /> Dar entrada em veículo
+              <Plus className="size-4" /> Dar entrada no estoque
             </Botao>
           )
         }
@@ -408,7 +408,7 @@ export function TelaEstoque({
                 icone={<Bike />}
                 titulo={filtros.q || filtros.status || filtros.tipo ? "Nenhum veículo com este filtro" : "Nenhum veículo no estoque"}
                 texto={filtros.q || filtros.status || filtros.tipo ? "Tire os filtros para ver todos." : "Dê entrada no primeiro veículo. Ele passa a aparecer no funil e na venda."}
-                acao={permissoes.editar && !filtros.q && <Botao onClick={() => setEditando({})}>Dar entrada em veículo</Botao>}
+                acao={permissoes.editar && !filtros.q && <Botao onClick={() => setEditando({})}>Dar entrada no estoque</Botao>}
               />
             ) : (
               <>
@@ -532,7 +532,7 @@ export function TelaEstoque({
       )}
 
       {ajustando && <DialogoQuantidade grupo={ajustando} aoFechar={() => setAjustando(null)} />}
-      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} admin={permissoes.admin} />
+      <FormularioVeiculo aberto={!!editando} aoMudar={(v) => !v && setEditando(null)} inicial={editando ?? {}} modelos={modelos} cores={cores} unidades={unidades} custo={permissoes.custo} admin={permissoes.admin} acessorios={catalogo.filter((c) => c.ativo && c.tipo === "acessorio")} />
     </>
   );
 }
@@ -556,6 +556,7 @@ function FormularioVeiculo({
   unidades,
   custo,
   admin,
+  acessorios = [],
 }: {
   aberto: boolean;
   aoMudar: (v: boolean) => void;
@@ -565,9 +566,10 @@ function FormularioVeiculo({
   unidades: { id: number; nome: string }[];
   custo: boolean;
   admin: boolean;
+  acessorios?: ItemCatalogo[];
 }) {
   /* entrada nova abre na rápida (moto elétrica do catálogo); editar e "outro veículo" usam o formulário completo */
-  const [modo, setModo] = useState<"rapida" | "completa">("rapida");
+  const [modo, setModo] = useState<"rapida" | "completa" | "acessorio">("rapida");
   const temEletrica = modelos.some((m) => ehEletrico(m.tipo));
   const rapida = !inicial.id && temEletrica && modo === "rapida";
   return (
@@ -578,9 +580,11 @@ function FormularioVeiculo({
         if (!v) setModo("rapida");
       }}
       largura="lg"
-      titulo={inicial.id ? "Editar veículo" : "Dar entrada em veículo"}
+      titulo={inicial.id ? "Editar veículo" : "Dar entrada no estoque"}
       descricao={
-        rapida
+        !inicial.id && modo === "acessorio"
+          ? "Escolha o acessório e quantos chegaram. Soma ao que já tem no estoque."
+          : rapida
           ? "Escolha o modelo, a cor e quantas chegaram. O resto vem do catálogo."
           : "Moto elétrica não tem placa nem Renavam. Veículo emplacado: placa, ano e Renavam ajudam na documentação da venda."
       }
@@ -591,18 +595,100 @@ function FormularioVeiculo({
           abas={[
             { id: "rapida", rotulo: "Moto ou patinete elétrico novo" },
             { id: "completa", rotulo: "Outro veículo (usado, a combustão, carro)" },
+            ...(acessorios.length ? [{ id: "acessorio" as const, rotulo: "Acessório (capacete, baú...)" }] : []),
           ]}
           atual={modo}
           aoMudar={setModo}
         />
       )}
       {aberto &&
-        (rapida ? (
+        (!inicial.id && modo === "acessorio" ? (
+          <EntradaAcessorio acessorios={acessorios} aoFechar={() => aoMudar(false)} />
+        ) : rapida ? (
           <EntradaRapida modelos={modelos.filter((m) => ehEletrico(m.tipo))} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
         ) : (
           <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
         ))}
     </Dialogo>
+  );
+}
+
+/* Entrada de acessório: escolhe o item do catálogo e quantos chegaram; soma à quantidade que já tem. */
+function EntradaAcessorio({ acessorios, aoFechar }: { acessorios: ItemCatalogo[]; aoFechar: () => void }) {
+  const [modeloId, setModeloId] = useState<number | null>(null);
+  const [quantidade, setQuantidade] = useState(1);
+  const [erros, setErros] = useState<Record<string, string>>({});
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const escolhido = acessorios.find((a) => a.id === modeloId) ?? null;
+
+  function salvar() {
+    iniciar(async () => {
+      if (!escolhido) return void setErros({ modeloId: "Escolha o acessório" });
+      const r = await darEntradaAcessorio({ modeloId: escolhido.id, quantidade });
+      if (!r.ok) {
+        setErros(r.campos ?? {});
+        toast.error(r.erro);
+        return;
+      }
+      toast.success(r.mensagem);
+      aoFechar();
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-5">
+        <fieldset>
+          <legend className="mb-2 text-[12px] font-medium text-ink-2">
+            Acessório <span className="text-critico">*</span>
+          </legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="Acessório">
+            {acessorios.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => {
+                  setModeloId(a.id);
+                  setErros({});
+                }}
+                aria-pressed={a.id === modeloId}
+                className={`flex min-h-14 flex-col items-start justify-center rounded-xl border px-3 py-2 text-left transition ${a.id === modeloId ? "border-ink bg-trilho" : "border-linha hover:border-linha-forte"}`}
+              >
+                <span className="text-[14px] font-semibold leading-tight">{a.nome}</span>
+                <span className="text-[12px] text-ink-3">{a.quantidade != null ? `${a.quantidade} em estoque` : "sem contagem"}</span>
+              </button>
+            ))}
+          </div>
+          {erros.modeloId && <p className="mt-1 text-[12px] text-critico">{erros.modeloId}</p>}
+        </fieldset>
+        <Campo rotulo="Quantas chegaram" erro={erros.quantidade}>
+          <div className="flex items-center gap-2">
+            <Botao type="button" onClick={() => setQuantidade((q) => Math.max(1, q - 1))} aria-label="Menos um">
+              −
+            </Botao>
+            <Entrada value={String(quantidade)} onChange={(e) => setQuantidade(Math.max(1, Math.min(999, Number(e.target.value.replace(/\D/g, "")) || 1)))} inputMode="numeric" className="w-20 text-center" />
+            <Botao type="button" onClick={() => setQuantidade((q) => Math.min(999, q + 1))} aria-label="Mais um">
+              +
+            </Botao>
+          </div>
+        </Campo>
+        {escolhido && (
+          <p className="text-[13px] text-ink-2">
+            Fica com <strong>{(escolhido.quantidade ?? 0) + quantidade}</strong> em estoque. Para corrigir a contagem (ou zerar), edite o acessório em Catálogo e cores.
+          </p>
+        )}
+      </div>
+      <RodapeDialogo>
+        <Botao type="button" onClick={aoFechar}>
+          Cancelar
+        </Botao>
+        <Botao variante="primario" carregando={pendente} onClick={salvar}>
+          {quantidade > 1 ? `Dar entrada em ${quantidade}` : "Dar entrada"}
+        </Botao>
+      </RodapeDialogo>
+    </>
   );
 }
 

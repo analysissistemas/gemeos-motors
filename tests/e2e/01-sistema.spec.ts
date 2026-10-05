@@ -138,8 +138,8 @@ test("cadastro completo de cliente, edição, bloqueio de duplicado e perfil 360
 
 test("entrada de veículo no estoque", async () => {
   await page.goto("/sistema/estoque");
-  await page.getByRole("button", { name: "Dar entrada em veículo" }).first().click();
-  const d = page.getByRole("dialog", { name: "Dar entrada em veículo" });
+  await page.getByRole("button", { name: "Dar entrada no estoque" }).first().click();
+  const d = page.getByRole("dialog", { name: "Dar entrada no estoque" });
   /* veículo fora do catálogo: formulário completo (a aba rápida é só para moto elétrica do catálogo) */
   const outro = d.getByRole("tab", { name: /Outro veículo/ });
   if (await outro.count()) await outro.click();

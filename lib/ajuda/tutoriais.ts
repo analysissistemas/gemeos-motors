@@ -247,7 +247,7 @@ export const TUTORIAIS: Tutorial[] = [
     resumo: "Cada veículo é cadastrado sozinho, com chassi e condição próprios.",
     passos: [
       { texto: "Abra \"Estoque\". No alto aparecem os disponíveis, os vendidos nos últimos 30 dias e o que pede atenção.", imagem: img("estoque", 1), legenda: "Tela do estoque" },
-      { texto: "Toque em \"Dar entrada em veículo\". Escolha o modelo do catálogo, a cor, a condição, o chassi, o valor anunciado, a loja e a data de entrada. Toque em \"Salvar\".", imagem: img("estoque", 2), legenda: "Formulário de entrada de veículo" },
+      { texto: "Toque em \"Dar entrada no estoque\". Para acessório (capacete, baú), use a aba \"Acessório\": escolha o item e quantos chegaram. Para veículo, escolha o modelo do catálogo, a cor, a condição, o chassi, o valor anunciado, a loja e a data de entrada. Toque em \"Salvar\".", imagem: img("estoque", 2), legenda: "Formulário de entrada de veículo" },
       { texto: "Para mudar a situação (Disponível, Reservado, Fora de venda), abra o veículo, troque a \"Situação\" e salve." },
       { texto: "Na aba \"Entradas e saídas\" você vê o que entrou e o que saiu por venda finalizada." },
     ],
