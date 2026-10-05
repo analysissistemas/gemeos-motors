@@ -837,13 +837,13 @@ a{color:inherit;text-decoration:none}
 <!-- O ?v= força o navegador a buscar a versão nova em vez de usar a guardada.
      Suba o número sempre que mexer nestes arquivos, senão você (e o cliente)
      continuam vendo a versão antiga sem entender por quê. -->
-<script src="cores-motos.js?v=21"></script>
-<script src="fotos-disponiveis.js?v=21"></script>
+<script src="cores-motos.js?v=22"></script>
+<script src="fotos-disponiveis.js?v=22"></script>
 <!-- antes do estoque.js: é daqui que sai fotoDoProduto -->
-<script src="foto-produto.js?v=21"></script>
-<script src="estoque.js?v=21"></script>
-<script src="cores-sistema.js?v=21"></script>
-<script src="catalogo-sistema.js?v=21"></script>
+<script src="foto-produto.js?v=22"></script>
+<script src="estoque.js?v=22"></script>
+<script src="cores-sistema.js?v=22"></script>
+<script src="catalogo-sistema.js?v=22"></script>
 <script>
 /* ============================================================
    Número que recebe as mensagens do site.
@@ -1089,7 +1089,7 @@ function card(a){
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Z"/></svg>
           ${a.reserva ? "Reservar agora"
             : a.porQuantidade ? "Consultar disponibilidade"
-            : a.tipo === "Carro" ? "Quero esse carro" : "Quero essa moto"}
+            : a.tipo === "Carro" ? "Quero esse carro" : a.tipo === "Patinete elétrico" ? "Quero esse patinete" : "Quero essa moto"}
         </button>`}
       </div>
     </div>
@@ -1416,6 +1416,7 @@ document.addEventListener("click", e=>{
     const pedacos = fichaEmPedacos(a.ficha);
     const eletrico = a.eletrico !== false;
     const ehCarro = a.tipo === "Carro";
+    const ehPatinete = a.tipo === "Patinete elétrico";
     /* acessório não tem condição nem quilometragem: repetir "Zero km, sem uso"
        num capacete deixa a mensagem com cara de formulário mal preenchido */
     const linhas = a.porQuantidade ? [
@@ -1424,8 +1425,8 @@ document.addEventListener("click", e=>{
       precoEscolhido(a) == null ? "Qual o valor?" : `*${brl(precoEscolhido(a))}*`, "",
       "Ainda tem em estoque?"
     ] : [
-      a.reserva  ? `Olá! Quero reservar est${ehCarro?"e carro":"a moto"} do site:`
-                 : `Olá! Tenho interesse n${ehCarro?"este carro":"esta moto"} do site:`, "",
+      a.reserva  ? `Olá! Quero reservar est${ehCarro?"e carro":ehPatinete?"e patinete":"a moto"} do site:`
+                 : `Olá! Tenho interesse n${ehCarro?"este carro":ehPatinete?"este patinete":"esta moto"} do site:`, "",
       `*${a.modelo}*`,
       a.ano ? `Ano ${a.ano}` : null,
       el.cor,

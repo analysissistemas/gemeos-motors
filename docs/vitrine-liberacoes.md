@@ -35,3 +35,5 @@ voltou a valer depois de cada uma:
   usam a coordenada exata da loja (-7.566338250594923, -35.00642739571563), pedida pelo dono.
 - 27/09/2026 (ficha) — chip "Peso" vira "Aguenta até" (o campo guarda a carga máxima, não o peso
   da moto) em `public/estoque.js`; scripts sobem para `?v=20` no `vitrine.html`. Autorizado pelo dono.
+- 05/10/2026 (patinetes) — scripts sobem para `?v=22`; card de patinete com o botão "Quero esse patinete"
+  e mensagem do WhatsApp "neste patinete". Autorizado pelo usuário.
