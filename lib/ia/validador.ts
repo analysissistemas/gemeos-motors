@@ -26,6 +26,26 @@ export const EMOJIS_PERMITIDOS = [
 ];
 export const MAX_EMOJIS = 2;
 
+/** Emoji fora da lista (ex.: 🔊) sai do texto, e só ficam os 2 primeiros aprovados. Antes, um emoji só
+ *  reprovava a resposta inteira e o cliente recebia "vou checar com a equipe" (teste de 05/10/2026). */
+export function limparEmojis(texto: string): string {
+  const aprovados = [...EMOJIS_PERMITIDOS].sort((a, b) => b.length - a.length);
+  let usados = 0;
+  let out = "";
+  for (let i = 0; i < texto.length; ) {
+    const ok = aprovados.find((e) => texto.startsWith(e, i));
+    if (ok) {
+      if (usados++ < MAX_EMOJIS) out += ok;
+      i += ok.length;
+      continue;
+    }
+    const ch = String.fromCodePoint(texto.codePointAt(i)!);
+    if (!/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/u.test(ch)) out += ch;
+    i += ch.length;
+  }
+  return out.replace(/[ \t]{2,}/g, " ").replace(/ +([.,!?])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
+}
+
 export const MAX_CARACTERES = 1000;
 export const MAX_LINHAS = 12;
 

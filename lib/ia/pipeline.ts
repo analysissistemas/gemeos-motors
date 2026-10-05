@@ -21,7 +21,7 @@
 import type { ControleIa } from "./permissoes.ts";
 import { norm, type ConsultaEstoque, type ResultadoEstoque } from "./estoque-tipos.ts";
 import { textoModeloSemEstoque, type ResultadoCatalogo } from "./catalogo-tipos.ts";
-import { validarResposta, type Violacao } from "./validador.ts";
+import { limparEmojis, validarResposta, type Violacao } from "./validador.ts";
 import { executarFluxo, type Etapa, type PassoDaTrilha } from "./fluxo.ts";
 
 export const LIMITE_MENSAGEM_CLIENTE = 2000;
@@ -209,7 +209,7 @@ export const interpretar: EtapaDeAtendimento = {
   rodar: async (c) => {
     try {
       const saida = await c.deps.gerar({ mensagemCliente: c.mensagemCliente, estoque: null });
-      return { ctx: { chamouModelo: true, saida, texto: saida.mensagem, humano: saida.transferir, motivo: saida.transferir ? "modelo_pediu_transferencia" : null } };
+      return { ctx: { chamouModelo: true, saida, texto: saida.mensagem ? limparEmojis(saida.mensagem) : saida.mensagem, humano: saida.transferir, motivo: saida.transferir ? "modelo_pediu_transferencia" : null } };
     } catch {
       return bloqueia("erro_modelo", { chamouModelo: true });
     }
@@ -267,7 +267,7 @@ export const redigirComEstoque: EtapaDeAtendimento = {
     if (c.estoque?.estado !== "CONFIRMADO_DISPONIVEL") return {};
     try {
       const saida = await c.deps.gerar({ mensagemCliente: c.mensagemCliente, estoque: c.estoque });
-      return { ctx: { saida, texto: saida.mensagem, humano: c.humano || saida.transferir, motivo: saida.transferir ? ("modelo_pediu_transferencia" as const) : c.motivo } };
+      return { ctx: { saida, texto: saida.mensagem ? limparEmojis(saida.mensagem) : saida.mensagem, humano: c.humano || saida.transferir, motivo: saida.transferir ? ("modelo_pediu_transferencia" as const) : c.motivo } };
     } catch {
       return bloqueia("erro_modelo");
     }

@@ -95,12 +95,11 @@ test("PERMISSÃO DE ENVIO DESLIGADA: gera e valida, mas não envia", async () =>
   assert.deepEqual(enviados, []);
 });
 
-test("VALIDADOR REPROVA: não envia (emoji)", async () => {
-  const { r, enviados } = await rodar("Oi!", { modelo: [texto("Olá! Tudo bem? 😀")] });
-  assert.equal(r.acao, "bloqueada");
-  assert.equal(r.motivo, "validador");
-  assert.ok(r.violacoes.some((v) => v.regra === "emoji"));
-  assert.deepEqual(enviados, []);
+/* desde 05/10/2026 o emoji fora da lista sai do texto (antes reprovava a resposta inteira) */
+test("EMOJI PROIBIDO: sai do texto e a resposta segue", async () => {
+  const { enviados } = await rodar("Oi!", { modelo: [texto("Olá! Tudo bem? 😀")] });
+  assert.equal(enviados.length, 1);
+  assert.doesNotMatch(JSON.stringify(enviados), /😀/);
 });
 
 test("TUDO APROVADO: veículo existente e disponível → modelo, estoque, modelo, validador, e o mockSend recebe", async () => {

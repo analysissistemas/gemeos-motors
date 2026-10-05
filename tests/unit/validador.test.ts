@@ -106,3 +106,11 @@ test("reprova pedir número do cartão, código de segurança ou senha (regra do
   }
   assert.ok(validarResposta("Qual é a bandeira do cartão? 😊").aprovada);
 });
+
+test("emoji fora da lista sai do texto em vez de reprovar a resposta (05/10/2026)", async () => {
+  const { limparEmojis } = await import("../../lib/ia/validador.ts");
+  assert.equal(limparEmojis("Tem sim! Caixa de som com Bluetooth 🔊 e LED RGB 🌈"), "Tem sim! Caixa de som com Bluetooth e LED RGB");
+  assert.equal(limparEmojis("Show 😊 olha ela 🛵 e mais ✅ aqui 🎉"), "Show 😊 olha ela 🛵 e mais aqui");
+  assert.equal(limparEmojis("Obrigado 🙏🏻"), "Obrigado 🙏🏻");
+  assert.ok(validarResposta(limparEmojis("Tem caixa de som 🔊!")).aprovada);
+});

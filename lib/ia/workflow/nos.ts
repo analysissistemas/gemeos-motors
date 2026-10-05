@@ -1207,7 +1207,9 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
         midia =
           c.momento === "pesquisando"
             ? planejarOpcoes({ modelos, resposta: resposta.join("\n"), jaEnviadas })
-            : planejarApresentacao({ modelos, textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas });
+            : /* a resposta apresentou 2 ou 3 opções ("vocês têm patinete?"): uma foto de cada (teste de 05/10/2026) */
+              (planejarApresentacao({ modelos, textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas }) ??
+              planejarOpcoes({ modelos, resposta: resposta.join("\n"), jaEnviadas }));
       } catch {
         midia = null;
       }
