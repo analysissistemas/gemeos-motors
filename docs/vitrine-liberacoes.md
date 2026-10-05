@@ -37,3 +37,4 @@ voltou a valer depois de cada uma:
   da moto) em `public/estoque.js`; scripts sobem para `?v=20` no `vitrine.html`. Autorizado pelo dono.
 - 05/10/2026 (patinetes) — scripts sobem para `?v=22`; card de patinete com o botão "Quero esse patinete"
   e mensagem do WhatsApp "neste patinete". Autorizado pelo usuário.
+- 05/10/2026 (selo) — card zero km mostra "NOVO" em vez de "ZERO KM", como os acessórios. Autorizado pelo usuário.

@@ -1044,7 +1044,7 @@ function card(a){
   return `<article class="prod" data-id="${a.id}">
     <div class="prod-foto" ${acao}="${a.id}">
       <span class="selo ${a.lancamento ? "lanc" : zero?"lac":"semi"}">${
-        a.lancamento ? "Lançamento" : a.porQuantidade ? "Novo" : condRotulo(e.cond, a.genero)}</span>
+        a.lancamento ? "Lançamento" : a.porQuantidade || zero ? "Novo" : condRotulo(e.cond, a.genero)}</span>
       ${disp && !a.lancamento ? `<span class="selo-disp ${a.disponibilidade==="pronta_entrega"?"pronta":""}">${disp}</span>` : ""}
       ${fotoDupla(a)}
     </div>
