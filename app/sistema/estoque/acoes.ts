@@ -160,7 +160,7 @@ export async function darEntradaEmLote(entrada: {
     if (entrada.status === "disponivel" && !teste) await avisarInteressados(m.id);
     revalidatePath("/sistema/estoque");
     return { quantidade };
-  }, entrada.quantidade > 1 ? `${entrada.quantidade} motos cadastradas no estoque` : "Moto cadastrada no estoque");
+  }, entrada.quantidade > 1 ? `${entrada.quantidade} unidades cadastradas no estoque` : "Unidade cadastrada no estoque");
 }
 
 /* Linha agrupada do estoque ("AG08 · Cinza · 5 unidades"): o dono ajusta quantidade, preço e situação
