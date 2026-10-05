@@ -61,6 +61,11 @@ export const esquemaModelo = z
     ficha: esquemaFicha,
     descricao: textoOpcional(500),
     mostrarNoSite: z.boolean().default(true),
+    /* quantidade em estoque do acessório; null e "" antes da coerção (senão vazio vira 0) */
+    quantidade: z
+      .union([z.null(), z.literal(""), z.coerce.number().int("Quantidade sem vírgula").min(0, "Quantidade não pode ser negativa").max(9999, "Quantidade muito alta")])
+      .optional()
+      .transform((v) => (typeof v === "number" ? v : null)),
     disponibilidade: z.enum(chaves(DISPONIBILIDADES), { message: "Escolha a disponibilidade" }).default("consultar"),
     lancamento: z.boolean().default(false),
     lancamentoTexto: textoOpcional(60),
@@ -69,6 +74,8 @@ export const esquemaModelo = z
     ...d,
     /* acessório não tem ficha técnica; frase de lançamento só existe em lançamento */
     ficha: d.tipo === "acessorio" ? null : d.ficha,
+    /* moto e patinete contam pelas unidades do estoque, não por aqui */
+    quantidade: d.tipo === "acessorio" ? d.quantidade : null,
     lancamentoTexto: d.lancamento ? d.lancamentoTexto : null,
     eletrico: ehEletrico(d.tipo),
   }));
@@ -108,6 +115,7 @@ export async function salvarModelo(u: Quem, id: number | null, entrada: unknown)
       if (campos.includes("precoTabela")) partes.push(`preço de ${antes.precoTabela ? brl(antes.precoTabela) : "Consultar preço"} para ${d.precoTabela ? brl(d.precoTabela) : "Consultar preço"}`);
       if (campos.includes("mostrarNoSite")) partes.push(d.mostrarNoSite ? "voltou a mostrar no site" : "tirou do site");
       if (campos.includes("lancamento")) partes.push(d.lancamento ? "marcou como lançamento" : "tirou de lançamento");
+      if (campos.includes("quantidade")) partes.push(`quantidade em estoque de ${antes.quantidade ?? "—"} para ${d.quantidade ?? "—"}`);
       if (campos.includes("disponibilidade")) partes.push(`disponibilidade "${DISPONIBILIDADES[d.disponibilidade]}"`);
       if (campos.includes("ficha")) partes.push("ficha técnica");
       await registrarLog(

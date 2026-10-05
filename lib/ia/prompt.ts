@@ -112,7 +112,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   const v = schema.veiculos;
   const [linhas, cores, unidades, base] = await Promise.all([
     db
-      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao })
+      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade })
       .from(m)
       .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_ELETRICOS, "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
@@ -134,7 +134,12 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   for (const l of linhas) {
     const nome = [l.marca, l.nome].filter(Boolean).join(" ");
     if (l.tipo === "acessorio") {
-      itens.push(`• ${nome} (acessório): ${brl(l.preco as number | null)}`);
+      /* acessório com quantidade contada: 0 = acabou, não oferece (05/10/2026) */
+      if (l.quantidade === 0) {
+        semEstoque.push({ nome, apelidos: apelidosDoModelo(l.nome) });
+        continue;
+      }
+      itens.push(`• ${nome} (acessório): ${brl(l.preco as number | null)}${l.quantidade ? ` | EM ESTOQUE: ${l.quantidade} unidade(s)` : ""}`);
       continue;
     }
     /* unidade ligada ao modelo, ou com o mesmo nome digitado na entrada */

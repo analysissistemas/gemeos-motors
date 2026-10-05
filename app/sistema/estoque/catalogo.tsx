@@ -85,6 +85,7 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
                       {TIPOS_CATALOGO[m.tipo as TipoCatalogo] ?? m.tipo} · {m.precoTabela ? brl(m.precoTabela) : "Consultar preço"} ·{" "}
                       {DISPONIBILIDADES[m.disponibilidade as Disponibilidade] ?? m.disponibilidade}
                       {m.veiculos ? ` · ${m.veiculos} veículo(s) no estoque` : ""}
+                      {m.tipo === "acessorio" && m.quantidade != null ? ` · ${m.quantidade} em estoque` : ""}
                     </p>
                     {lista.length > 0 && (
                       <span className="mt-1 flex flex-wrap gap-1">
@@ -198,6 +199,7 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     return f;
   });
   const [mostrarNoSite, setMostrarNoSite] = useState(item?.mostrarNoSite ?? true);
+  const [quantidade, setQuantidade] = useState(item?.quantidade != null ? String(item.quantidade) : "");
   const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>((item?.disponibilidade as Disponibilidade) ?? "consultar");
   const [lancamento, setLancamento] = useState(item?.lancamento ?? false);
   const [lancamentoTexto, setLancamentoTexto] = useState(item?.lancamentoTexto ?? "");
@@ -222,6 +224,7 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       descricao,
       ficha,
       mostrarNoSite,
+      quantidade: acessorio ? quantidade : null,
       disponibilidade,
       lancamento,
       lancamentoTexto,
@@ -440,6 +443,12 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       <Campo rotulo="Descrição curta" dica="Aparece no card (principalmente em acessório)." erro={erros.descricao}>
         <AreaTexto value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} maxLength={500} />
       </Campo>
+
+      {acessorio && (
+        <Campo rotulo="Quantidade em estoque" dica="Quantos tem na loja. Vazio = não contado; 0 = acabou (a IA não oferece)." erro={erros.quantidade}>
+          <Entrada value={quantidade} onChange={(e) => setQuantidade(e.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={4} invalido={!!erros.quantidade} />
+        </Campo>
+      )}
 
       {!acessorio && (
         <fieldset className="rounded-2xl border border-linha p-3">

@@ -138,6 +138,9 @@ export const modelos = pgTable(
        no lugar da foto da cor. Mesmo acervo das fotos do catálogo (/api/vitrine/foto/...) */
     fotoWhatsappUrl: text(),
     mostrarNoSite: boolean().notNull().default(true),
+    /* só acessório (vendido por quantidade, sem unidade própria): quantos tem na loja. null = não contado.
+       0 = acabou (a IA não oferece). Pedido de 05/10/2026: "Baú 28 litros, 7 unidades". */
+    quantidade: integer(),
     disponibilidade: text().notNull().default("consultar"), // pronta_entrega | sob_encomenda | consultar
     /* lançamento: destaque no site e formulário de reserva */
     lancamento: boolean().notNull().default(false),

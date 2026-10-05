@@ -1,0 +1,1 @@
+ALTER TABLE "modelos" ADD COLUMN "quantidade" integer;
