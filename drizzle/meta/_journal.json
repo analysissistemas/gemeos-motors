@@ -218,6 +218,13 @@
       "when": 1791239878632,
       "tag": "0030_new_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791239938632,
+      "tag": "0031_ia_indicacoes_dono",
+      "breakpoints": true
     }
   ]
 }
