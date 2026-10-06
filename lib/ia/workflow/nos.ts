@@ -723,11 +723,14 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
 }
 
 /** Endereços de foto/vídeo que a IA já mandou nesta conversa (para não repetir sem o cliente pedir). */
+/* Só conta o que foi mandado nas últimas 24 h: cliente que volta outro dia e se interessa de novo recebe a foto e o
+   vídeo outra vez (conversa real de 05/10/2026: a TANK tinha ido dias antes e a IA não mandou). */
 async function midiasJaEnviadas(conversaId: number) {
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const linhas = await db
     .select({ url: schema.mensagens.midiaUrl })
     .from(schema.mensagens)
-    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.autor, "ia"), sql`${schema.mensagens.midiaUrl} is not null`));
+    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.autor, "ia"), sql`${schema.mensagens.midiaUrl} is not null`, gt(schema.mensagens.criadoEm, desde)));
   return linhas.map((l) => l.url).filter((u): u is string => !!u);
 }
 
