@@ -16,6 +16,9 @@ test("assistência, garantia e defeito ganham de compra", () => {
 
 test("falou de moto, modelo, preço ou pagamento: é compra", () => {
   for (const t of ["quanto custa a AG08?", "vi a moto no site", "tem a T1?", "quais modelos vocês têm?", "aceita pix?", "df17"]) assert.equal(intencaoDoTexto(t, NOMES), "compra", t);
+  /* revisão de 06/10/2026: sem estas, a conversa virava "recado" depois do "como posso te ajudar?" */
+  for (const t of ["vocês têm patinete elétrico?", "quero ver as bicicletas de vocês", "queria aquela do pneu largo", "a do motoqueiro fantasma", "queria saber das motinhas"]) assert.equal(intencaoDoTexto(t, NOMES), "compra", t);
+  assert.equal(intencaoDoTexto("o pneu da minha patinete furou", NOMES), "assistencia");
   /* nome dentro de outra palavra não conta */
   assert.equal(intencaoDoTexto("ag080", NOMES), null);
 });

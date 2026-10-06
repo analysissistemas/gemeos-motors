@@ -140,7 +140,19 @@ export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesD
        Antes ela era barrada e o cliente recebia "vou confirmar com a equipe" (teste real de 05/10/2026, M6) */
     const NEGA = /(?<![\p{L}])(?:n[ãa]o\s+(?:temos|tem|tenho|h[áa]|est[áa]|ficou|chegou)|sem\s+unidade|esgotad\p{L}*|indispon[ií]ve(?:l|is)|em\s+falta|acabou|acabaram)(?![\p{L}])/iu;
     if (NEGA.test(frase)) {
-      if (catalogo.some((n) => comEstoque.has(n) && cita(n, f))) return false;
+      /* cada pedaço vale por si: "não temos a M6 disponível, mas a AG08 está a pronta entrega" é a verdade
+         (revisão de 06/10/2026: a frase inteira era barrada por citar a AG08 junto do "não temos") */
+      for (const parte of frase.split(/[,;]|\s(?:mas|por[ée]m|s[óo]\s+que|e\s+sim)\s/iu)) {
+        const p = ` ${norm(parte)} `;
+        if (NEGA.test(parte)) {
+          if (catalogo.some((n) => comEstoque.has(n) && cita(n, p))) return false;
+          continue;
+        }
+        if (!ESTOQUE.test(parte)) continue;
+        let restoParte = p;
+        for (const n of Array.from(comEstoque).sort((a, b) => b.length - a.length)) if (n.length >= 2) restoParte = restoParte.replace(palavraInteira(n), " ");
+        if (catalogo.some((n) => !comEstoque.has(n) && cita(n, restoParte))) return false;
+      }
       continue;
     }
     let resto = f;

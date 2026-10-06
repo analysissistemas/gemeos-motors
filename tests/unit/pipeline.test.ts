@@ -408,4 +408,9 @@ test("frase negativa sobre modelo sem unidade passa; negar o que tem unidade nã
   assert.equal(disponibilidadeDoEstoque("A M6 está indisponível agora.", deps), true);
   assert.equal(disponibilidadeDoEstoque("A M6 está disponível.", deps), false);
   assert.equal(disponibilidadeDoEstoque("Não temos a T1 disponível.", deps), false);
+  /* revisão de 06/10/2026: a negativa e a oferta na mesma frase */
+  assert.equal(disponibilidadeDoEstoque("No momento não temos a M6 disponível, mas a T1 está a pronta entrega 😊", deps), true);
+  assert.equal(disponibilidadeDoEstoque("A M6 está esgotada; a T1 tem a pronta entrega.", deps), true);
+  assert.equal(disponibilidadeDoEstoque("Não temos a M6 disponível, mas a M6 chega dia 9.", deps), true);
+  assert.equal(disponibilidadeDoEstoque("Não temos a T1 agora, mas a M6 está disponível.", deps), false);
 });
