@@ -37,7 +37,7 @@ import {
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, textoPosVenda, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, textoPosVenda, textoRecado, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -125,6 +125,8 @@ export type CtxWorkflow = {
   mandarLocal: boolean;
   /** última mensagem da loja (IA ou vendedor), para saber a que pergunta o cliente está respondendo */
   ultimaDaLoja: string;
+  /** assunto que não é compra nem assistência (recado, pedido de uma pessoa): a resposta é do sistema e vai para a equipe */
+  recado?: boolean;
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -251,7 +253,7 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
     }
     const troca = temTroca(fatos.troca);
     /* pós-venda não é venda: não abre negócio no funil (Diretrizes, 04/10/2026) */
-    if (!negocioId && c.intencao !== "assistencia") {
+    if (!negocioId && c.intencao === "compra") {
       negocioId = await criarNegocio(
         null,
         { clienteId, veiculoInteresse: fatos.interesse?.trim() || null, origem: "whatsapp", temTroca: !!troca, trocaDescricao: troca ? fatos.troca : null, responsavelId: null },
@@ -271,7 +273,7 @@ async function qualificarLead(c: CtxWorkflow, fatos: FatosLead, resumo: string |
 
   /* temperatura na triagem da conversa (a tela já mostra a "intenção de compra") */
   /* reclamação de pós-venda que vai para uma pessoa não é "lead quente" (teste de 04/10/2026) */
-  const pediuProposta = c.intencao !== "assistencia" && (c.pipe?.motivo === "modelo_pediu_transferencia" || ["decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais"].includes(c.momento ?? ""));
+  const pediuProposta = c.intencao === "compra" && (c.pipe?.motivo === "modelo_pediu_transferencia" || ["decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais"].includes(c.momento ?? ""));
   const antes = temperaturaDaIntencao(cv.triagemIa?.intencaoCompra);
   const triagem = triagemDosFatos(fatos, resumo, cv.triagemIa ?? null, { pediuProposta });
   const temperatura = temperaturaDoLead(fatos, { pediuProposta });
@@ -569,8 +571,8 @@ async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
    ou disse o nome pode querer garantia, assistência ou peça: nada de moto, preço, estoque ou foto ainda.
    Sai a frase que oferece produto e as perguntas saem; fica UMA, aberta: "Como posso te ajudar?" (fase 2:
    o nome não é mais a pergunta). */
-async function entenderPrimeiro(resposta: string[], intencao: Intencao | null): Promise<string[]> {
-  if (intencao) return resposta;
+async function entenderPrimeiro(resposta: string[], intencao: Intencao | null, c?: CtxWorkflow): Promise<string[]> {
+  if (intencao || c?.recado) return resposta;
   const nomes = await nomesDoCatalogo();
   let r = resposta.map((b) => tirarOfertaDeProduto(b, nomes)).filter((b) => /\p{L}/u.test(b));
   r = r
@@ -980,6 +982,22 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `Pós-venda. O cliente escreveu: "${relato}"` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, posVenda: "passa para uma pessoa (pós-venda)" } };
     }
+    /* Recado / outro assunto (teste real de 05/10/2026, Dinho): não é compra nem assistência e o cliente pede uma
+       pessoa, manda recado, a própria IA pediu a transferência, ou a loja já perguntou "como posso te ajudar?" e ele
+       seguiu falando de outra coisa. Texto do sistema: passa o recado, sem vender e sem repetir a pergunta. */
+    const jaPerguntouAjuda = /como posso te ajudar|em que posso te ajudar|o que você precisa/iu.test(ultimaDaLoja);
+    const falouAlgo = c.textoBuffer.replace(/[^\p{L}]+/gu, " ").trim().split(" ").length >= 4;
+    const perguntaRobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|[ée]\s+humano|pessoa de verdade|intelig[êe]ncia artificial/iu.test(c.textoBuffer);
+    if (!intencao && !perguntaRobo && r.ctx.texto && (r.ctx.humano || RX_RECADO.test(c.textoBuffer) || RX_PEDE_PESSOA.test(c.textoBuffer) || (jaPerguntouAjuda && falouAlgo))) {
+      const relato = textoDoCliente(c).replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
+      const texto = textoRecado({
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome) ?? primeiroNome(nomeDoPerfil(c.conversa?.contatoNome)),
+        lojaAberta: aberta,
+        jaEncaminhou: /passar o seu recado|juntei isso ao seu recado/iu.test(c.memoria.historico ?? ""),
+      });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, recado: true, motivoTransferencia: `Recado / outro assunto. O cliente escreveu: "${relato}"` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, recado: true } };
+    }
     if (momento === "pediu_simulacao") {
       const recentes = leadAntes.split("\n").slice(-2).join("\n");
       const agora = simulacaoPedida(c.textoBuffer);
@@ -1063,7 +1081,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
     if (!lojaAberta(await lerHorario())) {
       await db.update(schema.conversas).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
-      await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, ${c.intencao === "assistencia" ? "a equipe da assistência" : "um vendedor"} deve assumir. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "não informado")}. Resumo: ${resumo}`, { triagem: true });
+      await mensagemSistema(db, c.conversaId, `Fora do horário: a IA continua atendendo. Quando a loja abrir, ${c.intencao === "assistencia" ? "a equipe da assistência" : c.recado ? "alguém da equipe" : "um vendedor"} deve assumir. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "não informado")}. Resumo: ${resumo}`, { triagem: true });
       /* fora do horário ninguém vai continuar agora: nada de "já estou te encaminhando" */
       const emAndamento = !!c.memoria.historico?.includes("Agente IA:") || !!c.memoria.historico?.includes("Vendedor:");
       const texto = pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA ? pipe.texto : emAndamento ? TEXTO_CONFIRMAR : TEXTO_FORA_HORARIO;
@@ -1080,7 +1098,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       await tx.update(schema.conversas).set({ modo: "humano", prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
       await mensagemSistema(tx, c.conversaId, `Transferido para atendimento humano pela IA. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "não informado")}. Resumo: ${resumo}`, { triagem: true });
       /* pós-venda não abre negócio de venda no funil */
-      if (cv.clienteId && !negocioId && c.intencao !== "assistencia") {
+      if (cv.clienteId && !negocioId && c.intencao === "compra") {
         const f = { ...c.memoria.fatos, ...c.aprendido.fatos };
         negocioId = await criarNegocio(null, { clienteId: cv.clienteId, veiculoInteresse: f.interesse ?? null, origem: "whatsapp", temTroca: !!f.troca, trocaDescricao: f.troca ?? null, responsavelId: null }, { demo: cv.demo, triagemIa: resumo }, tx);
         if (negocioId) await tx.update(schema.conversas).set({ negocioId }).where(eq(schema.conversas.id, c.conversaId));
@@ -1175,7 +1193,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
     /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
-    resposta = await entenderPrimeiro(resposta, intencao);
+    resposta = await entenderPrimeiro(resposta, intencao, c);
     /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
        "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */
     /* a proposta automática saiu (P20); se a IA ainda escrever uma (prompt antigo), ela sai da resposta */

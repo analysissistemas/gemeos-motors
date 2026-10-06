@@ -68,7 +68,8 @@ export function instrucaoDeIntencao(intencao: Intencao | null): string {
     return `# O QUE O CLIENTE QUER
 O cliente fala de assistência, garantia, defeito, peça ou reclamação. A venda para aqui: NÃO ofereça moto, preço nem foto. Deixe o cliente contar, mostre empatia de verdade, não discuta, não culpe o cliente e não use frase pronta. Entenda o problema (o que está acontecendo, qual é a moto e quando comprou — uma pergunta por vez). Quando entender, convide UMA vez a trazer a moto à loja para a assistência técnica avaliar (endereço e horário da base de conhecimento). Se ele disser que não pode vir ou mora longe, NÃO insista: diga que vai encaminhar o caso aos responsáveis para avaliarem a melhor forma de atendimento e combinarem os próximos passos com ele, e coloque transferir como true com o motivo "pós-venda: <resumo fiel do relato>". Cliente muito irritado: priorize passar para uma pessoa. Nunca prometa conserto, troca, reembolso ou prazo.`;
   return `# O QUE O CLIENTE QUER
-Ainda não está claro o que o cliente quer (ele só cumprimentou ou disse o nome). NÃO fale de moto, modelo, preço, estoque nem foto. Primeiro entenda o que ele precisa: pode ser comprar uma moto, assistência técnica, garantia, um defeito, peça ou acessório. Faça UMA pergunta aberta: "Como posso te ajudar?". Não pergunte o nome do cliente.`;
+Ainda não está claro o que o cliente quer (ele só cumprimentou ou disse o nome). NÃO fale de moto, modelo, preço, estoque nem foto. Primeiro entenda o que ele precisa: pode ser comprar uma moto, assistência técnica, garantia, um defeito, peça ou acessório. Faça UMA pergunta aberta: "Como posso te ajudar?". Não pergunte o nome do cliente.
+Se o cliente falar de outro assunto (recado para alguém da loja, assunto pessoal, sorteio, brincadeira ou promoção da loja, trabalho, fornecedor, cobrança) ou pedir para falar com alguém: NÃO diga o que a loja faz ou deixa de fazer, NÃO recuse e NÃO puxe para moto. Diga que vai passar o recado para a equipe e coloque transferir como true com o motivo "recado: <resumo fiel do que ele pediu>".`;
 }
 
 /** No pós-venda, o cliente disse que não pode vir à loja: não insistir, passar para uma pessoa (Diretrizes, 04/10/2026). */
@@ -95,4 +96,19 @@ export function textoPosVenda(p: { nome: string | null; lojaAberta: boolean; jaE
       : " Já deixei o seu caso anotado, com prioridade, para os responsáveis da assistência: assim que a loja abrir, eles avaliam a melhor forma de te atender e combinam os próximos passos com você por aqui.";
   const conta = p.semDetalhe ? "\nSe quiser, já me conta aqui o que está acontecendo com a moto, que fica tudo registrado para eles." : "";
   return `${abre}${longe}${caso}${conta}`;
+}
+
+/** O cliente quer falar com alguém ou mandar recado ("quero falar com o moço", "fala pra ele que..."). Teste real
+ *  de 05/10/2026 (Dinho): pediu para falar com o dono sobre um presente e a IA respondeu "Em que posso te ajudar?". */
+export const RX_RECADO =
+  /(?<![\p{L}])(?:(?:quero|queria|preciso|posso|gostaria de)\s+falar\s+com|fala\s+(?:pra|para|com)\s+(?:ele|ela|o\s|a\s)|diz\s+(?:pra|para)\s+(?:ele|ela)|avisa\s+(?:pra|para|a|o)\s|manda\s+(?:um\s+)?recado|deixar\s+(?:um\s+)?recado|(?:um|o|esse|meu)\s+recado|passa\s+(?:pra|para)\s+(?:ele|ela|o\s+dono|o\s+gerente)|com\s+o\s+dono|com\s+o\s+gerente|com\s+o\s+respons[áa]vel)(?![\p{L}])/iu;
+
+/** Texto do sistema quando o assunto não é compra nem assistência: passa o recado, sem insistir em vender e sem
+ *  repetir "Como posso te ajudar?". `jaEncaminhou`: o recado já foi passado antes nesta conversa. */
+export function textoRecado(p: { nome: string | null; lojaAberta: boolean; jaEncaminhou: boolean }): string {
+  const n = p.nome ? `, ${p.nome}` : "";
+  if (p.jaEncaminhou) return `Anotado${n}! Já juntei isso ao seu recado para a equipe 🙏`;
+  return p.lojaAberta
+    ? `Entendi${n}! Vou passar o seu recado agora para a nossa equipe, e o responsável fala com você por aqui 🙏`
+    : `Entendi${n}! Vou passar o seu recado para a nossa equipe, e o responsável fala com você por aqui assim que a loja abrir 🙏`;
 }

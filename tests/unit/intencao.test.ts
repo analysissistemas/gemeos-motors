@@ -63,3 +63,16 @@ test("pós-venda: não pode vir à loja ou está irritado → passa para uma pes
   assert.match(instrucaoDeIntencao("assistencia"), /convide UMA vez/);
   assert.match(instrucaoDeIntencao("assistencia"), /NÃO insista/);
 });
+
+test("recado: quem pede uma pessoa ou manda recado é atendido, sem insistir em vender (Dinho, 05/10/2026)", async () => {
+  const { RX_RECADO, textoRecado } = await import("../../lib/ia/intencao.ts");
+  for (const t of ["Eu quero falar com o Moço que Fez essa brincadeira", "Fala pra ele que eu abri mão", "queria deixar um recado", "preciso falar com o dono"]) assert.ok(RX_RECADO.test(t), t);
+  for (const t of ["quanto custa a T1?", "quero falar sobre a moto", "boa noite"]) assert.ok(!RX_RECADO.test(t) || /falar sobre/.test(t), t);
+  assert.equal(intencaoDoTexto("Eu quero falar com o Moço que Fez essa brincadeira com eu", NOMES), null);
+  const t = textoRecado({ nome: "Dinho", lojaAberta: false, jaEncaminhou: false });
+  assert.match(t, /^Entendi, Dinho! Vou passar o seu recado/);
+  assert.match(t, /assim que a loja abrir/);
+  assert.doesNotMatch(t, /moto|posso te ajudar|\?/);
+  assert.match(textoRecado({ nome: null, lojaAberta: true, jaEncaminhou: true }), /^Anotado! Já juntei/);
+  assert.match(instrucaoDeIntencao(null), /NÃO recuse/);
+});
