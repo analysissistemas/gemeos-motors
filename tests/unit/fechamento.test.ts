@@ -165,3 +165,12 @@ test("\"quero que entregue\" também é escolha de entrega (teste de 05/10/2026)
   for (const t of ["quero que entregue, moro em Goiana", "pode entregar", "entrega", "manda pra mim", "leva aqui em casa"]) assert.equal(detectarMomento({ textoCliente: t, ultimaDaLoja, conheceModelo: true }), "escolheu_entrega", t);
   assert.equal(detectarMomento({ textoCliente: "vou buscar aí", ultimaDaLoja, conheceModelo: true }), "escolheu_retirada");
 });
+
+test("venda não se adia: \"conversamos amanhã\" e \"loja está fechada\" saem da resposta (05/10/2026)", async () => {
+  const { tirarAdiamento } = await import("../../lib/ia/fechamento.ts");
+  assert.deepEqual(
+    tirarAdiamento(["A loja está fechada neste momento, mas a equipe vai te atender amanhã. A *TANK AG11* está disponível por R$ 12.900.", "É um modelo com motor forte. O que acha de conversarmos melhor amanhã para confirmar sua compra? 🙂"]),
+    ["A *TANK AG11* está disponível por R$ 12.900.", "É um modelo com motor forte."],
+  );
+  assert.deepEqual(tirarAdiamento(["A T1 anda até 70 km."]), ["A T1 anda até 70 km."]);
+});

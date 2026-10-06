@@ -260,3 +260,13 @@ O cliente mandou parte dos dados que você pediu. Agradeça e peça só o que ai
       return "";
   }
 }
+
+/* Frase que adia a venda ("O que acha de conversarmos melhor amanhã?", "A loja está fechada neste momento"):
+   sai da resposta de quem quer comprar. Pedido de 05/10/2026: mesmo com a loja fechada, a IA vai até o sim. */
+const RX_ADIA = /(?<![\p{L}])(?:conversar\p{L}*\s+(?:melhor\s+)?amanh[ãa]|amanh[ãa]\s+(?:a\s+gente|conversamos|te\s+chamo|falamos|confirmamos)|loja\s+(?:est[áa]|t[áa])\s+fechada|quando\s+a\s+loja\s+abrir\s+(?:a\s+gente\s+)?(?:confirma|fecha|conversa))/iu;
+export function tirarAdiamento(resposta: string[]): string[] {
+  const FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu;
+  return resposta
+    .map((b) => (b.match(FRASES) ?? [b]).filter((f) => !RX_ADIA.test(f)).join("").trim())
+    .filter((b) => /\p{L}/u.test(b));
+}
