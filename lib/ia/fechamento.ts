@@ -25,7 +25,8 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLow
 
 const RX_PEDIU_ESCOLHA = /retir\w*[^?]{0,60}entreg|entreg\w*[^?]{0,60}retir|buscar[^?]{0,40}entreg|delivery/;
 const RX_PEDIU_DADOS = /nome completo/;
-const RX_ENTREGA = /(?<![a-z])(entrega\w*|entregar|delivery|deliv[e]ry|receber (em casa|aqui)|manda(r)? (pra|para) (mim|casa|ca)|em casa|na minha casa)(?![a-z])/;
+/* "entreg\w*" pega entrega, entregar, entregue, entreguem ("quero que entregue", teste de 05/10/2026) */
+const RX_ENTREGA = /(?<![a-z])(entreg\w*|delivery|receber (em casa|aqui|la em casa)|manda(r)? (pra|para) (mim|casa|ca)|leva(r)? (pra mim|ate mim|aqui)|em casa|na minha casa)(?![a-z])/;
 const RX_RETIRADA = /(?<![a-z])(retir\w*|buscar|busco|pegar (ai|na loja|aqui)|vou ai|vou na loja|ir na loja|passo ai|eu pego|eu busco)(?![a-z])/;
 const RX_CPF = /(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)/;
 const RX_OUTRO_DADO = /(?<!\d)\d{5}-?\d{3}(?!\d)|(?<!\d)\d{1,2}\/\d{1,2}\/\d{2,4}(?!\d)|(?<![a-z])(rua|avenida|av\.|bairro|cep|travessa)(?![a-z])/;

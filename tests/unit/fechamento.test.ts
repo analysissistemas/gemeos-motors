@@ -159,3 +159,9 @@ test("patinete: as frases prontas usam o artigo certo (o patinete, a moto)", asy
   assert.match(textoDadosRecebidos({ nome: "Ana", modelo: "T1", modo: "retirada", lojaAberta: true }, 0), /separação da sua \*T1\*/);
   assert.match(textoSimulacao({ parcelas: 10, bandeira: "Visa", modelo: "Patinete 350W" }), /do patinete\?$/);
 });
+
+test("\"quero que entregue\" também é escolha de entrega (teste de 05/10/2026)", () => {
+  const ultimaDaLoja = "Prefere vir buscar aqui na loja ou que a gente entregue pra você? 🛵";
+  for (const t of ["quero que entregue, moro em Goiana", "pode entregar", "entrega", "manda pra mim", "leva aqui em casa"]) assert.equal(detectarMomento({ textoCliente: t, ultimaDaLoja, conheceModelo: true }), "escolheu_entrega", t);
+  assert.equal(detectarMomento({ textoCliente: "vou buscar aí", ultimaDaLoja, conheceModelo: true }), "escolheu_retirada");
+});
