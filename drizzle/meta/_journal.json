@@ -225,6 +225,13 @@
       "when": 1791239938632,
       "tag": "0031_ia_indicacoes_dono",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791239998632,
+      "tag": "0032_t3_t5_autonomia_original",
+      "breakpoints": true
     }
   ]
 }

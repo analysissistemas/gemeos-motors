@@ -4,7 +4,7 @@
 -- Tank AG11: 45 a 55 km por carga (a conta de economia passa a usar 45).
 UPDATE "modelos" SET "ficha" = coalesce("ficha", '{}'::jsonb) || '{"autonomia":"45 a 55 km"}'::jsonb
 WHERE upper(trim("nome")) IN ('TANK AG11', 'AG11', 'TANK');--> statement-breakpoint
--- T1, T3 Retrô e T5 Retrô: até 70 km
+-- T1, T3 Retrô e T5 Retrô: até 70 km (T3 e T5 voltam à faixa da equipe na 0032)
 UPDATE "modelos" SET "ficha" = coalesce("ficha", '{}'::jsonb) || '{"autonomia":"Até 70 km"}'::jsonb
 WHERE upper(trim("nome")) ~ '^T[135]( |$)';--> statement-breakpoint
 INSERT INTO "ia_conhecimento" ("categoria", "titulo", "conteudo")
