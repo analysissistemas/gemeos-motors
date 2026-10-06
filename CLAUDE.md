@@ -51,7 +51,7 @@ roda só no VPS da Hostinger, com o EasyPanel.
 
 | | |
 |---|---|
-| Teste | **https://teste.gemeosmotors.com.br** (loja em `/`, equipe em `/login`) |
+| Teste | **teste.gemeosmotors.com.br** — mesmo sistema e mesmo banco do principal. Desde 05/10/2026, com o site no ar, **redireciona para gemeosmotors.com.br** (`proxy.ts`); só abre de verdade com `MODO_MANUTENCAO=1` (porta da equipe). Equipe: `gemeosmotors.com.br/login` |
 | Domínio principal | **gemeosmotors.com.br** e **www** — **no ar desde 05/10/2026** (`MODO_MANUTENCAO=0` no Ambiente, pedido do dono). Para voltar à manutenção: `MODO_MANUTENCAO=1` + Implantar (só `teste` fica liberado) |
 | VPS | `srv2001302.hstgr.cloud`, IP `2.25.240.204`; EasyPanel em `http://2.25.240.204:3000` |
 | Projeto no EasyPanel | `gemeos-motors`: serviço **sistema** (este código) e serviço **banco** (PostgreSQL 18, base `gemeos`, endereço interno `gemeos-motors_banco:5432`, sem SSL) |

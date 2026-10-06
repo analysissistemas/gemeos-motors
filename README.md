@@ -4,8 +4,8 @@ Sistema da **Gêmeos Motors** (Goiana, Pernambuco, com entrega em toda a região
 elétricas**, **compra, venda e repasse de moto a combustão e de
 carro**, acessórios e assistência técnica própria.
 
-**No ar (teste):** https://teste.gemeosmotors.com.br — abre a loja; a equipe
-entra em `/login`. Roda no VPS da Hostinger, pelo EasyPanel (sem Vercel).
+**No ar:** https://gemeosmotors.com.br — abre a loja; a equipe entra em
+`/login`. O endereço `teste.` redireciona para o principal (só abre em manutenção). Roda no VPS da Hostinger, pelo EasyPanel (sem Vercel).
 
 **Código:** https://github.com/analysissistemas/gemeos-motors, branch
 `vitrine-html` (a branch `main` é outro sistema, do Leo — não misture as duas).

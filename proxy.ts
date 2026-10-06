@@ -19,9 +19,26 @@ function emManutencao(request: NextRequest) {
   return !liberados.includes(host);
 }
 
+/* 3) teste.gemeosmotors.com.br é o MESMO sistema e o MESMO banco do domínio principal. Com o site
+      no ar, quem abre o teste vai para o mesmo caminho no principal (ninguém cai nele por acaso).
+      Em manutenção ele volta a abrir: é a porta da equipe. 302, para o navegador não guardar. */
+const HOST_TESTE = "teste.gemeosmotors.com.br";
+
+function enderecoPrincipal(request: NextRequest) {
+  if (process.env.MODO_MANUTENCAO === "1") return null;
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (host !== HOST_TESTE) return null;
+  const principal = (process.env.SITE_URL ?? "").replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+  if (!principal || principal === HOST_TESTE) return null;
+  return new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${principal}`);
+}
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname.startsWith("/api/webhooks/")) return NextResponse.next();
+
+  const principal = enderecoPrincipal(request);
+  if (principal) return NextResponse.redirect(principal, 302);
 
   if (emManutencao(request)) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ erro: "Em manutenção" }, { status: 503, headers: { "Retry-After": "3600" } });
