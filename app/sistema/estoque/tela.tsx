@@ -11,7 +11,7 @@ import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
-import { ajustarGrupoVeiculos, darEntradaAcessorio, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
+import { ajustarGrupoVeiculos, ajustarQuantidadeAcessorio, darEntradaAcessorio, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
 import { Catalogo } from "./catalogo";
 
@@ -308,6 +308,11 @@ export function TelaEstoque({
   const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov">("veiculos");
   const [editando, setEditando] = useState<Partial<VeiculoLinha> | null>(null);
   const [ajustando, setAjustando] = useState<VeiculoLinha[] | null>(null);
+  const [ajustandoAcessorio, setAjustandoAcessorio] = useState<ItemCatalogo | null>(null);
+  /* acessórios entram na lista do estoque (pedido de 05/10/2026), pela quantidade do catálogo */
+  const termo = (filtros.q ?? "").trim().toLowerCase();
+  const acessorios = catalogo.filter((c) => c.ativo && c.tipo === "acessorio" && (!termo || c.nome.toLowerCase().includes(termo)));
+  const verAcessorios = !filtros.tipo && (!filtros.status || filtros.status === "disponivel");
   const [abertos, setAbertos] = useState<Set<number>>(() => new Set());
   const grupos = agrupar(veiculos);
   const alternarGrupo = (id: number) =>
@@ -476,8 +481,44 @@ export function TelaEstoque({
               </>
             )}
           </Painel>
+
+          {verAcessorios && acessorios.length > 0 && (
+            <Painel className="mt-4 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-linha px-4 py-3">
+                <p className="text-[13px] font-semibold">Acessórios</p>
+                <p className="text-[12px] text-ink-3">Por quantidade. Entrada nova: Dar entrada no estoque → Acessório.</p>
+              </div>
+              <ul>
+                {acessorios.map((a) => (
+                  <li key={a.id} className="flex items-center gap-3 border-b border-linha px-4 py-3 last:border-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{a.nome}</p>
+                      <p className="truncate text-[12.5px] text-ink-2">Acessório{a.mostrarNoSite ? "" : " · fora do site"}</p>
+                    </div>
+                    <span className="num hidden w-28 text-right font-semibold sm:block">{a.precoTabela ? brl(a.precoTabela) : <Selo tom="atencao">Sem preço</Selo>}</span>
+                    <span className="w-32 text-right">
+                      {a.quantidade == null ? (
+                        <Selo tom="neutro">Sem contagem</Selo>
+                      ) : a.quantidade > 0 ? (
+                        <Selo tom="bom">{a.quantidade} em estoque</Selo>
+                      ) : (
+                        <Selo tom="atencao">Esgotado</Selo>
+                      )}
+                    </span>
+                    {permissoes.editar && (
+                      <Botao tamanho="sm" variante="secundario" onClick={() => setAjustandoAcessorio(a)} aria-label={`Ajustar quantidade de ${a.nome}`}>
+                        Quantidade
+                      </Botao>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Painel>
+          )}
         </>
       )}
+
+      {ajustandoAcessorio && <AjusteAcessorio item={ajustandoAcessorio} aoFechar={() => setAjustandoAcessorio(null)} />}
 
       {aba === "catalogo" && <Catalogo itens={catalogo} cores={cores} editar={permissoes.editar} />}
 
@@ -609,6 +650,45 @@ function FormularioVeiculo({
         ) : (
           <CorpoVeiculo key={inicial.id ?? "novo"} inicial={inicial} modelos={modelos} cores={cores} unidades={unidades} custo={custo} admin={admin} aoFechar={() => aoMudar(false)} />
         ))}
+    </Dialogo>
+  );
+}
+
+/* Ajusta a contagem de um acessório (vendeu, contou de novo, acabou). */
+function AjusteAcessorio({ item, aoFechar }: { item: ItemCatalogo; aoFechar: () => void }) {
+  const [quantidade, setQuantidade] = useState(item.quantidade ?? 0);
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  function salvar() {
+    iniciar(async () => {
+      const r = await ajustarQuantidadeAcessorio({ modeloId: item.id, quantidade });
+      if (!r.ok) return void toast.error(r.erro);
+      toast.success(r.mensagem);
+      aoFechar();
+      router.refresh();
+    });
+  }
+  return (
+    <Dialogo aberto aoMudar={(v) => !v && aoFechar()} titulo={item.nome} descricao="Quantos tem na loja agora. Com 0, a IA para de oferecer.">
+      <Campo rotulo="Quantidade em estoque">
+        <div className="flex items-center gap-2">
+          <Botao type="button" onClick={() => setQuantidade((q) => Math.max(0, q - 1))} aria-label="Menos um">
+            −
+          </Botao>
+          <Entrada value={String(quantidade)} onChange={(e) => setQuantidade(Math.max(0, Math.min(9999, Number(e.target.value.replace(/\D/g, "")) || 0)))} inputMode="numeric" className="w-20 text-center" />
+          <Botao type="button" onClick={() => setQuantidade((q) => Math.min(9999, q + 1))} aria-label="Mais um">
+            +
+          </Botao>
+        </div>
+      </Campo>
+      <RodapeDialogo>
+        <Botao type="button" onClick={aoFechar}>
+          Cancelar
+        </Botao>
+        <Botao variante="primario" carregando={pendente} onClick={salvar}>
+          Salvar
+        </Botao>
+      </RodapeDialogo>
     </Dialogo>
   );
 }

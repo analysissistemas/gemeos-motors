@@ -279,3 +279,21 @@ export async function darEntradaAcessorio(entrada: { modeloId: number; quantidad
     return { total };
   }, `Entrada registrada: ${Math.trunc(Number(entrada.quantidade))} unidade(s)`);
 }
+
+/* Ajuste da contagem do acessório pela lista do Estoque (corrigir, baixar venda, zerar). */
+export async function ajustarQuantidadeAcessorio(entrada: { modeloId: number; quantidade: number }) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const quantidade = Math.trunc(Number(entrada.quantidade));
+    if (!(quantidade >= 0 && quantidade <= 9999)) throw new ErroRegra("Quantidade de 0 a 9999.", { quantidade: "De 0 a 9999" });
+    const [m] = await db.select().from(schema.modelos).where(eq(schema.modelos.id, Number(entrada.modeloId))).limit(1);
+    if (!m || m.tipo !== "acessorio") throw new ErroRegra("Acessório não encontrado. Atualize a página.");
+    if (m.quantidade === quantidade) return { quantidade };
+    await db.transaction(async (tx) => {
+      await tx.update(schema.modelos).set({ quantidade }).where(eq(schema.modelos.id, m.id));
+      await registrarLog(u, { acao: "modelo.estoque", entidade: "modelo", entidadeId: m.id, descricao: `Ajustou a quantidade de ${m.nome}: de ${m.quantidade ?? "—"} para ${quantidade}` }, tx);
+    });
+    revalidatePath("/sistema/estoque");
+    return { quantidade };
+  }, "Quantidade atualizada");
+}
