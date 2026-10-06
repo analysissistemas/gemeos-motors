@@ -1,7 +1,7 @@
 import "server-only";
 import { autonomiaMinima, comGasolinaDaRegiao, lerParametrosEconomia, textoEconomia } from "./economia";
 import { gasolinaPara, type GasolinaDoCliente } from "./gasolina";
-import { and, asc, desc, eq, inArray, max } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { TIPOS_ELETRICOS } from "@/lib/dominio";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
@@ -110,7 +110,7 @@ export function apelidosDoModelo(nome: string) {
 export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?: number | null; /** preço da ANP para a região do cliente; sem, a média do estado da loja */ gasolina?: GasolinaDoCliente | null } = {}) {
   const m = schema.modelos;
   const v = schema.veiculos;
-  const [linhas, cores, unidades, base] = await Promise.all([
+  const [linhas, cores, unidades, base, chegando] = await Promise.all([
     db
       .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade })
       .from(m)
@@ -122,6 +122,12 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
       .from(v)
       .where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
+    /* encomenda a caminho (05/10/2026: "a M6 chega dia 9/10, a linha esgotou e o dono fez o pedido"): unidade
+       Reservado com data de entrada no futuro. A IA diz quando chega e anota o interesse, sem vender como disponível */
+    db
+      .select({ modeloId: v.modeloId, modelo: v.modelo, entradaEm: v.entradaEm })
+      .from(v)
+      .where(and(eq(v.status, "reservado"), inArray(v.tipo, [...TIPOS_ELETRICOS]), sql`${v.entradaEm} > current_date`, opcoes.incluirTeste ? undefined : eq(v.teste, false))),
   ]);
   /* conta de economia × gasolina com os números da base (preço da gasolina, km/l, custo da carga) */
   const baseEconomia = lerParametrosEconomia(base.map((b) => b.conteudo));
@@ -129,7 +135,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[], semEstoque: [] as string[][] };
   const brl = (x: number | null) => (x ? reais(Number(x)) : "preço sob consulta");
   const comEstoque: string[] = [];
-  const semEstoque: { nome: string; apelidos: string[] }[] = [];
+  const semEstoque: { nome: string; apelidos: string[]; chega?: string | null }[] = [];
   const itens: string[] = [];
   for (const l of linhas) {
     const nome = [l.marca, l.nome].filter(Boolean).join(" ");
@@ -145,7 +151,9 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     /* unidade ligada ao modelo, ou com o mesmo nome digitado na entrada */
     const minhas = unidades.filter((u) => u.modeloId === l.id || (!u.modeloId && u.modelo.trim().toLowerCase() === l.nome.trim().toLowerCase()));
     if (!minhas.length) {
-      semEstoque.push({ nome, apelidos: apelidosDoModelo(l.nome) });
+      const vindo = chegando.filter((u) => u.modeloId === l.id || (!u.modeloId && u.modelo.trim().toLowerCase() === l.nome.trim().toLowerCase()));
+      const quando = vindo.map((u) => u.entradaEm).sort()[0];
+      semEstoque.push({ nome, apelidos: apelidosDoModelo(l.nome), chega: quando ? quando.split("-").reverse().slice(0, 2).join("/") : null });
       continue;
     }
     comEstoque.push(l.nome, ...(l.marca ? [l.marca] : []));
@@ -159,8 +167,9 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     const detalhes = l.descricao?.trim() ? ` | detalhes: ${l.descricao.trim()}` : "";
     itens.push(`• ${nome}${l.tipo === "patinete" ? " (patinete elétrico)" : ""}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
   }
+  const vindo = semEstoque.filter((x) => x.chega);
   const avisoSem = semEstoque.length
-    ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.`
+    ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.${vindo.length ? `\nENCOMENDA A CAMINHO (a loja já fez o pedido): ${vindo.map((x) => `${x.nome} chega em ${x.chega}`).join("; ")}. Se o cliente perguntar por esse modelo, diga que no momento não tem disponível, que a próxima remessa chega em ${vindo.length === 1 ? vindo[0].chega : "a data acima"} e ofereça anotar o interesse para a equipe avisar assim que chegar. Não prometa reserva nem preço.` : ""}`
     : "";
   const nenhuma = comEstoque.length ? "" : "\nNENHUMA moto elétrica com unidade disponível agora: não ofereça modelo; diga que a equipe confirma o que chegou e já te retorna.";
   const texto = `# CATÁLOGO DA LOJA E ESTOQUE AGORA
