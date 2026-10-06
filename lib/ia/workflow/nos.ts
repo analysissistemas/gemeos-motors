@@ -485,6 +485,45 @@ async function tarefaEntregaFora(c: CtxWorkflow, clienteId: number | null, negoc
   return `entrega em ${cidade}`;
 }
 
+/* Pedido de 05/10/2026: "quando a pessoa mandar um Oi e não responder mais nada, programa um follow-up 10 min
+   depois, 1 h depois e 23 h depois — só que ele não dispara a mensagem". Quando o cliente só cumprimentou (não
+   disse o que quer) e a IA respondeu, nascem 3 follow-ups para a EQUIPE chamar o cliente; nada sai sozinho para o
+   WhatsApp. Se o cliente voltar a falar, os que ainda não venceram são cancelados (e, se ainda só cumprimentou,
+   os 3 recomeçam a contar dali). 23 h fica dentro da janela de 24 h do WhatsApp para a equipe responder. */
+export const LEMBRETES_SEM_RESPOSTA = [
+  { minutos: 10, rotulo: "10 min" },
+  { minutos: 60, rotulo: "1 h" },
+  { minutos: 23 * 60, rotulo: "23 h" },
+] as const;
+async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
+  const F = schema.followUps;
+  const agora = new Date();
+  /* os lembretes antigos desta conversa que ainda não venceram saem: o cliente falou de novo */
+  await db
+    .update(F)
+    .set({ status: "cancelado", concluidoEm: agora })
+    .where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), sql`${F.contexto}->>'semResposta' = 'true'`, gt(F.agendadoPara, agora)));
+  const soCumprimentou = !c.intencao && !c.recado && !c.pipe?.humano && !!c.pipe?.texto;
+  if (!soCumprimentou) return null;
+  const cv = await carregarConversa(c.conversaId);
+  const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
+  await db.insert(F).values(
+    LEMBRETES_SEM_RESPOSTA.map((l, i) => ({
+      conversaId: c.conversaId,
+      clienteId: clienteId ?? cv.clienteId,
+      negocioId: negocioId ?? cv.negocioId,
+      usuarioId: cv.responsavelId,
+      agendadoPara: new Date(agora.getTime() + l.minutos * 60_000),
+      notas: `${nome ?? "O cliente"} só cumprimentou e não respondeu mais. ${i + 1}º lembrete (${l.rotulo}): chame de novo na conversa${i === 2 ? " (último: depois de 24 h o WhatsApp só aceita mensagem modelo)" : ""}.`,
+      tipo: "retorno_cliente",
+      motivo: `Sem resposta depois do cumprimento (${l.rotulo})`,
+      origem: "ia",
+      contexto: { semResposta: true, etapa: i + 1, detectadoPor: "ia" },
+    })),
+  );
+  return { lembretes: LEMBRETES_SEM_RESPOSTA.length };
+}
+
 /** Liga o negócio a uma unidade disponível do modelo que ainda não está em outra negociação aberta. */
 async function ligarMotoDoEstoque(negocioId: number, modeloNome: string) {
   const [neg] = await db.select({ veiculoId: schema.negocios.veiculoId, valorAnunciado: schema.negocios.valorAnunciado }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
@@ -1131,6 +1170,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       }
       /* dados do pedido no cadastro, com o resumo para a equipe */
       pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
+      /* só cumprimentou e sumiu: lembretes para a equipe chamar de novo (10 min, 1 h, 23 h) */
+      await lembretesSemResposta(c, q.clienteId, q.negocioId).catch(() => null);
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
     }
