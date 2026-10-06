@@ -400,3 +400,12 @@ test("SÓ O QUE TEM: moto que o cliente perguntou sai da lista (quem monta as De
   const { enviados } = await rodar("vocês têm a T1?", { modelo: [texto("A T1 no momento está sem unidade. Posso anotar seu interesse e te avisar quando chegar?")], ...LOJA, semEstoque: ["TANK AG11", "AG11", "T3 RETRÔ", "T3"] });
   assert.equal(enviados.length, 1);
 });
+
+test("frase negativa sobre modelo sem unidade passa; negar o que tem unidade não (M6, 05/10/2026)", async () => {
+  const { disponibilidadeDoEstoque } = await import("../../lib/ia/pipeline.ts");
+  const deps = { nomesDoCatalogo: ["M6", "T1"], modelosComEstoque: ["T1"] };
+  assert.equal(disponibilidadeDoEstoque("No momento não temos a M6 disponível. A T1 está a pronta entrega.", deps), true);
+  assert.equal(disponibilidadeDoEstoque("A M6 está indisponível agora.", deps), true);
+  assert.equal(disponibilidadeDoEstoque("A M6 está disponível.", deps), false);
+  assert.equal(disponibilidadeDoEstoque("Não temos a T1 disponível.", deps), false);
+});

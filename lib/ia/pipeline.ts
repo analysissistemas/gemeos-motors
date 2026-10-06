@@ -136,6 +136,13 @@ export function disponibilidadeDoEstoque(texto: string, deps: Pick<Deps, "nomesD
       continue;
     }
     /* tira os nomes com unidade (maiores primeiro): "T3 Retrô 2" com unidade não conta como "T3 Retrô" */
+    /* frase NEGATIVA ("no momento não temos a M6 disponível") sobre modelo SEM unidade é a verdade, não afirmação.
+       Antes ela era barrada e o cliente recebia "vou confirmar com a equipe" (teste real de 05/10/2026, M6) */
+    const NEGA = /(?<![\p{L}])(?:n[ãa]o\s+(?:temos|tem|tenho|h[áa]|est[áa]|ficou|chegou)|sem\s+unidade|esgotad\p{L}*|indispon[ií]ve(?:l|is)|em\s+falta|acabou|acabaram)(?![\p{L}])/iu;
+    if (NEGA.test(frase)) {
+      if (catalogo.some((n) => comEstoque.has(n) && cita(n, f))) return false;
+      continue;
+    }
     let resto = f;
     for (const n of Array.from(comEstoque).sort((a, b) => b.length - a.length)) if (n.length >= 2) resto = resto.replace(palavraInteira(n), " ");
     if (catalogo.some((n) => !comEstoque.has(n) && cita(n, resto))) return false;
