@@ -31,9 +31,15 @@ export function pedidoDeMidia(texto: string): TipoMidiaIa[] {
 
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Nome inteiro e os pedaços com número ("TANK AG11" → "AG11"), como na trava de estoque. */
+/* palavras que não identificam um modelo sozinhas ("moto tank" → TANK AG11, mas "capacete" não é nenhum) */
+const GENERICOS = new Set(["moto", "motos", "patinete", "patinetes", "capacete", "bau", "gemeos", "motors", "eletrica", "eletrico", "retro"]);
 function nomesDe(nome: string) {
-  const pedacos = nome.split(/\s+/).filter((p) => p.length >= 2 && /\d/.test(p));
-  return Array.from(new Set([nome, ...pedacos].map(norm)));
+  const palavras = nome.split(/\s+/);
+  const pedacos = palavras.filter((p) => p.length >= 2 && /\d/.test(p));
+  /* a 1ª palavra também vale ("tank" → TANK AG11, teste de 05/10/2026), se tiver 3+ letras e não for genérica */
+  const primeira = norm(palavras[0] ?? "");
+  const extra = palavras.length > 1 && primeira.length >= 3 && !/\d/.test(primeira) && !GENERICOS.has(primeira) ? [primeira] : [];
+  return Array.from(new Set([nome, ...pedacos, ...extra].map(norm)));
 }
 /** A moto citada por último no texto (posição da última menção). */
 export function ultimaCitada<T extends { nome: string }>(modelos: T[], texto: string): T | null {

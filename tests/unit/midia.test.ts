@@ -73,3 +73,11 @@ test("pesquisando: a resposta com 2 ou 3 motos leva uma foto de cada, sem vídeo
   assert.equal(planejarOpcoes({ modelos: [AG08, TANK], resposta: "A AG08 custa R$ 8.999,90.", jaEnviadas: [] }), null);
   assert.deepEqual(planejarOpcoes({ modelos: [AG08, TANK], resposta: "AG08 e TANK AG11", jaEnviadas: [AG08.fotos[0].url] })?.itens.map((i) => i.legenda), ["*TANK AG11* na cor Preta"]);
 });
+
+test("\"moto tank\" é a TANK AG11; palavra genérica não identifica modelo (05/10/2026)", () => {
+  const ms = [{ nome: "TANK AG11" }, { nome: "T1" }, { nome: "Patinete 800W" }, { nome: "X GÊMEOS" }, { nome: "Capacete Joy Bege" }];
+  assert.equal(ultimaCitada(ms, "fechado, quero a moto tank")?.nome, "TANK AG11");
+  assert.equal(ultimaCitada(ms, "quero um patinete"), null);
+  assert.equal(ultimaCitada(ms, "vocês são da gêmeos motors?"), null);
+  assert.equal(ultimaCitada(ms, "e o de 800W?")?.nome, "Patinete 800W");
+});
