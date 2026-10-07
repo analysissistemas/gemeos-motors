@@ -1022,7 +1022,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const doCliente = textoDoCliente(c);
       const relato = doCliente.replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
       const texto = textoPosVenda({
-        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome) ?? primeiroNome(nomeDoPerfil(c.conversa?.contatoNome)),
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
         lojaAberta: aberta,
         jaEncaminhou: /respons[áa]veis da assist[êe]ncia/i.test(c.memoria.historico ?? ""),
         naoPodeVir: naoPodeVir || RX_NAO_PODE_VIR.test(doCliente),
@@ -1041,7 +1041,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     if (!intencao && !perguntaRobo && r.ctx.texto && (r.ctx.humano || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) || (jaPerguntouAjuda && falouAlgo))) {
       const relato = textoDoCliente(c).replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
       const texto = textoRecado({
-        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome) ?? primeiroNome(nomeDoPerfil(c.conversa?.contatoNome)),
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
         lojaAberta: aberta,
         jaEncaminhou: /passar o seu recado|juntei isso ao seu recado/iu.test(c.memoria.historico ?? ""),
       });
@@ -1303,10 +1303,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
     if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
     /* abertura do Milton (P2 a P4): "Boa tarde, Carla! Tudo certinho? 😊 Me chamo Milton, sou da Gêmeos Motors…". O nome
-       é o que o cliente disse ou o do perfil do WhatsApp; se a resposta já fala do Milton (perguntou se é robô), não repete */
+       é só o que o cliente disse; se a resposta já fala do Milton (perguntou se é robô), não repete */
     let abertura = saudacao;
     if (abertura) {
-      const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(c.conversa?.contatoNome));
+      /* só o nome que o CLIENTE disse: o do perfil do WhatsApp erra ("Deus", apelido, nome de outra pessoa), 06/10/2026 */
+      const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome);
       if (!nomeNovo) abertura = saudacaoComNome(abertura, nome);
       if (!/milton/iu.test(resposta.join(" "))) abertura = `${abertura} ${reclamando ? "Aqui é o Milton, da Gêmeos Motors." : variar(APRESENTACAO)}`;
     }
