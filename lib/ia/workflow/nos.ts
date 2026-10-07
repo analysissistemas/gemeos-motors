@@ -37,7 +37,7 @@ import {
 } from "@/lib/ia/pipeline";
 import { entradaDoTexto, simularCartao } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -1086,10 +1086,10 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const agora = simulacaoPedida(c.textoBuffer);
       const antes = simulacaoPedida(recentes);
       const sim = { parcelas: agora.parcelas ?? antes.parcelas, bandeira: agora.bandeira ?? antes.bandeira };
-      const jaPerguntouOQueFalta = /E qual é a bandeira|E em quantas vezes/i.test(ultimaDaLoja);
+      const jaPerguntouOQueFalta = jaPerguntouSoOQueFalta(ultimaDaLoja, !sim.parcelas ? "parcelas" : "bandeira");
       let texto: string;
       let tarefa = false;
-      if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? "E em quantas vezes você gostaria de dividir? 😊" : "E qual é a bandeira do cartão? 😊";
+      if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? PERGUNTA_SO_PARCELAS : PERGUNTA_SO_BANDEIRA;
       else {
         /* simulação pelo sistema (tabela da maquininha, 06/10/2026); com entrada, bandeira sem tabela ou Amex acima de
            12x o vendedor confirma antes de passar valor */

@@ -174,3 +174,10 @@ test("venda não se adia: \"conversamos amanhã\" e \"loja está fechada\" saem 
   );
   assert.deepEqual(tirarAdiamento(["A T1 anda até 70 km."]), ["A T1 anda até 70 km."]);
 });
+
+test("só a bandeira (\"Visa\") depois da pergunta da IA com as duas coisas: ainda pergunta as parcelas (Arine, 06/10/2026)", async () => {
+  const { jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS } = await import("../../lib/ia/fechamento.ts");
+  assert.equal(jaPerguntouSoOQueFalta("Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊", "parcelas"), false);
+  assert.equal(jaPerguntouSoOQueFalta(PERGUNTA_SO_PARCELAS, "parcelas"), true);
+  assert.equal(jaPerguntouSoOQueFalta("E qual é a bandeira do cartão? 😊", "parcelas"), false);
+});

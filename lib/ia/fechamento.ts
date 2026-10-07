@@ -299,3 +299,15 @@ export function tirarAdiamento(resposta: string[]): string[] {
     .map((b) => (b.match(FRASES) ?? [b]).filter((f) => !RX_ADIA.test(f)).join("").trim())
     .filter((b) => /\p{L}/u.test(b));
 }
+
+export const PERGUNTA_SO_PARCELAS = "E em quantas vezes você gostaria de dividir? 😊";
+export const PERGUNTA_SO_BANDEIRA = "E qual é a bandeira do cartão? 😊";
+/** A loja já perguntou SÓ o que falta (a pergunta do sistema, sozinha) e o cliente seguiu sem responder: não pergunta de
+ *  novo. Pergunta da IA com as duas coisas ("Em quantas vezes...? E qual é a bandeira?") não conta: o cliente que respondeu
+ *  só "Visa" ainda tem que dizer as parcelas (Arine, 06/10/2026). */
+export function jaPerguntouSoOQueFalta(ultimaDaLoja: string, falta: "parcelas" | "bandeira") {
+  const t = ultimaDaLoja.trim();
+  const perguntas = (t.match(/\?/g) ?? []).length;
+  const alvo = falta === "parcelas" ? /e\s+em\s+quantas\s+vezes/iu : /e\s+qual\s+[ée]\s+a\s+bandeira/iu;
+  return perguntas === 1 && alvo.test(t);
+}
