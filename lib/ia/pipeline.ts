@@ -313,6 +313,9 @@ export const travaDeFatos: EtapaDeAtendimento = {
 export const validadorDeResposta: EtapaDeAtendimento = {
   nome: "validador",
   rodar: (c) => {
+    /* texto montado pelo SISTEMA (catálogo, simulação de parcelas, agenda): os valores vêm de conta do sistema, não da IA.
+       Teste real de 06/10/2026: a simulação "12 de R$ 689,04" era reprovada como "valor escrito pela IA" */
+    if (c.texto && c.texto === c.textoCatalogo) return {};
     const v = validarResposta(c.texto, { promptSistema: c.deps.promptSistema, fontesAutorizadas: c.deps.fontesAutorizadas });
     return v.aprovada ? {} : bloqueia("validador", { violacoes: v.violacoes });
   },

@@ -76,3 +76,12 @@ test("mídia: 'me mostra uma opção mais em conta' não é pedido de foto; 'fot
   const plano = planejarPedido({ modelos, textoCliente: "Me envia foto das duas opções", historicoCliente: "T3 RETRÔ", interesse: "T3 RETRÔ", ultimasDaLoja: "Agente IA: • *DF17* (bege ou preta): R$ 7.190\n• *AG08* (cinza): R$ 8.999,90" });
   assert.deepEqual(plano?.itens.map((i) => i.url), ["/df17-bege.webp", "/ag08.webp"]);
 });
+
+test("o validador não reprova a simulação montada pelo sistema, mas reprova valor escrito pela IA (teste real de 06/10/2026)", async () => {
+  const { validadorDeResposta } = await import("../../lib/ia/pipeline.ts");
+  const texto = textoSimulacaoPronta({ nome: "Rita", modelo: "DF17", aVista: 7190, parcelas: 12, bandeira: "Visa", parcela: 689.04, total: 8268.5 });
+  const base = { deps: { promptSistema: "", fontesAutorizadas: [] } } as never;
+  assert.deepEqual(validadorDeResposta.rodar({ ...(base as object), texto, textoCatalogo: texto } as never), {});
+  const r = validadorDeResposta.rodar({ ...(base as object), texto, textoCatalogo: null } as never) as { encerrar?: string };
+  assert.ok(r.encerrar, "sem a marca de texto do sistema, o valor continua barrado");
+});
