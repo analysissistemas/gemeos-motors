@@ -38,7 +38,7 @@ import {
 import { entradaDoTexto, simularCartao } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, semAberturaDoSite, textoPosVenda, textoRecado, tirarOfertaDeProduto, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, semAberturaDoSite, textoPosVenda, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -967,7 +967,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoDeIntencao(intencao)}
+${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoTriciclo(c.textoBuffer)}${instrucaoDeIntencao(intencao)}
 
 ${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1266,6 +1266,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     resposta = tirarPropostaAntiga(resposta);
     /* venda não se adia (05/10/2026: "a IA, mesmo com a loja fechada, tem que ir até o sim") */
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
+    resposta = tirarTriciclo(resposta);
     if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
     /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
     if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {

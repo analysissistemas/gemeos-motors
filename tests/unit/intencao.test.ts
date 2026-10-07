@@ -89,3 +89,12 @@ test("mensagem pronta do site não é pedido de falar com a equipe (Any, 06/10/2
   assert.equal(semAberturaDoSite(`${site}\nBom dia! Vcs tem triciclo elétrico?`), "Olá! Bom dia! Vcs tem triciclo elétrico?");
   assert.ok(RX_RECADO.test(semAberturaDoSite("quero falar com o dono")));
 });
+
+test("triciclo: a loja não tem; a resposta nunca chama moto de triciclo (06/10/2026)", async () => {
+  const { pediuTriciclo, tirarTriciclo, instrucaoTriciclo } = await import("../../lib/ia/intencao.ts");
+  assert.ok(pediuTriciclo("vocês têm triciclo elétrico?") && pediuTriciclo("queria uma de 3 rodas") && !pediuTriciclo("quero uma moto"));
+  assert.match(instrucaoTriciclo("tem triciclo?"), /NÃO tem triciclo/);
+  assert.equal(instrucaoTriciclo("tem moto?"), "");
+  assert.deepEqual(tirarTriciclo(["Temos sim, o triciclo elétrico mais popular é a *T3 Retrô*."]), ["Temos sim, a moto elétrica mais popular é a *T3 Retrô*."]);
+  assert.deepEqual(tirarTriciclo(["No momento não temos triciclo, mas temos motos de duas rodas."]), ["No momento não temos triciclo, mas temos motos de duas rodas."]);
+});

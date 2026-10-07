@@ -239,6 +239,13 @@
       "when": 1791240058632,
       "tag": "0033_simulacao_cartao_ia",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791240118632,
+      "tag": "0034_ia_triciclo_valor_por_ultimo",
+      "breakpoints": true
     }
   ]
 }

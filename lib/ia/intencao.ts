@@ -122,3 +122,18 @@ export const RX_ABERTURA_SITE = /vim\s+pelo\s+site[^.!?\n]*?(?:e\s+)?quero\s+fal
 export const veioDoSite = (texto: string) => new RegExp(RX_ABERTURA_SITE.source, "iu").test(texto);
 /** O texto do cliente sem a frase pronta do site (para as regras de recado e de pedir uma pessoa). */
 export const semAberturaDoSite = (texto: string) => texto.replace(RX_ABERTURA_SITE, " ").replace(/\s+/g, " ").trim();
+
+/* A loja NÃO tem triciclo (06/10/2026: a IA respondeu "Temos sim, o triciclo elétrico mais popular é a T3 Retrô", que é
+   uma moto de duas rodas). O cliente que fala em triciclo / três rodas recebe a verdade; a resposta nunca chama moto de triciclo. */
+const RX_TRICICLO = /(?<![\p{L}])(?:tric[ií]clos?|tr[êe]s\s+rodas|3\s+rodas)(?![\p{L}])/iu;
+export const pediuTriciclo = (texto: string) => RX_TRICICLO.test(texto);
+export function instrucaoTriciclo(texto: string): string {
+  if (!pediuTriciclo(texto)) return "";
+  return `# TRICICLO
+O cliente falou de triciclo (três rodas). A loja NÃO tem triciclo: todas as motos são de DUAS rodas. NÃO diga "temos sim" e NÃO chame nenhuma moto de triciclo. Diga com naturalidade que no momento a loja trabalha com motos elétricas de duas rodas e patinetes, e apresente 2 ou 3 opções do estoque que combinam com o que ele procura (conforto, carga, autonomia), com o preço por último.\n\n`;
+}
+/** Rede de segurança: "triciclo" numa frase que não nega vira "moto". */
+export function tirarTriciclo(resposta: string[]): string[] {
+  const NEGA = /(?<![\p{L}])n[ãa]o\s+(?:temos|tem|trabalhamos|vendemos|h[áa]|fazemos)/iu;
+  return resposta.map((b) => b.replace(/[^.!?\n]+[.!?]*/gu, (f) => (RX_TRICICLO.test(f) && !NEGA.test(f) ? f.replace(/(?<![\p{L}])(o|um)\s+(tric[ií]clos?\s+el[ée]tricos?|tric[ií]clos?)/giu, (_m, art: string, t: string) => `${art.toLowerCase() === "o" ? "a" : "uma"} ${/el[ée]trico/i.test(t) ? "moto elétrica" : "moto"}`).replace(/tric[ií]clos?\s+el[ée]tricos?/giu, "moto elétrica").replace(/tric[ií]clos?/giu, "moto").replace(/(?:de\s+)?(?:tr[êe]s|3)\s+rodas/giu, "de duas rodas") : f)));
+}
