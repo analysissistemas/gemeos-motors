@@ -529,6 +529,17 @@ async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, ne
   return { lembretes: LEMBRETES_SEM_RESPOSTA.length };
 }
 
+/** Modelos que o catálogo descreve como triciclo / três rodas (hoje o MM3) e que têm unidade disponível. */
+async function triciclosComEstoque(c: CtxWorkflow) {
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const linhas = await db
+    .select({ nome: m.nome })
+    .from(m)
+    .where(and(eq(m.ativo, true), sql`(${m.descricao} ilike '%triciclo%' or ${m.descricao} ilike '%três rodas%' or ${m.descricao} ilike '%tres rodas%')`, sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`));
+  return linhas.map((l) => l.nome);
+}
+
 /** Liga o negócio a uma unidade disponível do modelo que ainda não está em outra negociação aberta. */
 async function ligarMotoDoEstoque(negocioId: number, modeloNome: string) {
   const [neg] = await db.select({ veiculoId: schema.negocios.veiculoId, valorAnunciado: schema.negocios.valorAnunciado }).from(schema.negocios).where(eq(schema.negocios.id, negocioId)).limit(1);
@@ -973,7 +984,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoTriciclo(c.textoBuffer)}${instrucaoDeIntencao(intencao)}
+${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1272,7 +1283,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     resposta = tirarPropostaAntiga(resposta);
     /* venda não se adia (05/10/2026: "a IA, mesmo com a loja fechada, tem que ir até o sim") */
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
-    resposta = tirarTriciclo(resposta);
+    resposta = tirarTriciclo(resposta, await triciclosComEstoque(c));
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
     resposta = resposta.map((b) => b.replace(/\\n/g, "\n").trim()).filter((b) => /\p{L}/u.test(b));
     /* conversa enxuta: no máximo 3 mensagens de texto por resposta (o resto se junta à última) */

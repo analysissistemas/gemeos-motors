@@ -98,3 +98,12 @@ test("triciclo: a loja não tem; a resposta nunca chama moto de triciclo (06/10/
   assert.deepEqual(tirarTriciclo(["Temos sim, o triciclo elétrico mais popular é a *T3 Retrô*."]), ["Temos sim, a moto elétrica mais popular é a *T3 Retrô*."]);
   assert.deepEqual(tirarTriciclo(["No momento não temos triciclo, mas temos motos de duas rodas."]), ["No momento não temos triciclo, mas temos motos de duas rodas."]);
 });
+
+test("triciclo: o MM3 (três rodas no catálogo) é o triciclo; a T3 Retrô não (06/10/2026)", async () => {
+  const { instrucaoTriciclo, tirarTriciclo } = await import("../../lib/ia/intencao.ts");
+  assert.match(instrucaoTriciclo("vcs tem triciclo elétrico?", ["MM3"]), /triciclo da loja é \*MM3\*/);
+  assert.match(instrucaoTriciclo("vcs tem triciclo?", []), /NÃO tem triciclo/);
+  assert.equal(instrucaoTriciclo("quanto custa a T1?", ["MM3"]), "");
+  assert.deepEqual(tirarTriciclo(["Temos sim o triciclo elétrico *MM3*, de três rodas."], ["MM3"]), ["Temos sim o triciclo elétrico *MM3*, de três rodas."]);
+  assert.doesNotMatch(tirarTriciclo(["O triciclo elétrico mais indicado é a *T3 RETRÔ*."], ["MM3"])[0], /triciclo/);
+});
