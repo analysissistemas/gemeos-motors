@@ -30,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh">
         {children}
         <Toaster
-          position="top-center"
+          /* à direita, abaixo da barra do topo: no centro do topo os avisos cobriam os botões do Atendimento (simulador) e
+             embaixo cobririam o microfone/enviar da conversa (07/10/2026) */
+          position="top-right"
+          offset={{ top: 140, right: 24 }}
           toastOptions={{
             style: {
               background: "var(--elevado)",
