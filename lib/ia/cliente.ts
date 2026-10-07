@@ -1,7 +1,7 @@
 import "server-only";
 import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
-import type { z } from "zod";
+import { z } from "zod";
 import { iaLigada } from "./controle";
 
 /* ============================================================
@@ -108,6 +108,41 @@ export async function analisarMidia(tipo: "audio" | "imagem" | "documento", byte
       maxRetries: 1,
     });
     return r.text.trim();
+  } catch (e) {
+    throw traduzirErro(e);
+  }
+}
+
+/* Foto de moto que o cliente mandou: qual moto do ESTOQUE é a mais parecida (06/10/2026). Compara a foto do cliente
+   com uma foto de cada moto disponível e devolve o nome de uma delas, ou null se nenhuma se parece de verdade. */
+const SchemaParecida = z.object({ modelo: z.string().nullable(), confianca: z.enum(["alta", "media", "baixa"]), motivo: z.string() });
+export async function motoParecidaComFoto(foto: { bytes: Buffer; mime: string }, candidatas: { nome: string; bytes: Buffer; mime: string }[]): Promise<{ modelo: string; confianca: "alta" | "media"; motivo: string } | null> {
+  if (!candidatas.length) return null;
+  await exigirIaLigada();
+  if (!COM_OPENAI) throw new IaIndisponivel("Comparar foto precisa da OPENAI_API_KEY no ambiente.");
+  const nomes = candidatas.map((c) => c.nome);
+  try {
+    const r = await generateText({
+      model: modelo(),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `A PRIMEIRA imagem é uma foto que um cliente mandou numa loja de motos elétricas. As imagens seguintes são as motos que a loja tem em estoque, cada uma com o nome antes dela. Diga qual moto do estoque é a MAIS PARECIDA com a da foto do cliente (formato, tamanho dos pneus, quadro, farol, banco, proporções; ignore cor, fundo e acessórios). Se a foto não for de uma moto ou patinete, ou se nenhuma do estoque se parecer de verdade, devolva modelo null e confianca baixa. Nomes possíveis: ${nomes.join(", ")}. Responda o nome exatamente como está na lista, e o motivo em uma frase simples, sem inventar.` },
+            { type: "image", image: foto.bytes, mediaType: foto.mime },
+            ...candidatas.flatMap((c) => [{ type: "text" as const, text: `Moto do estoque: ${c.nome}` }, { type: "image" as const, image: c.bytes, mediaType: c.mime }]),
+          ],
+        },
+      ],
+      output: Output.object({ schema: SchemaParecida }),
+      maxOutputTokens: 300,
+      timeout: 60_000,
+      maxRetries: 1,
+    });
+    const o = r.output as z.infer<typeof SchemaParecida>;
+    const nome = nomes.find((n) => n.toLowerCase() === (o.modelo ?? "").trim().toLowerCase());
+    if (!nome || o.confianca === "baixa") return null;
+    return { modelo: nome, confianca: o.confianca, motivo: o.motivo };
   } catch (e) {
     throw traduzirErro(e);
   }

@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
-import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
+import { analisarMidia, gerarObjeto, MODELO_IA, motoParecidaComFoto } from "@/lib/ia/cliente";
 import { consultarEstoque } from "@/lib/ia/estoque";
 import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
@@ -1372,6 +1372,28 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
   final: (c) => ({ fim: "sucesso", detalhe: c.enviados ? `${c.enviados} mensagem(ns) enviada(s)` : "Nada a enviar", saida: { enviados: c.enviados, transferida: !!c.pipe?.humano } }),
 };
 
+/* Foto de moto do cliente → a moto do estoque mais parecida (06/10/2026). O texto sai na análise da imagem e a
+   conversa segue como se o cliente tivesse citado o modelo: a IA apresenta a moto e o sistema manda foto e vídeo. */
+async function carregarFotoDoCatalogo(url: string): Promise<{ bytes: Buffer; mime: string } | null> {
+  try {
+    const arq = await lerBytes(url);
+    if (arq) return arq;
+    const r = await fetch(`http://127.0.0.1:${process.env.PORT ?? 3000}${url.startsWith("/") ? url : `/${url}`}`, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) return null;
+    const mime = (r.headers.get("content-type") ?? "image/webp").split(";")[0];
+    return mime.startsWith("image/") ? { bytes: Buffer.from(await r.arrayBuffer()), mime } : null;
+  } catch {
+    return null;
+  }
+}
+async function motoParecidaDoEstoque(c: CtxWorkflow, foto: { bytes: Buffer; mime: string }): Promise<string | null> {
+  const modelos = (await motosComMidia(c)).filter((x) => x.fotos.length).slice(0, 10);
+  const candidatas = (await Promise.all(modelos.map(async (x) => ({ nome: x.nome, arq: await carregarFotoDoCatalogo(x.fotos[0].url) })))).flatMap((x) => (x.arq ? [{ nome: x.nome, ...x.arq }] : []));
+  const r = await motoParecidaComFoto(foto, candidatas);
+  if (!r) return candidatas.length ? "[SISTEMA] Nenhuma moto do estoque se parece de verdade com a foto do cliente: não diga que é parecida com nenhuma; diga o que viu na foto e apresente 2 ou 3 opções do estoque." : null;
+  return `[SISTEMA] A moto do estoque mais parecida com a foto do cliente é a ${r.modelo} (${r.confianca === "alta" ? "bem parecida" : "parecida"}: ${r.motivo.replace(/[.\s]+$/, "")}). Diga que a da foto é parecida com a *${r.modelo}*, que a loja tem em pronta entrega, sem afirmar que é o mesmo modelo.`;
+}
+
 /* Áudio, imagem e documento: analisa uma vez e guarda na própria mensagem (metadados.transcricao),
    para o buffer e a memória lerem depois. Falha na análise não derruba o atendimento. */
 async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento", ligado: boolean) {
@@ -1384,7 +1406,9 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
   if (!arq) return { saida: { texto: c.textoEntrada, observacao: "arquivo da mídia não encontrado" } };
   try {
     const analise = await analisarMidia(tipo, arq.bytes, m.midiaMime ?? arq.mime);
-    const texto = m.conteudo ? `${analise}\n(legenda: ${m.conteudo})` : analise;
+    /* foto de moto: diz qual moto do estoque é parecida (a falha aqui não derruba a descrição) */
+    const parecida = tipo === "imagem" ? await motoParecidaDoEstoque(c, { bytes: arq.bytes, mime: m.midiaMime ?? arq.mime }).catch(() => null) : null;
+    const texto = [analise, m.conteudo ? `(legenda: ${m.conteudo})` : "", parecida].filter(Boolean).join("\n");
     await db.update(schema.mensagens).set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ transcricao: texto })}::jsonb` }).where(eq(schema.mensagens.id, m.id));
     const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento" }[tipo];
     return { ctx: { textoEntrada: `[${rotulo}] ${texto}` }, entrada: { arquivo: m.midiaNome ?? m.midiaUrl, mime: m.midiaMime, bytes: arq.bytes.length }, saida: { texto } };
