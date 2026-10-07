@@ -19,7 +19,7 @@ export type PlanoMidia = { modelo: ModeloComMidia | null; pedido: TipoMidiaIa[];
 const RX_FOTO = /(?<![\p{L}\p{N}])(?:fotos?|imagens?|imagem|fotinhas?)(?![\p{L}\p{N}])/iu;
 const RX_VIDEO = /(?<![\p{L}\p{N}])v[ií]deos?(?![\p{L}\p{N}])/iu;
 /* "quero ver a moto", "me mostra ela", "tem como ver?" */
-const RX_VER = /(?<![\p{L}])(?:ver\s+(?:a\s+moto|ela|essa|esta|como\s+(?:[ée]|ela\s+[ée])|de\s+perto)|mostr(?:a|ar|e)(?:\s+(?:a\s+moto|ela|pra\s+mim|para\s+mim))?|como\s+ela\s+[ée])(?![\p{L}])/iu;
+const RX_VER = /(?<![\p{L}])(?:ver\s+(?:a\s+moto|ela|essa|esta|como\s+(?:[ée]|ela\s+[ée])|de\s+perto)|mostr(?:a|ar|e)\s+(?:a\s+moto|ela|pra\s+mim\s+(?:a\s+moto|ela)|para\s+mim\s+(?:a\s+moto|ela))|como\s+ela\s+[ée])(?![\p{L}])/iu;
 
 /** O que o cliente pediu para ver nesta mensagem. */
 export function pedidoDeMidia(texto: string): TipoMidiaIa[] {
@@ -59,15 +59,22 @@ export function ultimaCitada<T extends { nome: string }>(modelos: T[], texto: st
 function itensDe(m: ModeloComMidia, tipos: TipoMidiaIa[]): ItemMidia[] {
   const itens: ItemMidia[] = [];
   if (tipos.includes("foto"))
-    for (const f of m.fotos.slice(0, 3)) itens.push({ tipo: "foto", url: f.url, legenda: `*${m.nome}*${f.cor ? ` na cor ${f.cor}` : ""}` });
+    for (const f of m.fotos.slice(0, 1)) itens.push({ tipo: "foto", url: f.url, legenda: `*${m.nome}*${f.cor ? ` na cor ${f.cor}` : ""}` });
   if (tipos.includes("video") && m.videoUrl) itens.push({ tipo: "video", url: m.videoUrl, legenda: `Vídeo d${artigo(m.nome)} *${m.nome}*` });
   return itens;
 }
 
 /** Antes da IA escrever: o cliente pediu foto/vídeo? De qual moto (com estoque)? O que dá para mandar? */
-export function planejarPedido(p: { modelos: ModeloComMidia[]; textoCliente: string; historicoCliente: string; interesse: string | null }): PlanoMidia | null {
+export function planejarPedido(p: { modelos: ModeloComMidia[]; textoCliente: string; historicoCliente: string; interesse: string | null; /** o que a loja acabou de dizer: "foto das duas opções" fala dessas motos */ ultimasDaLoja?: string }): PlanoMidia | null {
   const pedido = pedidoDeMidia(p.textoCliente);
   if (!pedido.length) return null;
+  /* o cliente não nomeou a moto e a loja acabou de apresentar 2 ou 3: a foto é de cada uma delas (teste real de 06/10/2026) */
+  if (!ultimaCitada(p.modelos, p.textoCliente) && p.ultimasDaLoja) {
+    const apresentadas = p.modelos.filter((m) => ultimaCitada([m], p.ultimasDaLoja!));
+    if (apresentadas.length >= 2 && apresentadas.length <= 3) {
+      return { modelo: { ...apresentadas[0], nome: apresentadas.map((m) => m.nome).join(" e ") }, pedido, itens: apresentadas.flatMap((m) => itensDe(m, ["foto"])) };
+    }
+  }
   const modelo =
     ultimaCitada(p.modelos, p.textoCliente) ??
     ultimaCitada(p.modelos, [p.interesse ?? "", p.historicoCliente].join("\n")) ??

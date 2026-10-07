@@ -63,3 +63,16 @@ test("entrada: a taxa vale só sobre o que sobra; o valor é lido do texto", asy
   }
   assert.equal(simularCartao({ preco: 10000, parcelas: 10, bandeira: "Visa", entrada: 10000 }).tipo, "consultar");
 });
+
+test("mídia: 'me mostra uma opção mais em conta' não é pedido de foto; 'foto das duas opções' vai das motos que a loja acabou de apresentar (06/10/2026)", async () => {
+  const { planejarPedido, pedidoDeMidia } = await import("../../lib/ia/midia-tipos.ts");
+  const foto = (u: string) => [{ url: u, cor: null }];
+  const modelos = [
+    { id: 1, nome: "T3 RETRÔ", fotos: foto("/t3.webp"), videoUrl: "/t3.mp4" },
+    { id: 2, nome: "DF17", fotos: [{ url: "/df17-bege.webp", cor: "bege" }, { url: "/df17-preta.webp", cor: "preta" }], videoUrl: null },
+    { id: 3, nome: "AG08", fotos: foto("/ag08.webp"), videoUrl: null },
+  ];
+  assert.deepEqual(pedidoDeMidia("Me mostra uma opção mais em conta."), []);
+  const plano = planejarPedido({ modelos, textoCliente: "Me envia foto das duas opções", historicoCliente: "T3 RETRÔ", interesse: "T3 RETRÔ", ultimasDaLoja: "Agente IA: • *DF17* (bege ou preta): R$ 7.190\n• *AG08* (cinza): R$ 8.999,90" });
+  assert.deepEqual(plano?.itens.map((i) => i.url), ["/df17-bege.webp", "/ag08.webp"]);
+});

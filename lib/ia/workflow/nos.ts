@@ -769,6 +769,12 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   });
 }
 
+/** As últimas falas da loja (IA ou vendedor), de trás para frente, sem parar no cliente: de que motos se falou por último. */
+function ultimasFalasDaLoja(historico: string | null | undefined, n: number) {
+  const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^(Agente IA|Vendedor):/.test(b));
+  return blocos.slice(-n).join("\n");
+}
+
 /** Endereços de foto/vídeo que a IA já mandou nesta conversa (para não repetir sem o cliente pedir). */
 /* Só conta o que foi mandado nas últimas 24 h: cliente que volta outro dia e se interessa de novo recebe a foto e o
    vídeo outra vez (conversa real de 05/10/2026: a TANK tinha ido dias antes e a IA não mandou). */
@@ -949,7 +955,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
     /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
     const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
-    const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null });
+    const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null, ultimasDaLoja: ultimasFalasDaLoja(c.memoria.historico, 3) });
     /* o que o cliente quer (compra, assistência ou ainda não disse): sem saber, nada de produto */
     const intencao = await intencaoDoCliente(c);
     /* momento da compra: a que pergunta ele responde, se tem interesse, se decidiu, se tem objeção */
@@ -1226,7 +1232,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const textoBase = c.pipe?.texto === TEXTO_FORA_HORARIO ? variar(VARIANTES_FORA_HORARIO) : c.pipe?.texto === TEXTO_CONFIRMAR ? variar(VARIANTES_CONFIRMAR) : (c.pipe?.texto ?? "");
     let resposta = quebrarEmBlocos(organizarTexto(textoBase), c.config.maxBlocos).map((b) => corrigirCumprimento(b));
     /* saudação já foi (agora, solta, ou antes na conversa): cumprimento/apresentação no começo da resposta sai */
-    const perguntouSeERobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|intelig[êe]ncia artificial|(?<![\p{L}])ia(?![\p{L}])|humano|pessoa de verdade/iu.test(c.textoBuffer);
+    const perguntouSeERobo = /rob[ôo]|atendente\s+virtual|atendimento\s+(?:virtual|autom[áa]tico)|autom[áa]tic[oa]|virtual|(?<![\p{L}])bot(?![\p{L}])|intelig[êe]ncia artificial|(?<![\p{L}])ia(?![\p{L}])|humano|pessoa de verdade/iu.test(c.textoBuffer);
     if ((saudacao || jaConversou) && resposta.length) resposta = [tirarCumprimentoRepetido(resposta[0], perguntouSeERobo), ...resposta.slice(1)].filter(Boolean);
     resposta = resposta.map(tirarEmojiDoInicio).filter(Boolean);
     /* fase 2 (P2): o nome não é perguntado; o nome completo só entra na lista de dados do fechamento.
@@ -1267,6 +1273,10 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* venda não se adia (05/10/2026: "a IA, mesmo com a loja fechada, tem que ir até o sim") */
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
     resposta = tirarTriciclo(resposta);
+    /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
+    resposta = resposta.map((b) => b.replace(/\\n/g, "\n").trim()).filter((b) => /\p{L}/u.test(b));
+    /* conversa enxuta: no máximo 3 mensagens de texto por resposta (o resto se junta à última) */
+    if (resposta.length > 3) resposta = [...resposta.slice(0, 2), resposta.slice(2).join("\n\n")];
     if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
     /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
     if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {
@@ -1286,10 +1296,16 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const respostaDaIa = !!c.pipe?.texto && ![TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
     /* o cliente pediu (mesmo sem arquivo para mandar): vale o que a IA já sabia ao escrever */
     let midia: PlanoMidia | null = intencao === "compra" ? c.midia : null;
+    const jaEnviadas = await midiasJaEnviadas(c.conversaId);
+    /* a resposta apresenta 2 ou 3 motos e o pedido era de OUTRA (teste real de 06/10/2026: "uma opção mais em conta" mandou a T3):
+       vale o que a resposta apresenta */
+    if (midia?.modelo && resposta.length) {
+      const modelosDaResposta = (await motosComMidia(c)).filter((m) => ultimaCitada([m], resposta.join("\n")));
+      if (modelosDaResposta.length >= 2 && !modelosDaResposta.some((m) => m.id === midia!.modelo!.id)) midia = null;
+    }
     if (!midia && intencao === "compra" && respostaDaIa && resposta.length) {
       try {
         const modelos = await motosComMidia(c);
-        const jaEnviadas = await midiasJaEnviadas(c.conversaId);
         /* pesquisando: 2 ou 3 opções, uma foto de cada (Diretrizes do Milton, 04/10/2026) */
         midia =
           c.momento === "pesquisando"
@@ -1300,6 +1316,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       } catch {
         midia = null;
       }
+    }
+    /* foto e vídeo só UMA vez (o dono, 06/10/2026: "não adianta mandar a foto pro cliente 10x"): o que já foi na conversa não vai
+       de novo, e no máximo 3 arquivos por resposta */
+    if (midia) {
+      const itens = midia.itens.filter((i) => !jaEnviadas.includes(i.url)).slice(0, 3);
+      midia = itens.length ? { ...midia, itens } : { ...midia, itens: [] };
     }
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
     if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
