@@ -85,3 +85,14 @@ test("o validador não reprova a simulação montada pelo sistema, mas reprova v
   const r = validadorDeResposta.rodar({ ...(base as object), texto, textoCatalogo: null } as never) as { encerrar?: string };
   assert.ok(r.encerrar, "sem a marca de texto do sistema, o valor continua barrado");
 });
+
+test("cada bloco da simulação passa no validador quando o texto do sistema é fonte autorizada", async () => {
+  const { validarResposta } = await import("../../lib/ia/validador.ts");
+  const texto = textoSimulacaoPronta({ nome: "Carlos", modelo: "DF17", aVista: 7190, parcelas: 12, bandeira: "Visa", parcela: 689.04, total: 8268.5 });
+  const blocos = texto.split(/\n\n/);
+  assert.ok(blocos.length >= 2);
+  for (const b of blocos) {
+    assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [texto] }).aprovada, b);
+  }
+  assert.ok(!validarResposta(blocos[1], { promptSistema: "", fontesAutorizadas: [] }).aprovada);
+});

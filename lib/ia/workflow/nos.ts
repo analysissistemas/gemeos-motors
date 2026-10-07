@@ -169,7 +169,9 @@ async function enviar(c: CtxWorkflow, texto: string, citar = false, gravarFalha 
   const respostaA = citar && c.mensagem ? { id: c.mensagem.id, externoId: c.mensagem.externoId } : undefined;
   /* a conta de economia do uso deste cliente (feita pelo sistema) também é fonte para a trava de valores */
   const kmSemana = kmDoCliente(c);
-  const fontesExtras = kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : [];
+  /* e o texto montado pelo sistema nesta resposta (simulação de parcelas, agenda): cada bloco enviado é conferido sozinho, e os valores
+     vêm da conta do sistema (teste real de 06/10/2026: o bloco com "R$ 689,04" era barrado) */
+  const fontesExtras = [...(kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : []), ...(c.pipe?.textoCatalogo ? [c.pipe.textoCatalogo] : [])];
   return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha, fontesExtras });
 }
 
