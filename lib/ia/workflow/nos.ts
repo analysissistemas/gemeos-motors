@@ -64,6 +64,7 @@ const semPontoFinal = (s: string) => s.trim().replace(/[.\s]+$/u, "");
    com "Como posso te ajudar?" e não pergunta o nome (o nome completo só vem na lista de dados do fechamento). */
 const APRESENTACAO = ["Me chamo Milton, sou da Gêmeos Motors e vou te ajudar por aqui!", "Aqui é o Milton, da Gêmeos Motors, e vou te ajudar por aqui!", "Me chamo Milton, da Gêmeos Motors, e vou te ajudar por aqui!"];
 const TUDO_CERTO = ["Tudo certo por aqui 😊 Como posso te ajudar?", "Tudo ótimo por aqui! Em que posso te ajudar? 🙂", "Por aqui tudo bem 😊 Me conta, o que você precisa?"];
+const PERGUNTAS_NOME = ["Com quem eu falo? 😊", "Qual é o seu nome? 😊", "Como posso te chamar? 😊"];
 const PRAZER: ((nome: string) => string)[] = [(n) => `Prazer, ${n}!`, (n) => `Prazer em te conhecer, ${n}!`, (n) => `Que bom falar com você, ${n}!`, (n) => `Muito prazer, ${n}!`];
 const VARIANTES_FORA_HORARIO = [
   "Nossa equipe de vendas volta assim que a loja abrir, mas eu já te ajudo por aqui 😊 Pode me perguntar o que quiser sobre as motos.",
@@ -780,6 +781,11 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   });
 }
 
+/** A loja (IA ou vendedor) já perguntou o nome do cliente nesta conversa. */
+function jaPerguntouONome(historico: string | null | undefined) {
+  return (historico ?? "").split(/\n/).some((l) => /^(Agente IA|Vendedor):/.test(l) && RX_PERGUNTA_NOME.test(l));
+}
+
 /** As últimas falas da loja (IA ou vendedor), de trás para frente, sem parar no cliente: de que motos se falou por último. */
 function ultimasFalasDaLoja(historico: string | null | undefined, n: number) {
   const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^(Agente IA|Vendedor):/.test(b));
@@ -1344,6 +1350,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome);
       if (!nomeNovo) abertura = saudacaoComNome(abertura, nome);
       if (!/milton/iu.test(resposta.join(" "))) abertura = `${abertura} ${reclamando ? "Aqui é o Milton, da Gêmeos Motors." : variar(APRESENTACAO)}`;
+      /* a IA SEMPRE pergunta o nome do cliente (dono, 06/10/2026): na abertura, uma vez */
+      if (!nome && !nomeNovo && !c.recado && !reclamando && !jaPerguntouONome(c.memoria.historico)) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
+    } else if (resposta.length && !c.recado && !reclamando && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
+      /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
+      resposta = [...resposta, variar(PERGUNTAS_NOME)];
     }
     const blocos = [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta];
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */

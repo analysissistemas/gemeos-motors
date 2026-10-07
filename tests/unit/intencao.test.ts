@@ -107,3 +107,8 @@ test("triciclo: o MM3 (três rodas no catálogo) é o triciclo; a T3 Retrô não
   assert.deepEqual(tirarTriciclo(["Temos sim o triciclo elétrico *MM3*, de três rodas."], ["MM3"]), ["Temos sim o triciclo elétrico *MM3*, de três rodas."]);
   assert.doesNotMatch(tirarTriciclo(["O triciclo elétrico mais indicado é a *T3 RETRÔ*."], ["MM3"])[0], /triciclo/);
 });
+
+test("o texto do atendimento deixa claro que o sistema pergunta o nome (06/10/2026)", async () => {
+  const { instrucaoDeIntencao } = await import("../../lib/ia/intencao.ts");
+  assert.match(instrucaoDeIntencao(null), /sistema pergunta na abertura/);
+});
