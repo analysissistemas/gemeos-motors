@@ -37,7 +37,7 @@ import {
 } from "@/lib/ia/pipeline";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, textoPosVenda, textoRecado, tirarOfertaDeProduto, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, semAberturaDoSite, textoPosVenda, textoRecado, tirarOfertaDeProduto, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -603,7 +603,10 @@ async function nomesDoCatalogo() {
 
 /** O que o cliente quer, pelo que ELE escreveu (esta mensagem, as anteriores e o interesse já anotado). */
 async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
-  return intencaoDoTexto([c.memoria.fatos.interesse ?? "", textoDoCliente(c)].join("\n"), await nomesDoCatalogo());
+  const texto = textoDoCliente(c);
+  const intencao = intencaoDoTexto([c.memoria.fatos.interesse ?? "", semAberturaDoSite(texto)].join("\n"), await nomesDoCatalogo());
+  /* veio pelo botão do site e ainda não disse o quê: é quem quer comprar (o "consultor" é o Milton) */
+  return intencao ?? (veioDoSite(texto) ? "compra" : null);
 }
 
 /* Pedido do dono (02/10/2026): na abordagem, primeiro ENTENDER o que o cliente quer. Quem só cumprimentou
@@ -959,7 +962,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${instrucaoDeIntencao(intencao)}
+${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoDeIntencao(intencao)}
 
 ${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1030,7 +1033,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     const jaPerguntouAjuda = /como posso te ajudar|em que posso te ajudar|o que você precisa/iu.test(ultimaDaLoja);
     const falouAlgo = c.textoBuffer.replace(/[^\p{L}]+/gu, " ").trim().split(" ").length >= 4;
     const perguntaRobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|[ée]\s+humano|pessoa de verdade|intelig[êe]ncia artificial/iu.test(c.textoBuffer);
-    if (!intencao && !perguntaRobo && r.ctx.texto && (r.ctx.humano || RX_RECADO.test(c.textoBuffer) || RX_PEDE_PESSOA.test(c.textoBuffer) || (jaPerguntouAjuda && falouAlgo))) {
+    if (!intencao && !perguntaRobo && r.ctx.texto && (r.ctx.humano || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) || (jaPerguntouAjuda && falouAlgo))) {
       const relato = textoDoCliente(c).replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
       const texto = textoRecado({
         nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome) ?? primeiroNome(nomeDoPerfil(c.conversa?.contatoNome)),
@@ -1075,7 +1078,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* no meio do fechamento a IA não passa ao vendedor por conta própria (o teste de 03/10 mostrou ela passando
        logo depois do "entrega"): o sistema passa quando os dados chegam. Cliente que pede uma pessoa, passa. */
     let pipe = r.ctx;
-    const segurou = !!momento && MOMENTOS_SEM_TRANSFERIR.includes(momento) && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !!pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA && !RX_PEDE_PESSOA.test(c.textoBuffer);
+    const segurou = !!momento && MOMENTOS_SEM_TRANSFERIR.includes(momento) && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !!pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA && !RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer));
     if (segurou) pipe = { ...pipe, humano: false, motivo: null };
     return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
   },

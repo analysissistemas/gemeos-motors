@@ -79,3 +79,13 @@ test("recado: quem pede uma pessoa ou manda recado é atendido, sem insistir em 
   assert.match(textoRecado({ nome: null, lojaAberta: true, jaEncaminhou: true }), /^Anotado! Já juntei/);
   assert.match(instrucaoDeIntencao(null), /NÃO recuse/);
 });
+
+test("mensagem pronta do site não é pedido de falar com a equipe (Any, 06/10/2026)", async () => {
+  const { veioDoSite, semAberturaDoSite, RX_RECADO } = await import("../../lib/ia/intencao.ts");
+  const site = "Olá! Vim pelo site da Gêmeos Motors e quero falar com um consultor.";
+  assert.ok(veioDoSite(site));
+  assert.ok(veioDoSite("Olá! Vim pelo site da Gêmeos Motors e quero falar com vocês."));
+  assert.ok(!RX_RECADO.test(semAberturaDoSite(site)));
+  assert.equal(semAberturaDoSite(`${site}\nBom dia! Vcs tem triciclo elétrico?`), "Olá! Bom dia! Vcs tem triciclo elétrico?");
+  assert.ok(RX_RECADO.test(semAberturaDoSite("quero falar com o dono")));
+});

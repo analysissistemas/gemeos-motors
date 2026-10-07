@@ -114,3 +114,11 @@ export function textoRecado(p: { nome: string | null; lojaAberta: boolean; jaEnc
     ? `Entendi${n}! Vou passar o seu recado agora para a nossa equipe, e o responsável fala com você por aqui 🙏`
     : `Entendi${n}! Vou passar o seu recado para a nossa equipe, e o responsável fala com você por aqui assim que a loja abrir 🙏`;
 }
+
+/** Mensagem pronta dos botões do site ("Olá! Vim pelo site da Gêmeos Motors e quero falar com um consultor."):
+ *  não é pedido de falar com uma pessoa — o consultor é o Milton. Conversa real de 06/10/2026 (Any): a IA leu
+ *  "quero falar com" e passou como recado para a equipe. */
+export const RX_ABERTURA_SITE = /vim\s+pelo\s+site[^.!?\n]*?(?:e\s+)?quero\s+falar\s+com\s+(?:um\s+consultor|um\s+vendedor|voc[êe]s|a\s+loja|algu[ée]m)[.!]?/giu;
+export const veioDoSite = (texto: string) => new RegExp(RX_ABERTURA_SITE.source, "iu").test(texto);
+/** O texto do cliente sem a frase pronta do site (para as regras de recado e de pedir uma pessoa). */
+export const semAberturaDoSite = (texto: string) => texto.replace(RX_ABERTURA_SITE, " ").replace(/\s+/g, " ").trim();
