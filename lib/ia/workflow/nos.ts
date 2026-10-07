@@ -35,9 +35,9 @@ import {
   type Deps,
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
-import { entradaDoTexto, simularCartao } from "@/lib/ia/simulacao-cartao";
+import { entradaDoTexto, simularCartao, tabelaCompleta } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, textoTabelaCompleta, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -1113,7 +1113,13 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const jaPerguntouOQueFalta = jaPerguntouSoOQueFalta(ultimaDaLoja, !sim.parcelas ? "parcelas" : "bandeira");
       let texto: string;
       let tarefa = false;
-      if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? PERGUNTA_SO_PARCELAS : PERGUNTA_SO_BANDEIRA;
+      const precoTabela = !sim.parcelas && sim.bandeira && modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
+      const linhasTabela = precoTabela ? tabelaCompleta({ preco: precoTabela, bandeira: sim.bandeira, entrada: entradaDoTexto(c.textoBuffer) }) : [];
+      if (linhasTabela.length && modeloDaConversa && sim.bandeira && precoTabela) {
+        /* bandeira dita, parcelas não: a tabela completa (2x a 21x) vai de uma vez */
+        texto = textoTabelaCompleta({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, bandeira: sim.bandeira, aVista: precoTabela, entrada: entradaDoTexto(c.textoBuffer) ?? undefined, linhas: linhasTabela });
+        await mensagemSistema(db, c.conversaId, `Tabela de parcelas enviada pela IA: ${modeloDaConversa} no ${sim.bandeira} (2x a ${linhasTabela[linhasTabela.length - 1].parcelas}x).`, { triagem: true });
+      } else if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? PERGUNTA_SO_PARCELAS : PERGUNTA_SO_BANDEIRA;
       else {
         /* simulação pelo sistema (tabela da maquininha, 06/10/2026); com entrada, bandeira sem tabela ou Amex acima de
            12x o vendedor confirma antes de passar valor */

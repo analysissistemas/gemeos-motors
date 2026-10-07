@@ -62,6 +62,7 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   const sim = simulacaoPedida(p.textoCliente);
   if (RX_PEDIU_PARCELAS.test(loja) && (sim.parcelas || sim.bandeira)) return "pediu_simulacao";
   if (sim.parcelas && sim.bandeira) return "pediu_simulacao";
+  if (sim.bandeira && RX_QUER_PARCELAR.test(t) && /simula/.test(t)) return "pediu_simulacao";
   if (RX_QUER_PARCELAR.test(t)) return "quer_parcelar";
   /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
@@ -138,6 +139,18 @@ No *dinheiro ou Pix* o valor é o mesmo, sem taxa 😉 Quer seguir assim ou pref
 ${ent}• No ${p.bandeira}, em ${p.parcelas} vezes: *${p.parcelas} parcelas de ${brl(p.parcela)}* (total de ${brl(p.total)})
 
 Pagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 Se preferir, simulo em outro número de parcelas, e se não ficar bom pra você, o vendedor consulta a gerência pra ver o que dá pra fazer. O que acha?`;
+}
+/** Tabela completa (dono, 06/10/2026: "é só mandar a tabela completa pro cliente"): 2x a 21x da bandeira, num bloco só.
+ *  American Express: até 12x; acima o vendedor consulta se o cartão permite. */
+export function textoTabelaCompleta(p: { nome: string | null; modelo: string; bandeira: string; aVista: number; entrada?: number; linhas: { parcelas: number; parcela: number; total: number }[] }) {
+  const abre = p.nome ? `${p.nome}, segue a simulação` : "Segue a simulação";
+  const ent = p.entrada && p.entrada > 0 ? ` com entrada de ${brl(p.entrada)}` : "";
+  const linha = (l: { parcelas: number; parcela: number; total: number }) => `• ${l.parcelas}x de ${brl(l.parcela)} (total ${brl(l.total)})`;
+  /* duas mensagens: o validador limita cada uma a 1000 caracteres */
+  const meio = Math.ceil(p.linhas.length / 2);
+  const tabela = [p.linhas.slice(0, meio), p.linhas.slice(meio)].filter((x) => x.length).map((x) => x.map(linha).join("\n")).join("\n\n");
+  const amex = p.bandeira === "American Express" ? "\n\nNo American Express, acima de 12 vezes o vendedor consulta se o seu cartão permite 😉" : "";
+  return `${abre} d${artigo(p.modelo)} *${p.modelo}* no ${p.bandeira}${ent}, valor à vista ${brl(p.aVista)}:\n${tabela}${amex}\n\nPagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem taxa 😉 Qual dessas opções fica melhor pra você? Se não ficar bom, o vendedor consulta a gerência pra ver o que dá pra fazer.`;
 }
 /** Casos em que o vendedor confirma antes de passar valor. */
 export function textoSimulacaoConsultar(p: { motivo: "amex_acima_12" | "bandeira_sem_tabela" | "parcelas_acima_de_21" | "dados_incompletos"; modelo: string | null }) {

@@ -96,3 +96,20 @@ test("cada bloco da simulação passa no validador quando o texto do sistema é 
   }
   assert.ok(!validarResposta(blocos[1], { promptSistema: "", fontesAutorizadas: [] }).aprovada);
 });
+
+test("tabela completa: 2x a 21x da bandeira (Amex só até 12x), num bloco só, e cada linha passa no validador", async () => {
+  const { tabelaCompleta } = await import("../../lib/ia/simulacao-cartao.ts");
+  const { textoTabelaCompleta } = await import("../../lib/ia/fechamento.ts");
+  const { validarResposta } = await import("../../lib/ia/validador.ts");
+  const visa = tabelaCompleta({ preco: 7190, bandeira: "Visa" });
+  assert.equal(visa.length, 20);
+  assert.equal(visa[10].parcelas, 12);
+  assert.equal(visa[10].parcela, 689.04);
+  assert.equal(tabelaCompleta({ preco: 7190, bandeira: "American Express" }).length, 11);
+  assert.equal(tabelaCompleta({ preco: 7190, bandeira: "Hipercard" }).length, 0);
+  const t = textoTabelaCompleta({ nome: "Marcos", modelo: "DF17", bandeira: "Visa", aVista: 7190, linhas: visa });
+  assert.match(t, /^Marcos, segue a simulação da \*DF17\* no Visa/);
+  assert.match(t, /• 12x de R\$ 689,04 \(total R\$ 8\.268,50\)/);
+  assert.match(t, /• 21x de R\$ 427,98/);
+  for (const b of t.split(/\n\n/)) assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, b.slice(0, 60));
+});

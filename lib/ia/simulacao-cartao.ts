@@ -52,6 +52,17 @@ export function simularCartao(p: { preco: number | null; parcelas: number | null
   return { tipo: "ok", bandeira: p.bandeira, parcelas: p.parcelas, taxa, total: arred(entrada + financiado), parcela: arred(financiado / p.parcelas), aVista: p.preco, entrada };
 }
 
+/** Todas as faixas (2x a 21x) de uma bandeira, para a tabela completa. Amex só até 12x. Vazio se a bandeira não tem tabela. */
+export function tabelaCompleta(p: { preco: number | null; bandeira: string | null; entrada?: number | null }) {
+  const linhas: { parcelas: number; parcela: number; total: number }[] = [];
+  const maximo = p.bandeira === "American Express" ? AMEX_ATE : MAX_PARCELAS;
+  for (let n = 2; n <= maximo; n++) {
+    const r = simularCartao({ preco: p.preco, parcelas: n, bandeira: p.bandeira, entrada: p.entrada });
+    if (r.tipo === "ok") linhas.push({ parcelas: n, parcela: r.parcela, total: r.total });
+  }
+  return linhas;
+}
+
 /** Valor da entrada que o cliente escreveu ("entrada de 3 mil", "dou R$ 2.500 de entrada"); null se não deu para ler. */
 export function entradaDoTexto(texto: string): number | null {
   const t = texto.toLowerCase();
