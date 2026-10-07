@@ -1361,14 +1361,17 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* abertura do Milton (P2 a P4): "Boa tarde, Carla! Tudo certinho? 😊 Me chamo Milton, sou da Gêmeos Motors…". O nome
        é só o que o cliente disse; se a resposta já fala do Milton (perguntou se é robô), não repete */
     let abertura = saudacao;
+    /* conversa indo para a equipe (reclamação, recado, pós-venda, dados do fechamento): nada de "Qual é o seu nome?" depois
+       do pedido de desculpas (Arine, 06/10/2026) */
+    const vaiParaEquipe = !!c.recado || reclamando || !!c.aguardaEquipe || !!c.pipe?.humano || c.intencao === "assistencia";
     if (abertura) {
       /* só o nome que o CLIENTE disse: o do perfil do WhatsApp erra ("Deus", apelido, nome de outra pessoa), 06/10/2026 */
       const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome);
       if (!nomeNovo) abertura = saudacaoComNome(abertura, nome);
       if (!/milton/iu.test(resposta.join(" "))) abertura = `${abertura} ${reclamando ? "Aqui é o Milton, da Gêmeos Motors." : variar(APRESENTACAO)}`;
       /* a IA SEMPRE pergunta o nome do cliente (dono, 06/10/2026): na abertura, uma vez */
-      if (!nome && !nomeNovo && !c.recado && !reclamando && !jaPerguntouONome(c.memoria.historico)) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
-    } else if (resposta.length && !c.recado && !reclamando && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
+      if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
+    } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
       resposta = [...resposta, variar(PERGUNTAS_NOME)];
     }
