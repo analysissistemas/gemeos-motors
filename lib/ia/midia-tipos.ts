@@ -68,6 +68,11 @@ function itensDe(m: ModeloComMidia, tipos: TipoMidiaIa[]): ItemMidia[] {
 export function planejarPedido(p: { modelos: ModeloComMidia[]; textoCliente: string; historicoCliente: string; interesse: string | null; /** o que a loja acabou de dizer: "foto das duas opções" fala dessas motos */ ultimasDaLoja?: string }): PlanoMidia | null {
   const pedido = pedidoDeMidia(p.textoCliente);
   if (!pedido.length) return null;
+  /* o cliente nomeou 2 ou 3 motos ("foto da Df17 e Ag08"): uma foto de cada, não só da última (Arine, 06/10/2026) */
+  const nomeadas = p.modelos.filter((m) => ultimaCitada([m], p.textoCliente));
+  if (nomeadas.length >= 2 && nomeadas.length <= 3) {
+    return { modelo: { ...nomeadas[0], nome: nomeadas.map((m) => m.nome).join(" e ") }, pedido, itens: nomeadas.flatMap((m) => itensDe(m, ["foto"]).slice(0, 1)) };
+  }
   /* o cliente não nomeou a moto e a loja acabou de apresentar 2 ou 3: a foto é de cada uma delas (teste real de 06/10/2026) */
   if (!ultimaCitada(p.modelos, p.textoCliente) && p.ultimasDaLoja) {
     const apresentadas = p.modelos.filter((m) => ultimaCitada([m], p.ultimasDaLoja!));
@@ -128,4 +133,20 @@ const RX_PROMETE = /(?:segue[mn]?|aqui\s+est[aã]o?|te\s+mand(?:o|ei)|vou\s+(?:t
 export function tirarPromessaDeMidia(bloco: string): string {
   const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
   return frases.filter((f) => !RX_PROMETE.test(f)).join("").trim();
+}
+
+/* Texto e foto têm que bater (conversa real de 06/10/2026, Arine: "Aqui estão as fotos da DF17 e da AG08" e foi a T3).
+   Frase que promete foto/vídeo e cita uma moto que NÃO vai junto sai; a que cita só motos que vão, fica.
+   `vao` = nomes das motos com arquivo nesta resposta; `todos` = nomes do catálogo. */
+const RX_PROMETE_FOTO = /(?:segue[mn]?|aqui\s+est[aã]o?|olha|te\s+mand(?:o|ei)|vou\s+(?:te\s+)?(?:mandar|enviar)|enviei|mandei|envio)[^\n]{0,80}(?:fotos?|v[ií]deos?|imagens?|ela\s+a[ií]|elas\s+a[ií])|(?:fotos?|v[ií]deos?|imagens?)\s+(?:d[aeo]s?\s+)/iu;
+export function tirarPromessaDeOutras(bloco: string, vao: string[], todos: string[]): string {
+  const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
+  return frases
+    .filter((f) => {
+      if (!RX_PROMETE_FOTO.test(f)) return true;
+      const citadas = todos.filter((n) => ultimaCitada([{ nome: n }], f));
+      return citadas.every((n) => vao.some((v) => norm(v) === norm(n)));
+    })
+    .join("")
+    .trim();
 }

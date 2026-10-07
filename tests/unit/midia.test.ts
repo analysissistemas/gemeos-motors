@@ -81,3 +81,11 @@ test("\"moto tank\" é a TANK AG11; palavra genérica não identifica modelo (05
   assert.equal(ultimaCitada(ms, "vocês são da gêmeos motors?"), null);
   assert.equal(ultimaCitada(ms, "e o de 800W?")?.nome, "Patinete 800W");
 });
+
+test("texto e foto batem: promessa de foto de moto que não vai sai (Arine, 06/10/2026)", async () => {
+  const { tirarPromessaDeOutras } = await import("../../lib/ia/midia-tipos.ts");
+  const todos = ["T3 RETRÔ", "DF17", "AG08"];
+  assert.equal(tirarPromessaDeOutras("Aqui está a foto da *DF17* e da *AG08*. A DF17 custa R$ 7.190.", ["T3 RETRÔ"], todos), "A DF17 custa R$ 7.190.");
+  assert.equal(tirarPromessaDeOutras("Aqui estão as fotos da *DF17* e da *AG08* 👇", ["DF17", "AG08"], todos), "Aqui estão as fotos da *DF17* e da *AG08* 👇");
+  assert.equal(tirarPromessaDeOutras("A AG08 anda até 45 km.", [], todos), "A AG08 anda até 45 km.");
+});

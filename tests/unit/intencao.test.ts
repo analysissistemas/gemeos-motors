@@ -112,3 +112,11 @@ test("o texto do atendimento deixa claro que o sistema pergunta o nome (06/10/20
   const { instrucaoDeIntencao } = await import("../../lib/ia/intencao.ts");
   assert.match(instrucaoDeIntencao(null), /sistema pergunta na abertura/);
 });
+
+test("cliente reclamando do atendimento da IA vai para uma pessoa, com desculpas (Arine, 06/10/2026)", async () => {
+  const { reclamouDoAtendimento, textoQueixa } = await import("../../lib/ia/intencao.ts");
+  for (const t of ["Não veio foto", "Só veio a foto da T3 retrô", "Acho que tô falando com atendente virtual. Depois passo aí pessoalmente", "já pedi a foto da DF17", "mandou errado", "você não entendeu"]) assert.ok(reclamouDoAtendimento(t), t);
+  for (const t of ["você é robô?", "Me envia foto das duas opções", "Me mostra uma opção mais em conta.", "quanto custa a T1?", "T3 da pra duas pessoas?"]) assert.ok(!reclamouDoAtendimento(t), t);
+  assert.match(textoQueixa({ nome: "Arine", lojaAberta: true }), /^Desculpa pela confusão, Arine 🙏 Vou chamar agora alguém da nossa equipe/);
+  assert.match(textoQueixa({ nome: null, lojaAberta: false }), /assim que a loja abrir/);
+});

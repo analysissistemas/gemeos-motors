@@ -38,8 +38,8 @@ import {
 import { entradaDoTexto, simularCartao } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, semAberturaDoSite, textoPosVenda, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -1039,6 +1039,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        para uma pessoa com o relato. A IA já foi instruída; aqui o sistema garante, se ela esquecer. */
     /* O teste de 04/10 mostrou a IA pedindo a transferência sozinha e o cliente recebendo "vou confirmar com a
        equipe... quer saber mais alguma coisa?": no pós-venda o texto é do sistema, com empatia e sem insistir. */
+    /* o cliente reclamou do atendimento da IA ("não veio foto", "acho que é atendente virtual... depois passo aí"):
+       desculpas e uma pessoa da equipe (Arine, 06/10/2026). Fica marcado para a equipe revisar a conversa. */
+    if (intencao !== "assistencia" && r.ctx.texto && reclamouDoAtendimento(c.textoBuffer)) {
+      const texto = textoQueixa({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      await mensagemSistema(db, c.conversaId, `REVISAR ATENDIMENTO DA IA: o cliente reclamou ("${c.textoBuffer.slice(0, 160)}"). Veja o que a IA mandou antes.`, { revisarIa: true });
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `O cliente reclamou do atendimento da IA: "${c.textoBuffer.slice(0, 200)}". Assumir e mandar o que ele pediu.` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, queixa: true } };
+    }
     const naoPodeVir = RX_NAO_PODE_VIR.test(c.textoBuffer);
     const irritado = RX_IRRITADO.test(c.textoBuffer);
     if (intencao === "assistencia" && r.ctx.texto && (r.ctx.humano || naoPodeVir || irritado)) {
@@ -1342,6 +1350,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     }
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
     if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
+    else {
+      /* texto e foto batem: frase que promete foto de OUTRA moto (não a que vai) sai (Arine, 06/10/2026) */
+      const todos = (await motosComMidia(c)).map((m) => m.nome);
+      const vao = todos.filter((n) => midia!.itens.some((i) => ultimaCitada([{ nome: n }], i.legenda)));
+      resposta = resposta.map((b) => tirarPromessaDeOutras(b, vao, todos)).filter((b) => /\p{L}/u.test(b));
+    }
     /* abertura do Milton (P2 a P4): "Boa tarde, Carla! Tudo certinho? 😊 Me chamo Milton, sou da Gêmeos Motors…". O nome
        é só o que o cliente disse; se a resposta já fala do Milton (perguntou se é robô), não repete */
     let abertura = saudacao;

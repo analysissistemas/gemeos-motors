@@ -142,3 +142,17 @@ export function tirarTriciclo(resposta: string[], triciclos: string[] = []): str
   const doTriciclo = (f: string) => triciclos.some((n) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(f));
   return resposta.map((b) => b.replace(/[^.!?\n]+[.!?]*/gu, (f) => (RX_TRICICLO.test(f) && !NEGA.test(f) && !doTriciclo(f) ? f.replace(/(?<![\p{L}])(o|um)\s+(tric[ií]clos?\s+el[ée]tricos?|tric[ií]clos?)/giu, (_m, art: string, t: string) => `${art.toLowerCase() === "o" ? "a" : "uma"} ${/el[ée]trico/i.test(t) ? "moto elétrica" : "moto"}`).replace(/tric[ií]clos?\s+el[ée]tricos?/giu, "moto elétrica").replace(/tric[ií]clos?/giu, "moto").replace(/(?:de\s+)?(?:tr[êe]s|3)\s+rodas/giu, "de duas rodas") : f)));
 }
+
+/* Cliente reclamando do ATENDIMENTO da IA (conversa real de 06/10/2026, Arine: "Não veio foto", "Só veio a foto da T3
+   retrô", "Acho que tô falando com atendente virtual. Depois passo aí pessoalmente"). Não é pergunta "é robô?": é queixa.
+   Pede desculpas e chama uma pessoa da equipe, em vez de seguir insistindo. */
+const RX_QUEIXA_ENVIO = /(?<![\p{L}])(?:n[ãa]o\s+(?:veio|chegou|apareceu|abriu)|s[óo]\s+(?:veio|chegou|mandou|mandaram)|veio\s+(?:errad[oa]|outr[ao])|mandou\s+(?:errad[oa]|outr[ao])|n[ãa]o\s+(?:[ée]|era)\s+(?:essa|esse|isso)|n[ãa]o\s+foi\s+(?:isso|essa|o\s+que\s+eu\s+pedi)|j[áa]\s+pedi|pedi\s+(?:outra|outro|a\s+foto)|voc[êe]\s+n[ãa]o\s+(?:entende|entendeu)|n[ãa]o\s+(?:me\s+)?entendeu)(?![\p{L}])/iu;
+const RX_DESCONFIOU = /(?<![\p{L}])(?:acho|parece|t[ôo]\s+vendo|percebi|deve\s+ser|s[óo]\s+pode\s+ser)[^.!?\n]{0,40}(?:atendente\s+virtual|rob[ôo]|autom[áa]tic[oa]|m[áa]quina|ia)(?![\p{L}])|(?:depois\s+(?:eu\s+)?passo\s+a[ií]|deixa\s+pra\s+l[áa]|desisto|esquece)/iu;
+export const reclamouDoAtendimento = (texto: string) => RX_QUEIXA_ENVIO.test(texto) || RX_DESCONFIOU.test(texto);
+
+export function textoQueixa(p: { nome: string | null; lojaAberta: boolean }): string {
+  const n = p.nome ? `, ${p.nome}` : "";
+  return p.lojaAberta
+    ? `Desculpa pela confusão${n} 🙏 Vou chamar agora alguém da nossa equipe para continuar com você por aqui e te mandar certinho o que você pediu.`
+    : `Desculpa pela confusão${n} 🙏 Já deixei o seu pedido anotado com prioridade, e assim que a loja abrir alguém da nossa equipe te manda certinho o que você pediu.`;
+}
