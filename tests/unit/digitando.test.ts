@@ -126,3 +126,11 @@ test("fase 2: nome do perfil do WhatsApp só quando parece nome de pessoa", asyn
   /* perguntou se é robô: a apresentação é a resposta */
   assert.equal(tirarCumprimentoRepetido("Boa noite! Sou o Milton, assistente virtual da Gêmeos Motors, e vou te ajudar por aqui!", true), "Sou o Milton, assistente virtual da Gêmeos Motors, e vou te ajudar por aqui!");
 });
+
+test("sem balão repetido nem a pergunta repetida da mensagem anterior (Arine, 06/10/2026)", async () => {
+  const { semRepeticao } = await import("../../lib/ia/workflow/util.ts");
+  const t3 = "• *T3 RETRÔ* (branca): R$ 9.990. Anda até 70 km com uma carga.";
+  assert.deepEqual(semRepeticao([t3, "• *T5 RETRÔ* (verde): R$ 11.000.", t3]), [t3, "• *T5 RETRÔ* (verde): R$ 11.000."]);
+  assert.deepEqual(semRepeticao(["A AG08 custa R$ 8.999,90.", "Qual dessas você quer conhecer melhor? 😊"], "Temos DF17 e AG08.\nQual dessas você quer conhecer melhor? 😊"), ["A AG08 custa R$ 8.999,90."]);
+  assert.deepEqual(semRepeticao(["Oi!", "Quer saber mais?"], "Temos a T1."), ["Oi!", "Quer saber mais?"]);
+});

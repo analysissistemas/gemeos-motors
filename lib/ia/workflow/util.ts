@@ -176,3 +176,21 @@ export function mesclarFatos(antigos: FatosLead, novos: FatosLead): FatosLead {
   for (const [k, v] of Object.entries(novos) as [keyof FatosLead, string | null | undefined][]) if (typeof v === "string" && v.trim()) r[k] = v.trim().slice(0, 300);
   return r;
 }
+
+/** Sem balão repetido (Arine, 06/10/2026: o mesmo resumo da T3 saiu duas vezes e a mesma pergunta voltava em toda
+ *  resposta). Sai o bloco igual (ou contido) a outro já enviado nesta resposta e a pergunta solta que é idêntica a
+ *  uma pergunta da última mensagem da loja. */
+export function semRepeticao(resposta: string[], ultimaDaLoja = ""): string[] {
+  const n = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const perguntasAnteriores = (ultimaDaLoja.match(/[^.!?\n]*\?/g) ?? []).map(n).filter((p) => p.length >= 12);
+  const ficam: string[] = [];
+  for (const b of resposta) {
+    const nb = n(b);
+    if (!nb) continue;
+    if (ficam.some((f) => { const nf = n(f); return nf === nb || (nb.length >= 30 && nf.includes(nb)); })) continue;
+    const soPergunta = /\?\s*(?:\p{Extended_Pictographic}\uFE0F?\s*)*$/u.test(b) && !/[.!]\s/u.test(b) && !b.includes("\n");
+    if (soPergunta && perguntasAnteriores.includes(n(b.replace(/\?[\s\S]*$/u, "?")))) continue;
+    ficam.push(b);
+  }
+  return ficam;
+}
