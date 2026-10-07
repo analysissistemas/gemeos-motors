@@ -130,7 +130,7 @@ export function textoSimulacaoPronta(p: { nome: string | null; modelo: string; a
 • Moto: *${p.modelo}*
 • No cartão ${p.bandeira}, em 1 vez: *${brl(p.total)}* (sem acréscimo)
 
-Quer seguir assim ou prefere simular em mais vezes?`;
+No *dinheiro ou Pix* o valor é o mesmo, sem taxa 😉 Quer seguir assim ou prefere simular em mais vezes?`;
   return `${abre}
 
 • Moto: *${p.modelo}*
