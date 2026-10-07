@@ -92,6 +92,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
                             <span className="truncate font-semibold">{f.cliente ?? formatarTelefone(f.telefone)}</span>
                             <span className="rounded-full bg-marca px-2 py-0.5 text-[10.5px] font-bold uppercase text-black">Follow-up pendente</span>
                             {f.tipo === "estoque" && <span className="rounded-full border border-linha px-2 py-0.5 text-[10.5px] text-ink-2">Voltou ao estoque</span>}
+                            {f.tipo === "revisar_ia" && <span className="rounded-full border border-serio px-2 py-0.5 text-[10.5px] text-serio">Revisar IA</span>}
                             {f.exigeAprovacao && <span className="rounded-full border border-linha px-2 py-0.5 text-[10.5px] text-ink-2">Precisa de aprovação</span>}
                           </span>
                           <span className="block truncate text-[12.5px] text-ink-2">

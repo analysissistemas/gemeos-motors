@@ -532,6 +532,27 @@ async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, ne
   return { lembretes: LEMBRETES_SEM_RESPOSTA.length };
 }
 
+/** Tarefa "Revisar atendimento da IA" em Follow-ups quando o cliente reclama (Arine, 06/10/2026). Uma pendente por conversa. */
+async function tarefaRevisarIa(c: CtxWorkflow, queixa: string) {
+  const F = schema.followUps;
+  const [ja] = await db.select({ id: F.id }).from(F).where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), eq(F.tipo, "revisar_ia"))).limit(1);
+  if (ja) return null;
+  const cv = await carregarConversa(c.conversaId);
+  await db.insert(F).values({
+    conversaId: c.conversaId,
+    clienteId: cv.clienteId,
+    negocioId: cv.negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: new Date(),
+    notas: `O cliente reclamou do atendimento da IA: "${queixa.slice(0, 200)}". Assuma a conversa, mande o que ele pediu e veja o que a IA respondeu antes (para corrigir).`.slice(0, 1000),
+    tipo: "revisar_ia",
+    motivo: "Revisar atendimento da IA",
+    origem: "ia",
+    contexto: { detectadoPor: "ia", queixa: queixa.slice(0, 300) },
+  });
+  return true;
+}
+
 /** Modelos que o catálogo descreve como triciclo / três rodas (hoje o MM3) e que têm unidade disponível. */
 async function triciclosComEstoque(c: CtxWorkflow) {
   const m = schema.modelos;
@@ -1047,6 +1068,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const texto = textoQueixa({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
       await mensagemSistema(db, c.conversaId, `REVISAR ATENDIMENTO DA IA: o cliente reclamou ("${c.textoBuffer.slice(0, 160)}"). Veja o que a IA mandou antes.`, { revisarIa: true });
+      /* fila de revisão: tarefa em Follow-ups para a equipe olhar no mesmo dia o que a IA fez (uma por conversa aberta) */
+      await tarefaRevisarIa(c, c.textoBuffer).catch(() => null);
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `O cliente reclamou do atendimento da IA: "${c.textoBuffer.slice(0, 200)}". Assumir e mandar o que ele pediu.` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, queixa: true } };
     }
     const naoPodeVir = RX_NAO_PODE_VIR.test(c.textoBuffer);
