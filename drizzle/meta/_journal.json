@@ -232,6 +232,13 @@
       "when": 1791239998632,
       "tag": "0032_t3_t5_autonomia_original",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791240058632,
+      "tag": "0033_simulacao_cartao_ia",
+      "breakpoints": true
     }
   ]
 }

@@ -35,8 +35,9 @@ import {
   type Deps,
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
+import { entradaDoTexto, simularCartao } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, textoSimulacaoPronta, textoSimulacaoConsultar, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, semAberturaDoSite, textoPosVenda, textoRecado, tirarOfertaDeProduto, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -320,6 +321,10 @@ async function conectarFunil(c: CtxWorkflow, negocioId: number | null) {
 
 /* Tarefa de simulação para o vendedor (P5/P19): modelo, preço de tabela, parcelas e bandeira. A IA nunca
    calcula parcela; quem manda os valores é o vendedor, na mesma conversa. */
+async function precoDoModelo(modelo: string) {
+  const [m] = await db.select({ preco: schema.modelos.precoTabela }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${modelo.toLowerCase()}`).limit(1);
+  return m?.preco ? Number(m.preco) : null;
+}
 async function criarTarefaSimulacao(c: CtxWorkflow, sim: { parcelas: number | null; bandeira: string | null }, modelo: string | null) {
   const cv = await carregarConversa(c.conversaId);
   let preco: string | null = null;
@@ -1053,9 +1058,23 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       let tarefa = false;
       if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? "E em quantas vezes você gostaria de dividir? 😊" : "E qual é a bandeira do cartão? 😊";
       else {
-        await criarTarefaSimulacao(c, sim, modeloDaConversa);
-        tarefa = true;
-        texto = textoSimulacao({ ...sim, modelo: modeloDaConversa });
+        /* simulação pelo sistema (tabela da maquininha, 06/10/2026); com entrada, bandeira sem tabela ou Amex acima de
+           12x o vendedor confirma antes de passar valor */
+        const preco = modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
+        const falouEntrada = /entrada/i.test(c.textoBuffer);
+        const entrada = entradaDoTexto(c.textoBuffer);
+        /* falou de entrada sem dizer o valor: o vendedor combina */
+        const calc = falouEntrada && !entrada ? ({ tipo: "consultar", motivo: "dados_incompletos" } as const) : simularCartao({ preco, parcelas: sim.parcelas, bandeira: sim.bandeira, entrada });
+        if (calc.tipo === "ok" && modeloDaConversa) {
+          texto = textoSimulacaoPronta({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, aVista: calc.aVista, parcelas: calc.parcelas, bandeira: calc.bandeira, parcela: calc.parcela, total: calc.total, entrada: calc.entrada });
+          await mensagemSistema(db, c.conversaId, `Simulação enviada pela IA: ${modeloDaConversa}, ${calc.parcelas}x no ${calc.bandeira} (taxa ${calc.taxa}%): parcela ${calc.parcela.toFixed(2)}, total ${calc.total.toFixed(2)}.`, { triagem: true });
+        } else if (calc.tipo === "consultar" && calc.motivo === "parcelas_acima_de_21") {
+          texto = textoSimulacaoConsultar({ motivo: calc.motivo, modelo: modeloDaConversa });
+        } else {
+          await criarTarefaSimulacao(c, sim, modeloDaConversa);
+          tarefa = true;
+          texto = calc.tipo === "consultar" && calc.motivo !== "dados_incompletos" ? textoSimulacaoConsultar({ motivo: calc.motivo, modelo: modeloDaConversa }) : textoSimulacao({ ...sim, modelo: modeloDaConversa });
+        }
       }
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, simulacao: { ...sim, tarefa } } };

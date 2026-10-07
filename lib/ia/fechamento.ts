@@ -118,6 +118,35 @@ export function textoSimulacao(p: { parcelas: number | null; bandeira: string | 
   return `Perfeito! Já passei pro nosso vendedor fazer a simulação${vezes ? ` ${vezes}` : ""}${no}${moto}, e ele te manda os valores certinhos por aqui 🙏 Enquanto isso, quer saber mais alguma coisa ${artigo(p.modelo) === "o" ? "do patinete" : "da moto"}?`;
 }
 
+const brl = (x: number) => `R$ ${x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** Simulação pronta (feita pelo sistema, com a tabela da maquininha): a moto, o valor à vista e a parcela. Sem "10x":
+ *  escreve "em 10 vezes", como o resto do atendimento. */
+export function textoSimulacaoPronta(p: { nome: string | null; modelo: string; aVista: number; parcelas: number; bandeira: string; parcela: number; total: number; entrada?: number }) {
+  const abre = p.nome ? `${p.nome}, fiz a simulação pra você 😊` : "Fiz a simulação pra você 😊";
+  const ent = p.entrada && p.entrada > 0 ? `• Entrada: ${brl(p.entrada)}
+` : "";
+  if (p.parcelas === 1) return `${abre}
+
+• Moto: *${p.modelo}*
+• No cartão ${p.bandeira}, em 1 vez: *${brl(p.total)}* (sem acréscimo)
+
+Quer seguir assim ou prefere simular em mais vezes?`;
+  return `${abre}
+
+• Moto: *${p.modelo}*
+• Valor à vista: ${brl(p.aVista)}
+${ent}• No ${p.bandeira}, em ${p.parcelas} vezes: *${p.parcelas} parcelas de ${brl(p.parcela)}* (total de ${brl(p.total)})
+
+Pagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 Se preferir, simulo em outro número de parcelas, e se não ficar bom pra você, o vendedor consulta a gerência pra ver o que dá pra fazer. O que acha?`;
+}
+/** Casos em que o vendedor confirma antes de passar valor. */
+export function textoSimulacaoConsultar(p: { motivo: "amex_acima_12" | "bandeira_sem_tabela" | "parcelas_acima_de_21" | "dados_incompletos"; modelo: string | null }) {
+  const moto = p.modelo ? ` pra *${p.modelo}*` : "";
+  if (p.motivo === "amex_acima_12") return `No American Express, acima de 12 vezes preciso confirmar se o seu cartão permite esse parcelamento. Já passei pro nosso vendedor consultar${moto} e ele te responde por aqui 🙏 Se preferir, simulo agora em até 12 vezes. Quer?`;
+  if (p.motivo === "parcelas_acima_de_21") return `No cartão a gente parcela em até 21 vezes. Em quantas vezes você quer que eu simule${moto}? 😊`;
+  return `Já passei pro nosso vendedor fazer a simulação${moto}, e ele te manda os valores certinhos por aqui 🙏`;
+}
+
 export const PERGUNTA_TEM_MODELO = "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções? 😊";
 
 export const PERGUNTAS_VISITA = [
@@ -233,7 +262,7 @@ O cliente ainda não escolheu e quer conhecer as opções. Apresente de 2 a 3 op
 O cliente quer comprar, mas ainda não falou de um modelo. Pergunte só: "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções?".`;
     case "quer_parcelar":
       return `# MOMENTO DA COMPRA
-O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros, não liste bandeiras e nunca peça número do cartão, código ou senha.`;
+O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e incentive, sem pressionar, pagar em dinheiro ou Pix, que é o melhor valor (sem taxa). Se ele quiser parcelar mesmo assim, diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros (o sistema calcula e manda a simulação quando ele disser as parcelas e a bandeira), não liste bandeiras e nunca peça número do cartão, código ou senha.`;
     case "pediu_simulacao":
       return `# MOMENTO DA COMPRA
 O cliente passou os dados da simulação. O sistema avisa o vendedor e confirma: escreva só uma frase curta, sem valores.`;
