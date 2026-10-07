@@ -41,6 +41,7 @@ import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRAN
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
+import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
 import { registrarLog } from "@/lib/logs";
@@ -1397,6 +1398,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
       resposta = [...resposta, variar(PERGUNTAS_NOME)];
+    }
+    /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
+    if (resposta.length) {
+      const fichas = await db.select({ nome: schema.modelos.nome, ficha: schema.modelos.ficha, descricao: schema.modelos.descricao }).from(schema.modelos).where(eq(schema.modelos.ativo, true));
+      const fatos = fichas.map((f) => ({ nome: f.nome, autonomia: (f.ficha as Record<string, string> | null)?.autonomia ?? null, descricao: f.descricao }));
+      resposta = resposta.map((b) => corrigirKmSemFonte(b, fatos));
     }
     /* sem balão repetido nem a mesma pergunta da mensagem anterior (Arine, 06/10/2026) */
     resposta = semRepeticao(resposta, ultimaFalaDaLoja(c.memoria.historico));
