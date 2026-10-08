@@ -138,8 +138,9 @@ test("sem balão repetido nem a pergunta repetida da mensagem anterior (Arine, 0
 test("o nome é perguntado de novo depois de 2 mensagens sem resposta, no máximo 3 vezes (07/10/2026)", async () => {
   const { deveRepetirPerguntaDoNome } = await import("../../lib/ia/workflow/util.ts");
   const perguntou = "Agente IA: Boa tarde! Me chamo Milton. Com quem eu falo? 😊";
-  assert.equal(deveRepetirPerguntaDoNome([perguntou, "Lead: quanto custa a T1?"].join("\n\n")), false);
-  assert.equal(deveRepetirPerguntaDoNome([perguntou, "Lead: quanto custa a T1?", "Agente IA: A T1 custa R$ 12.000.", "Lead: e a AG08?"].join("\n\n")), true);
+  /* o histórico não traz a mensagem que acabou de chegar: ela conta como mais uma */
+  assert.equal(deveRepetirPerguntaDoNome(perguntou), false);
+  assert.equal(deveRepetirPerguntaDoNome([perguntou, "Lead: quanto custa a T1?", "Agente IA: A T1 custa R$ 12.000."].join("\n\n")), true);
   const tresVezes = [perguntou, "Lead: a", "Lead: b", "Agente IA: Qual é o seu nome? 😊", "Lead: c", "Lead: d", "Agente IA: Como posso te chamar? 😊", "Lead: e", "Lead: f"].join("\n\n");
   assert.equal(deveRepetirPerguntaDoNome(tresVezes), false);
   assert.equal(deveRepetirPerguntaDoNome("Lead: oi\n\nLead: tudo bem"), false);

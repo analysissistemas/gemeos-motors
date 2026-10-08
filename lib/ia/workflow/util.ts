@@ -209,6 +209,7 @@ export function deveRepetirPerguntaDoNome(historico: string | null | undefined):
       depois = 0;
     } else if (/^Lead:/.test(b)) depois++;
   }
-  return vezes > 0 && vezes < MAX_PERGUNTAS_NOME && depois >= 2;
+  /* o histórico não traz a mensagem que acabou de chegar: ela conta como +1 (teste de 07/10/2026) */
+  return vezes > 0 && vezes < MAX_PERGUNTAS_NOME && depois + 1 >= 2;
 }
 export const REPERGUNTAS_NOME = ["Ah, antes que eu esqueça: com quem eu falo? 😊", "E me diz, qual é o seu nome? 😊", "Só pra eu te atender melhor: como posso te chamar? 😊"];
