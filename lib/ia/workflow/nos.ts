@@ -40,7 +40,7 @@ import { entradaDoTexto, simularCartao, tabelaCompleta } from "@/lib/ia/simulaca
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, textoTabelaCompleta, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { candidatosDaFoto, instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -52,7 +52,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corNoTexto, deveRepetirPerguntaDoNome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, deveRepetirPerguntaDoNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 import { ETAPAS_ABERTAS, TIPOS_ELETRICOS } from "@/lib/dominio";
@@ -1005,7 +1005,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
 
 ${instrucaoDoSite(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
-${instrucaoDeFechamento(momento, modeloDaConversa)}
+${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${instrucaoDeFechamento(momento, modeloDaConversa)}
 
 ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     });
@@ -1500,11 +1500,18 @@ async function carregarFotoDoCatalogo(url: string): Promise<{ bytes: Buffer; mim
   }
 }
 async function motoParecidaDoEstoque(c: CtxWorkflow, foto: { bytes: Buffer; mime: string }): Promise<string | null> {
-  const modelos = (await motosComMidia(c)).filter((x) => x.fotos.length).slice(0, 10);
+  /* o que o cliente já disse (moto ou patinete) decide com quais comparar; todos entram (antes, só os 10 primeiros) */
+  const [tipos, falas] = await Promise.all([
+    db.select({ nome: schema.modelos.nome, tipo: schema.modelos.tipo }).from(schema.modelos).where(eq(schema.modelos.ativo, true)),
+    db.select({ conteudo: schema.mensagens.conteudo }).from(schema.mensagens).where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "incoming"))).orderBy(desc(schema.mensagens.id)).limit(12),
+  ]);
+  const comTipo = (await motosComMidia(c)).filter((x) => x.fotos.length).map((x) => ({ ...x, tipo: tipos.find((t) => t.nome === x.nome)?.tipo ?? "moto_eletrica" }));
+  const modelos = candidatosDaFoto(comTipo, falas.map((f) => f.conteudo ?? "").join("\n")).slice(0, 14);
   const candidatas = (await Promise.all(modelos.map(async (x) => ({ nome: x.nome, arq: await carregarFotoDoCatalogo(x.fotos[0].url) })))).flatMap((x) => (x.arq ? [{ nome: x.nome, ...x.arq }] : []));
   const r = await motoParecidaComFoto(foto, candidatas);
   if (!r) return candidatas.length ? "[SISTEMA] Nenhuma moto do estoque se parece de verdade com a foto do cliente: não diga que é parecida com nenhuma; diga o que viu na foto e apresente 2 ou 3 opções do estoque." : null;
-  return `[SISTEMA] A moto do estoque mais parecida com a foto do cliente é a ${r.modelo} (${r.confianca === "alta" ? "bem parecida" : "parecida"}: ${r.motivo.replace(/[.\s]+$/, "")}). Diga que a da foto é parecida com a *${r.modelo}*, que a loja tem em pronta entrega, sem afirmar que é o mesmo modelo.`;
+  const a = artigo(r.modelo);
+  return `[SISTEMA] O modelo do estoque mais parecido com a foto do cliente é ${a} ${r.modelo} (${r.confianca === "alta" ? "bem parecid" + a : "parecid" + a}: ${r.motivo.replace(/[.\s]+$/, "")}). Diga que o da foto é parecido com ${a} *${r.modelo}*, que a loja tem em pronta entrega, sem afirmar que é o mesmo modelo.`;
 }
 
 /* Áudio, imagem e documento: analisa uma vez e guarda na própria mensagem (metadados.transcricao),

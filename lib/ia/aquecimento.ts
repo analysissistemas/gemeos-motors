@@ -23,6 +23,7 @@ export type MotivoPular =
   | "vendedor_assumiu"
   | "conversa_encerrada"
   | "fora_da_janela"
+  | "loja_deve_resposta"
   | null;
 
 export const ROTULO_PULAR: Record<Exclude<MotivoPular, null>, string> = {
@@ -31,6 +32,7 @@ export const ROTULO_PULAR: Record<Exclude<MotivoPular, null>, string> = {
   vendedor_assumiu: "um vendedor assumiu a conversa",
   conversa_encerrada: "a conversa foi encerrada",
   fora_da_janela: "passou da janela de 24 h do WhatsApp",
+  loja_deve_resposta: "o cliente está esperando a loja (simulação, entrega ou revisão pendente)",
 };
 
 /** Na hora de enviar, confere de novo se ainda faz sentido chamar o cliente. null = pode enviar. */
@@ -42,11 +44,15 @@ export function decidirAquecimento(p: {
   clienteFalouDepois: boolean;
   /** minutos desde a última mensagem do cliente */
   minDesdeCliente: number;
+  /** há tarefa pendente da equipe para este cliente (simulação, entrega, revisar IA): quem deve resposta é a loja
+   *  (Beatriz, 07/10/2026: pediu a simulação em 20x e ficou esperando o vendedor) */
+  lojaDeveResposta?: boolean;
 }): MotivoPular {
   if (!p.iaPodeEnviar) return "ia_desligada";
   if (p.clienteFalouDepois) return "cliente_respondeu";
   if (["resolvida", "encerrada"].includes(p.status)) return "conversa_encerrada";
   if (p.modo === "humano") return "vendedor_assumiu";
+  if (p.lojaDeveResposta) return "loja_deve_resposta";
   if (p.minDesdeCliente >= LIMITE_JANELA_MIN) return "fora_da_janela";
   return null;
 }

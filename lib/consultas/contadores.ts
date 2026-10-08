@@ -21,6 +21,8 @@ export async function contarPendencias(u: UsuarioAtual) {
             and(
               eq(schema.followUps.status, "pendente"),
               lte(schema.followUps.agendadoPara, fimDoDia),
+              /* o aquecimento a IA envia sozinha: não é tarefa da equipe */
+              sql`coalesce(${schema.followUps.tipo}, '') <> 'aquecimento'`,
               u.papel === "admin" ? undefined : or(eq(schema.followUps.usuarioId, u.id), isNull(schema.followUps.usuarioId)),
             ),
           )

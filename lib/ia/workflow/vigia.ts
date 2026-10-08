@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, lt, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerControle } from "@/lib/ia/controle";
@@ -9,7 +9,7 @@ import { lojaAberta } from "@/lib/ia/horario";
 import { lerConfigWorkflow } from "./config";
 import { rodarWorkflowAtendimento } from "./executar";
 import { enviarAquecimentos } from "./aquecimento";
-import { decidirNovaTentativa, decidirVigia, MAX_TENTATIVAS } from "./vigia-regra";
+import { decidirNovaTentativa, decidirVigia, deveCobrarTarefa, MAX_TENTATIVAS } from "./vigia-regra";
 
 /* ============================================================
    VIGIA DO ATENDENTE — roda a cada minuto (instrumentation.ts → /api/interno/vigia)
@@ -80,6 +80,35 @@ async function retomarInterrompidas(agora: Date) {
   return retomadas;
 }
 
+/* Simulação ou entrega que a IA disse que o vendedor ia mandar, e ninguém mandou: aviso na conversa (uma vez) e
+   prioridade alta. Só com a loja aberta; a tarefa feita de madrugada é cobrada quando a loja abre. */
+async function cobrarTarefasDaLoja(agora: Date, aberta: boolean) {
+  if (!aberta) return 0;
+  const F = schema.followUps;
+  const tarefas = await db
+    .select({ id: F.id, conversaId: F.conversaId, criadoEm: F.criadoEm, motivo: F.motivo, tipo: F.tipo, contexto: F.contexto })
+    .from(F)
+    .where(and(eq(F.status, "pendente"), eq(F.origem, "ia"), inArray(F.tipo, ["simulacao", "entrega"]), gt(F.criadoEm, new Date(agora.getTime() - 3 * 24 * 3600_000)), sql`coalesce(${F.contexto}->>'cobrada', 'false') <> 'true'`))
+    .limit(30);
+  let cobradas = 0;
+  for (const t of tarefas) {
+    if (!t.conversaId) continue;
+    const [equipe] = await db
+      .select({ id: M.id })
+      .from(M)
+      .where(and(eq(M.conversaId, t.conversaId), eq(M.direcao, "outgoing"), eq(M.autor, "usuario"), gt(M.criadoEm, t.criadoEm)))
+      .limit(1);
+    const minDesdeCriada = Math.floor((agora.getTime() - new Date(t.criadoEm).getTime()) / 60_000);
+    if (!deveCobrarTarefa({ lojaAberta: aberta, minDesdeCriada, jaCobrada: false, equipeRespondeuDepois: !!equipe })) continue;
+    await db.update(F).set({ contexto: { ...((t.contexto ?? {}) as Record<string, unknown>), cobrada: true } }).where(eq(F.id, t.id));
+    const oque = t.tipo === "simulacao" ? "a simulação no cartão" : "a confirmação da entrega";
+    await mensagemSistema(db, t.conversaId, `ATENÇÃO: o cliente espera ${oque} há ${minDesdeCriada >= 120 ? `${Math.floor(minDesdeCriada / 60)} h` : `${minDesdeCriada} min`} (${t.motivo ?? "pedido feito à IA"}). A IA disse que o vendedor ia mandar: responda nesta conversa.`, { cobrancaTarefa: true, followUpId: t.id });
+    await db.update(C).set({ prioridade: "alta", atualizadoEm: agora }).where(eq(C.id, t.conversaId));
+    cobradas++;
+  }
+  return cobradas;
+}
+
 export async function vigiarAtendimentos(agora = new Date()) {
   const retomadas = await retomarInterrompidas(agora).catch((e) => {
     console.error("[vigia] retomar interrompidas", e);
@@ -92,6 +121,10 @@ export async function vigiarAtendimentos(agora = new Date()) {
   });
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
+  const tarefasCobradas = await cobrarTarefasDaLoja(agora, aberta).catch((e) => {
+    console.error("[vigia] cobrar tarefas", e);
+    return 0;
+  });
   const iaPodeResponder = controle.ligada && config.ativo;
   const candidatas = await db
     .select({ id: C.id, demo: C.demo, modo: C.modo })
@@ -99,7 +132,7 @@ export async function vigiarAtendimentos(agora = new Date()) {
     .where(and(eq(C.ultimaMensagemDirecao, "incoming"), notInArray(C.status, ["resolvida", "encerrada"])))
     .limit(200);
 
-  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, retomadas, aquecimento, erros: 0 };
+  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, retomadas, aquecimento, tarefasCobradas, erros: 0 };
   for (const cv of candidatas) {
     try {
       const [ultimaSaida] = await db.select({ id: M.id }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"))).orderBy(desc(M.id)).limit(1);

@@ -47,10 +47,13 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
     base().where(and(sql`${schema.followUps.status} <> 'pendente'`, meus)).orderBy(desc(schema.followUps.concluidoEm)).limit(20),
   ]);
   const hoje = chaveHoje();
+  /* o aquecimento a IA envia sozinha (10 min, 1 h, 23 h 53 min): fica num grupo à parte, fora dos atrasados da equipe */
+  const daEquipe = pendentes.filter((f) => f.tipo !== "aquecimento");
   const grupos = [
-    { titulo: "Atrasados", itens: pendentes.filter((f) => jaPassou(f.agendadoPara)), alerta: true },
-    { titulo: "Hoje", itens: pendentes.filter((f) => !jaPassou(f.agendadoPara) && chaveDia(f.agendadoPara) === hoje) },
-    { titulo: "Próximos dias", itens: pendentes.filter((f) => !jaPassou(f.agendadoPara) && chaveDia(f.agendadoPara) !== hoje) },
+    { titulo: "Atrasados", itens: daEquipe.filter((f) => jaPassou(f.agendadoPara)), alerta: true },
+    { titulo: "Hoje", itens: daEquipe.filter((f) => !jaPassou(f.agendadoPara) && chaveDia(f.agendadoPara) === hoje) },
+    { titulo: "Próximos dias", itens: daEquipe.filter((f) => !jaPassou(f.agendadoPara) && chaveDia(f.agendadoPara) !== hoje) },
+    { titulo: "A IA envia sozinha", itens: pendentes.filter((f) => f.tipo === "aquecimento") },
   ];
 
   return (

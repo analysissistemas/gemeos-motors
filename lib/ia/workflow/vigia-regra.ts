@@ -46,3 +46,11 @@ export async function tokenDoVigia(segredo: string) {
   const { createHash } = await import("node:crypto");
   return createHash("sha256").update(`vigia-atendente:${segredo}`).digest("hex");
 }
+
+/** Tarefa que a IA prometeu ao cliente (simulação, entrega) e ninguém da equipe respondeu (Beatriz, 07/10/2026:
+    pediu a simulação em 20x às 16h25 e ficou sem resposta). Com a loja aberta, depois de COBRAR_TAREFA_MIN, avisa a
+    equipe na conversa uma vez e sobe a prioridade. */
+export const COBRAR_TAREFA_MIN = 10;
+export function deveCobrarTarefa(p: { lojaAberta: boolean; minDesdeCriada: number; jaCobrada: boolean; equipeRespondeuDepois: boolean }): boolean {
+  return p.lojaAberta && !p.jaCobrada && !p.equipeRespondeuDepois && p.minDesdeCriada >= COBRAR_TAREFA_MIN;
+}

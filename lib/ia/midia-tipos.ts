@@ -150,3 +150,16 @@ export function tirarPromessaDeOutras(bloco: string, vao: string[], todos: strin
     .join("")
     .trim();
 }
+
+/** Foto do cliente: com quais modelos comparar (Guilherme, 07/10/2026: disse "moto elétrica", mandou a foto e a IA
+ *  achou parecido com a Patinete 530W e depois a 800W — "Patinete não amigo, queria as motinhas"). Falou só de moto,
+ *  patinete fica de fora; falou só de patinete, só patinete; nada dito, todos. */
+export function candidatosDaFoto<T extends { tipo: string }>(modelos: T[], falasDoCliente: string): T[] {
+  const t = falasDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const naoPatinete = /patinete\s+n[aã]o|n[aã]o\s+(?:quero\s+|e\s+)?(?:o\s+|um\s+)?patinete/u.test(t);
+  const patinete = /patinete/u.test(t) && !naoPatinete;
+  const moto = /(?<![a-z])(?:moto|motinha|motoca|scooter|motoneta)s?(?![a-z])/u.test(t) || naoPatinete;
+  if (moto && !patinete) return modelos.filter((m) => m.tipo !== "patinete");
+  if (patinete && !moto) return modelos.filter((m) => m.tipo === "patinete");
+  return modelos;
+}

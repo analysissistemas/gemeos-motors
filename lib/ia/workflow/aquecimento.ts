@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
@@ -31,6 +31,8 @@ import { lerConfigWorkflow } from "./config";
 const F = schema.followUps;
 const M = schema.mensagens;
 const C = schema.conversas;
+/** Tarefas em que a LOJA deve a resposta ao cliente: enquanto pendentes, nada de "ainda está por aí?". */
+const TAREFAS_DA_LOJA = ["simulacao", "entrega", "revisar_ia"];
 
 export async function agendarAquecimento(p: {
   conversaId: number;
@@ -108,6 +110,11 @@ export async function enviarAquecimentos(agora = new Date()) {
       const etapa = ctx.etapa ?? 1;
       const [cv] = await db.select({ telefone: C.contatoTelefone, demo: C.demo, modo: C.modo, status: C.status }).from(C).where(eq(C.id, f.conversaId)).limit(1);
       const [ultima] = await db.select({ id: M.id, em: M.criadoEm }).from(M).where(and(eq(M.conversaId, f.conversaId), eq(M.direcao, "incoming"))).orderBy(desc(M.id)).limit(1);
+      const [pendente] = await db
+        .select({ id: F.id })
+        .from(F)
+        .where(and(eq(F.conversaId, f.conversaId), eq(F.status, "pendente"), inArray(F.tipo, TAREFAS_DA_LOJA)))
+        .limit(1);
       const motivo = !cv || !ultima
         ? "conversa_encerrada"
         : decidirAquecimento({
@@ -116,6 +123,7 @@ export async function enviarAquecimentos(agora = new Date()) {
             status: cv.status,
             clienteFalouDepois: !!ctx.mensagemId && ultima.id > ctx.mensagemId,
             minDesdeCliente: Math.floor((agora.getTime() - new Date(ultima.em).getTime()) / 60_000),
+            lojaDeveResposta: !!pendente,
           });
       if (motivo) {
         await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: ${ROTULO_PULAR[motivo]}.`.slice(0, 1000) }).where(eq(F.id, f.id));

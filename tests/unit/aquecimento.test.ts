@@ -67,3 +67,36 @@ test("Damarys: 'Como posso te ajudar?' não se repete em outra variação logo d
   assert.deepEqual(semRepeticao(["Bom te ver por aqui! Em que posso te ajudar?"], antes), ["Bom te ver por aqui!"]);
   assert.deepEqual(semRepeticao(["Como posso te ajudar?"], "Temos a T1."), ["Como posso te ajudar?"]);
 });
+
+test("Beatriz: pediu a simulação e espera o vendedor — o aquecimento não sai", () => {
+  const ok = { iaPodeEnviar: true, modo: "ia", status: "aberta", clienteFalouDepois: false, minDesdeCliente: 60 };
+  assert.equal(decidirAquecimento({ ...ok, lojaDeveResposta: true }), "loja_deve_resposta");
+  assert.equal(decidirAquecimento({ ...ok, lojaDeveResposta: false }), null);
+});
+
+test("Beatriz: simulação prometida e ninguém da equipe respondeu — cobra com a loja aberta, uma vez", async () => {
+  const { deveCobrarTarefa, COBRAR_TAREFA_MIN } = await import("../../lib/ia/workflow/vigia-regra.ts");
+  const base = { lojaAberta: true, minDesdeCriada: COBRAR_TAREFA_MIN, jaCobrada: false, equipeRespondeuDepois: false };
+  assert.equal(deveCobrarTarefa(base), true);
+  assert.equal(deveCobrarTarefa({ ...base, minDesdeCriada: COBRAR_TAREFA_MIN - 1 }), false);
+  assert.equal(deveCobrarTarefa({ ...base, lojaAberta: false }), false);
+  assert.equal(deveCobrarTarefa({ ...base, jaCobrada: true }), false);
+  assert.equal(deveCobrarTarefa({ ...base, equipeRespondeuDepois: true }), false);
+});
+
+test("Guilherme: falou 'moto' e mandou foto — patinete fica fora da comparação", async () => {
+  const { candidatosDaFoto } = await import("../../lib/ia/midia-tipos.ts");
+  const m = [{ nome: "TANK AG11", tipo: "moto_eletrica" }, { nome: "Patinete 530W", tipo: "patinete" }, { nome: "X GÊMEOS", tipo: "moto_eletrica" }];
+  assert.deepEqual(candidatosDaFoto(m, "Moto elétrica\nBom dia! Vocês tem desse modelo ?").map((x) => x.nome), ["TANK AG11", "X GÊMEOS"]);
+  assert.deepEqual(candidatosDaFoto(m, "Patinete não amigo\nQueria as motinhas").map((x) => x.nome), ["TANK AG11", "X GÊMEOS"]);
+  assert.deepEqual(candidatosDaFoto(m, "tem desse patinete?").map((x) => x.nome), ["Patinete 530W"]);
+  assert.equal(candidatosDaFoto(m, "Vocês tem desse modelo?").length, 3);
+});
+
+test("Guilherme: respondeu só o nome — a IA não repete a ficha (detector)", async () => {
+  const { respondeuSoONome } = await import("../../lib/ia/workflow/util.ts");
+  const perguntou = "Olha ela aí\n\nQual é o seu nome? 😊";
+  for (const t of ["Guilherme", "guilherme abreu", "Meu nome é Carla", "É a Rui!", "Sou o João 😊"]) assert.equal(respondeuSoONome(t, perguntou), true, t);
+  for (const t of ["Guilherme, quanto custa?", "quero a tank", "Sim", "ok", "Guilherme 81 9999"]) assert.equal(respondeuSoONome(t, perguntou), false, t);
+  assert.equal(respondeuSoONome("Guilherme", "A TANK custa R$ 12.900."), false);
+});

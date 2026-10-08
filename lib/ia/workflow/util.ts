@@ -217,3 +217,13 @@ export function deveRepetirPerguntaDoNome(historico: string | null | undefined):
   return vezes > 0 && vezes < MAX_PERGUNTAS_NOME && depois + 1 >= 2;
 }
 export const REPERGUNTAS_NOME = ["Ah, antes que eu esqueça: com quem eu falo? 😊", "E me diz, qual é o seu nome? 😊", "Só pra eu te atender melhor: como posso te chamar? 😊"];
+
+/** O cliente só respondeu o nome ("Guilherme", "é a Carla", "meu nome é Rui") logo depois de a loja perguntar.
+ *  Guilherme (07/10/2026): disse o nome e a IA repetiu a ficha inteira da TANK AG11 que tinha acabado de mandar. */
+export function respondeuSoONome(texto: string, ultimaDaLoja: string): boolean {
+  if (!RX_PERGUNTA_NOME.test(ultimaDaLoja)) return false;
+  const t = texto.trim().replace(/^(?:meu\s+nome\s+[ée]|me\s+chamo|sou\s+(?:o|a)|sou|aqui\s+[ée]\s+(?:o|a)|[ée]\s+(?:o|a))\s+/iu, "").replace(/[!.,😊🙂]+/gu, " ").trim();
+  if (!t || /[?\d]/u.test(t)) return false;
+  const palavras = t.split(/\s+/);
+  return palavras.length <= 3 && palavras.every((p) => /^\p{L}+$/u.test(p)) && !/moto|patinete|pre[çc]o|valor|quanto|tem|quero|foto|v[ií]deo|sim|n[ãa]o|ok|obrigad/iu.test(t);
+}
