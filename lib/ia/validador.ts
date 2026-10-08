@@ -99,6 +99,7 @@ const CHECAGENS = (Object.keys(RX) as (keyof typeof RX)[]).map((regra) => ({ reg
 
 /* sempre bloqueados, mesmo que a base cite: promessa que a loja não faz */
 const NUNCA = /sem juros|carn[êe]|boleto|fiado|garantid[oa]/iu;
+const RX_SITE_DA_LOJA = /^(?:https?:\/\/)?(?:www\.)?gemeosmotors\.com\.br\/?$/iu;
 const AUTORIZAVEIS = new Set(["preco", "parcelamento", "desconto"]);
 const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ");
 function todos(t: string, regra: string) {
@@ -169,7 +170,8 @@ export function validarResposta(texto: string | null | undefined, opcoes: Opcoes
   for (const c of CHECAGENS) {
     const achados = c.regra === "emoji" ? [semEmojisOk.match(RX.emoji)?.[0]].filter((x): x is string => !!x) : todos(t, c.regra);
     /* valor, parcela e desconto só passam quando a base de conhecimento diz exatamente isso */
-    const pendentes = AUTORIZAVEIS.has(c.regra) ? achados.filter((a) => !autorizado(a, base)) : achados;
+    /* o endereço do site da própria loja pode (dono, 08/10/2026: "qualquer coisa já manda o cliente pro site"); qualquer outro link, não */
+    const pendentes = AUTORIZAVEIS.has(c.regra) ? achados.filter((a) => !autorizado(a, base)) : c.regra === "link" ? achados.filter((a) => !RX_SITE_DA_LOJA.test(a)) : achados;
     if (pendentes.length) add(c.regra, `Trecho: "${pendentes[0]}"`);
   }
   if (opcoes.promptSistema) {

@@ -113,3 +113,12 @@ test("tabela completa: 2x a 21x da bandeira (Amex só até 12x), num bloco só, 
   assert.match(t, /• 21x de R\$ 427,98/);
   for (const b of t.split(/\n\n/)) assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, b.slice(0, 60));
 });
+
+test("o endereço do site da loja pode aparecer; outro link não (08/10/2026)", async () => {
+  const { validarResposta } = await import("../../lib/ia/validador.ts");
+  const ok = (t: string) => validarResposta(t, { promptSistema: "", fontesAutorizadas: [] }).aprovada;
+  assert.ok(ok("Você também pode ver todos os modelos no site gemeosmotors.com.br 😉"));
+  assert.ok(ok("Veja em www.gemeosmotors.com.br"));
+  assert.ok(!ok("Veja em outrosite.com.br"));
+  assert.ok(!ok("Veja em https://gemeosmotors.com.br.golpe.com/x"));
+});

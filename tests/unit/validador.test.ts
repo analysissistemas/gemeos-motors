@@ -28,10 +28,11 @@ test("reprova preço escrito pela IA", () => {
   }
 });
 
-test("reprova link e endereço de site", () => {
-  for (const t of ["Veja em https://gemeos-motors.vercel.app/vitrine", "Acesse www.gemeosmotors.com.br", "Está em gemeosmotors.com.br"]) {
+test("reprova link e endereço de site, menos o site da própria loja (dono, 08/10/2026)", () => {
+  for (const t of ["Veja em https://gemeos-motors.vercel.app/vitrine", "Acesse www.outraloja.com.br", "Está em outraloja.com.br"]) {
     assert.ok(regras(t).includes("link"), t);
   }
+  for (const t of ["Acesse www.gemeosmotors.com.br", "Está em gemeosmotors.com.br"]) assert.ok(!regras(t).includes("link"), t);
 });
 
 test("reprova parcelamento, entrada e carnê (a loja não trabalha com isso)", () => {
