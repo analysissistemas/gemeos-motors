@@ -1376,17 +1376,32 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     }
     /* foto e vídeo só UMA vez (o dono, 06/10/2026: "não adianta mandar a foto pro cliente 10x"): o que já foi na conversa não vai
        de novo, e no máximo 3 arquivos por resposta */
+    /* motos cuja foto o cliente pediu agora mas que já foi antes na conversa (não vai de novo) */
+    let jaForam: string[] = [];
     if (midia) {
+      const pedidoAgora = midia.pedido.length > 0;
       const itens = midia.itens.filter((i) => !jaEnviadas.includes(i.url)).slice(0, 3);
+      if (pedidoAgora) jaForam = midia.itens.filter((i) => jaEnviadas.includes(i.url)).map((i) => i.legenda.replace(/\*/g, "").replace(/^Vídeo d[aeo]s?\s+/iu, "").split(" na cor")[0].trim());
       midia = itens.length ? { ...midia, itens } : { ...midia, itens: [] };
     }
+    const antesDoFiltro = resposta.length;
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
+    let vao: string[] = [];
     if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
     else {
       /* texto e foto batem: frase que promete foto de OUTRA moto (não a que vai) sai (Arine, 06/10/2026) */
       const todos = (await motosComMidia(c)).map((m) => m.nome);
-      const vao = todos.filter((n) => midia!.itens.some((i) => ultimaCitada([{ nome: n }], i.legenda)));
+      vao = todos.filter((n) => midia!.itens.some((i) => ultimaCitada([{ nome: n }], i.legenda)));
       resposta = resposta.map((b) => tirarPromessaDeOutras(b, vao, todos)).filter((b) => /\p{L}/u.test(b));
+    }
+    /* a resposta ficou vazia ou o cliente pediu foto que já tinha ido: frase honesta no lugar (execução #408, 06/10/2026:
+       "nada a enviar" e nem a foto da AG08 saiu) */
+    const unicos = Array.from(new Set(jaForam)).filter((n) => !vao.some((v) => v.toLowerCase() === n.toLowerCase()));
+    if (!resposta.length || (unicos.length && antesDoFiltro > resposta.length)) {
+      const linhas: string[] = [];
+      if (vao.length) linhas.push(`Olha ${vao.length > 1 ? "as fotos" : "a foto"} ${vao.map((n) => `d${artigo(n)} *${n}*`).join(" e ")} 👇`);
+      if (unicos.length) linhas.push(`${unicos.length > 1 ? "As" : `${artigo(unicos[0]) === "o" ? "O" : "A"}`} ${unicos.map((n) => `*${n}*`).join(" e ")} eu já te mandei ali em cima 👆`);
+      if (linhas.length) resposta = [...resposta, ...linhas];
     }
     /* abertura do Milton (P2 a P4): "Boa tarde, Carla! Tudo certinho? 😊 Me chamo Milton, sou da Gêmeos Motors…". O nome
        é só o que o cliente disse; se a resposta já fala do Milton (perguntou se é robô), não repete */
