@@ -1423,7 +1423,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* perguntou o nome e o cliente não respondeu: pergunta de novo depois de 2 mensagens dele (no máximo 3 vezes), menos no
        meio de um passo importante (parcelas, entrega, dados, visita) — dono, 07/10/2026 */
     if (!abertura && resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
-      const passoImportante = /quantas\s+vezes|bandeira|retirar|entrega|dia\s+e\s+hor[áa]rio|nome\s+completo|cpf/iu.test(resposta.join(" "));
+      /* pela etapa da conversa, não por palavra solta ("pronta para entrega" bloqueava a pergunta, teste de 07/10/2026) */
+      const passoImportante = ["quer_parcelar", "pediu_simulacao", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
       if (!passoImportante && !RX_PERGUNTA_NOME.test(resposta.join(" "))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
     }
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
