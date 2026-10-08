@@ -194,3 +194,21 @@ export function semRepeticao(resposta: string[], ultimaDaLoja = ""): string[] {
   }
   return ficam;
 }
+
+/** Perguntar o nome de novo? (dono, 07/10/2026: "a IA pergunta o nome, o cliente não responde, a IA segue o baile e não
+ *  pergunta mais"). Conta quantas vezes a loja já perguntou e quantas mensagens o cliente mandou depois da última vez.
+ *  Pergunta de novo depois de 2 mensagens do cliente sem o nome, no máximo 3 vezes na conversa. */
+export const MAX_PERGUNTAS_NOME = 3;
+export function deveRepetirPerguntaDoNome(historico: string | null | undefined): boolean {
+  const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  let vezes = 0;
+  let depois = 0;
+  for (const b of blocos) {
+    if (/^(Agente IA|Vendedor):/.test(b) && RX_PERGUNTA_NOME.test(b)) {
+      vezes++;
+      depois = 0;
+    } else if (/^Lead:/.test(b)) depois++;
+  }
+  return vezes > 0 && vezes < MAX_PERGUNTAS_NOME && depois >= 2;
+}
+export const REPERGUNTAS_NOME = ["Ah, antes que eu esqueça: com quem eu falo? 😊", "E me diz, qual é o seu nome? 😊", "Só pra eu te atender melhor: como posso te chamar? 😊"];
