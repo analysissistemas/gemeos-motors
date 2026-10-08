@@ -1423,7 +1423,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
     if (resposta.length) {
       const fichas = await db.select({ nome: schema.modelos.nome, ficha: schema.modelos.ficha, descricao: schema.modelos.descricao }).from(schema.modelos).where(eq(schema.modelos.ativo, true));
-      const fatos = fichas.map((f) => ({ nome: f.nome, autonomia: (f.ficha as Record<string, string> | null)?.autonomia ?? null, descricao: f.descricao }));
+      const fatos = fichas.map((f) => ({ nome: f.nome, autonomia: (f.ficha as Record<string, string> | null)?.autonomia ?? null, velocidade: (f.ficha as Record<string, string> | null)?.velocidade ?? null, descricao: f.descricao }));
       resposta = resposta.map((b) => corrigirKmSemFonte(b, fatos));
     }
     /* sem balão repetido nem a mesma pergunta da mensagem anterior (Arine, 06/10/2026) */
