@@ -42,6 +42,8 @@ export type ConfigWorkflow = {
   avisoAtendenteMin: number;
   /** vigia do atendente: minutos de espera até a IA assumir (0 = nunca) */
   iaAssumeMin: number;
+  /** follow-up de aquecimento: a IA chama de novo quem parou de responder (10 min, 1 h, 23 h 53 min) */
+  followUpAquecimento: boolean;
 };
 
 export const CONFIG_PADRAO: ConfigWorkflow = {
@@ -58,6 +60,7 @@ export const CONFIG_PADRAO: ConfigWorkflow = {
   citarMensagem: true,
   avisoAtendenteMin: 5,
   iaAssumeMin: 15,
+  followUpAquecimento: true,
 };
 
 export const LIMITES_CONFIG = {
@@ -82,6 +85,7 @@ export const ROTULOS_CONFIG: Record<keyof ConfigWorkflow, { rotulo: string; ajud
   avisoMemoriaApagada: { rotulo: "Avisar \"Memória apagada\"", ajuda: "Depois de apagar a memória, responde \"Memória apagada!\" na conversa." },
   avisoAtendenteMin: { rotulo: "Avisar a equipe após (minutos)", ajuda: "Cliente com vendedor e sem resposta há este tempo: aviso no chat, prioridade alta e notificação." },
   iaAssumeMin: { rotulo: "IA assume após (minutos)", ajuda: "Se continuar sem resposta, a IA assume a conversa e responde (0 = nunca). Fora do horário a IA responde na hora." },
+  followUpAquecimento: { rotulo: "Follow-up de aquecimento", ajuda: "Cliente parou de responder: a IA chama de novo 10 min, 1 h e 23 h 53 min depois (fora do horário, pede desculpa pela hora). Cada tentativa aparece em Follow-ups e pode ser cancelada." },
   citarMensagem: { rotulo: "Responder citando a mensagem do cliente", ajuda: "A resposta aparece como resposta à mensagem do cliente (a saudação vai solta, como no WhatsApp da loja)." },
 };
 
@@ -119,7 +123,7 @@ export const NOS: NoWorkflow[] = [
   { id: "validador", nome: "Validador", categoria: "seguranca", x: col(16), y: 300, descricao: "Bloqueia preço, link, promessa, dado sensível e vazamento do prompt." },
   { id: "decide_transferir", nome: "Transferir para humano?", categoria: "roteamento", x: col(17), y: 300, descricao: "O agente pediu transferência, ou uma trava bloqueou a resposta?" },
   { id: "transferir", nome: "Transferir atendimento", categoria: "roteamento", x: col(18), y: 500, descricao: "Passa a conversa para HUMANO, sobe a prioridade, avisa a equipe com o resumo e abre o negócio no funil (CRM)." },
-  { id: "memoria_salva", nome: "Memória: salva fatos e resumo", categoria: "memoria", x: col(18), y: 300, descricao: "Guarda o que a IA aprendeu do lead (nome, interesse, pagamento, troca, cidade) e o resumo do atendimento." },
+  { id: "memoria_salva", nome: "Memória: salva fatos e resumo", categoria: "memoria", x: col(18), y: 300, descricao: "Guarda o que a IA aprendeu do lead (nome, interesse, pagamento, troca, cidade) e o resumo do atendimento." , config: ["followUpAquecimento"] },
   { id: "blocos", nome: "Quebra a resposta em blocos", categoria: "logica", x: col(19), y: 300, descricao: "A saudação (quando houver) vai sozinha no primeiro bloco; a resposta é dividida em mensagens curtas, como uma pessoa escreveria.", config: ["maxBlocos"] },
   { id: "loop", nome: "Um bloco por vez", categoria: "logica", x: col(20), y: 300, descricao: "Envia os blocos em ordem, um de cada vez." },
   { id: "intervalo", nome: "Intervalo entre mensagens", categoria: "envio", x: col(21), y: 140, descricao: "Pausa antes de cada bloco (maior para textos longos, até o dobro do valor).", config: ["intervaloSegundos"] },

@@ -8,6 +8,7 @@ import { lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { lerConfigWorkflow } from "./config";
 import { rodarWorkflowAtendimento } from "./executar";
+import { enviarAquecimentos } from "./aquecimento";
 import { decidirNovaTentativa, decidirVigia, MAX_TENTATIVAS } from "./vigia-regra";
 
 /* ============================================================
@@ -84,6 +85,11 @@ export async function vigiarAtendimentos(agora = new Date()) {
     console.error("[vigia] retomar interrompidas", e);
     return 0;
   });
+  /* follow-up de aquecimento: cliente que parou de responder (10 min, 1 h, 23 h 53 min) */
+  const aquecimento = await enviarAquecimentos(agora).catch((e) => {
+    console.error("[vigia] aquecimento", e);
+    return null;
+  });
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
   const iaPodeResponder = controle.ligada && config.ativo;
@@ -93,7 +99,7 @@ export async function vigiarAtendimentos(agora = new Date()) {
     .where(and(eq(C.ultimaMensagemDirecao, "incoming"), notInArray(C.status, ["resolvida", "encerrada"])))
     .limit(200);
 
-  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, retomadas, erros: 0 };
+  const resultado = { vistas: candidatas.length, avisadas: 0, assumidas: 0, respondidasFechada: 0, novasTentativas: 0, retomadas, aquecimento, erros: 0 };
   for (const cv of candidatas) {
     try {
       const [ultimaSaida] = await db.select({ id: M.id }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"))).orderBy(desc(M.id)).limit(1);

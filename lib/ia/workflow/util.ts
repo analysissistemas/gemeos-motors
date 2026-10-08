@@ -180,11 +180,15 @@ export function mesclarFatos(antigos: FatosLead, novos: FatosLead): FatosLead {
 /** Sem balão repetido (Arine, 06/10/2026: o mesmo resumo da T3 saiu duas vezes e a mesma pergunta voltava em toda
  *  resposta). Sai o bloco igual (ou contido) a outro já enviado nesta resposta e a pergunta solta que é idêntica a
  *  uma pergunta da última mensagem da loja. */
+export const RX_PERGUNTA_AJUDA = /(?:como|em\s+que)\s+(?:eu\s+)?posso\s+(?:te\s+|lhe\s+)?ajudar|posso\s+te\s+ajudar\s+com\s+(?:o\s+qu[eê]|alguma\s+coisa)/iu;
 export function semRepeticao(resposta: string[], ultimaDaLoja = ""): string[] {
   const n = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const perguntasAnteriores = (ultimaDaLoja.match(/[^.!?\n]*\?/g) ?? []).map(n).filter((p) => p.length >= 12);
+  /* "Como posso te ajudar?" em qualquer variação: a loja acabou de perguntar, não pergunta de novo (Damarys, 07/10/2026) */
+  const jaPerguntouAjuda = RX_PERGUNTA_AJUDA.test(ultimaDaLoja);
   const ficam: string[] = [];
-  for (const b of resposta) {
+  for (const b0 of resposta) {
+    const b = jaPerguntouAjuda ? (b0.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [b0]).filter((f) => !RX_PERGUNTA_AJUDA.test(f)).join("").trim() : b0;
     const nb = n(b);
     if (!nb) continue;
     if (ficam.some((f) => { const nf = n(f); return nf === nb || (nb.length >= 30 && nf.includes(nb)); })) continue;

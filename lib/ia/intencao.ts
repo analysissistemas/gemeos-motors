@@ -123,6 +123,16 @@ export const veioDoSite = (texto: string) => new RegExp(RX_ABERTURA_SITE.source,
 /** O texto do cliente sem a frase pronta do site (para as regras de recado e de pedir uma pessoa). */
 export const semAberturaDoSite = (texto: string) => texto.replace(RX_ABERTURA_SITE, " ").replace(/\s+/g, " ").trim();
 
+/** Instrução de quem chegou pelo botão do site. Damarys (07/10/2026) mandou a frase do site + "Vcs tem disponível" +
+ *  "Valor", e a IA só perguntou "como posso te ajudar?" duas vezes. Perguntou algo além da frase pronta: responde. */
+export function instrucaoDoSite(texto: string): string {
+  if (!veioDoSite(texto)) return "";
+  const resto = semAberturaDoSite(texto).replace(/^(?:ol[áa]|oi+|bom\s+dia|boa\s+tarde|boa\s+noite)[!.,\s]*/iu, "").trim();
+  const base = 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe.';
+  if (!/\p{L}{2,}/u.test(resto)) return `${base} Atenda e pergunte o que ele procura.\n\n`;
+  return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. Perguntou se tem disponível, valor ou preço sem dizer o modelo: liste as motos EM ESTOQUE com o preço de cada (do catálogo) e pergunte qual chamou mais a atenção. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
+}
+
 /* Triciclo (06/10/2026): a IA chamou a T3 Retrô (duas rodas) de triciclo. O dono confirmou que o MM3 tem TRÊS rodas.
    Triciclo é só o modelo cuja descrição no catálogo diz "triciclo" ou "três rodas" (hoje o MM3); nenhum outro.
    `triciclos` = nomes desses modelos com unidade no estoque. */

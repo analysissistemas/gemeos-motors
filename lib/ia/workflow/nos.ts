@@ -7,6 +7,7 @@ import { consultarEstoque } from "@/lib/ia/estoque";
 import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
+import { agendarAquecimento } from "./aquecimento";
 import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -38,7 +39,7 @@ import {
 import { entradaDoTexto, simularCartao, tabelaCompleta } from "@/lib/ia/simulacao-cartao";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, textoTabelaCompleta, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -494,43 +495,17 @@ async function tarefaEntregaFora(c: CtxWorkflow, clienteId: number | null, negoc
   return `entrega em ${cidade}`;
 }
 
-/* Pedido de 05/10/2026: "quando a pessoa mandar um Oi e não responder mais nada, programa um follow-up 10 min
-   depois, 1 h depois e 23 h depois — só que ele não dispara a mensagem". Quando o cliente só cumprimentou (não
-   disse o que quer) e a IA respondeu, nascem 3 follow-ups para a EQUIPE chamar o cliente; nada sai sozinho para o
-   WhatsApp. Se o cliente voltar a falar, os que ainda não venceram são cancelados (e, se ainda só cumprimentou,
-   os 3 recomeçam a contar dali). 23 h fica dentro da janela de 24 h do WhatsApp para a equipe responder. */
-export const LEMBRETES_SEM_RESPOSTA = [
-  { minutos: 10, rotulo: "10 min" },
-  { minutos: 60, rotulo: "1 h" },
-  { minutos: 23 * 60, rotulo: "23 h" },
-] as const;
+/* Follow-up de aquecimento (07/10/2026, Damarys perguntou o preço, disse "Brgd" e sumiu; antes, 05/10/2026: "quando a
+   pessoa mandar um Oi e não responder mais nada, 10 min, 1 h e 23 h depois"). Depois de cada resposta da IA, as
+   tentativas antigas saem (o cliente falou) e nascem 3 novas que a IA ENVIA sozinha (lib/ia/workflow/aquecimento.ts),
+   só para quem a IA está atendendo: recado, assistência, reclamação, conversa com a equipe e cliente que já mandou os
+   dados do fechamento ficam com as pessoas. */
 async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
-  const F = schema.followUps;
-  const agora = new Date();
-  /* os lembretes antigos desta conversa que ainda não venceram saem: o cliente falou de novo */
-  await db
-    .update(F)
-    .set({ status: "cancelado", concluidoEm: agora })
-    .where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), sql`${F.contexto}->>'semResposta' = 'true'`, gt(F.agendadoPara, agora)));
-  const soCumprimentou = !c.intencao && !c.recado && !c.pipe?.humano && !!c.pipe?.texto;
-  if (!soCumprimentou) return null;
   const cv = await carregarConversa(c.conversaId);
+  const qualifica =
+    !c.recado && !c.pipe?.humano && !c.aguardaEquipe && !c.motivoTransferencia && c.intencao !== "assistencia" && !["mandou_dados", "dados_parciais"].includes(c.momento ?? "") && cv.modo !== "humano";
   const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
-  await db.insert(F).values(
-    LEMBRETES_SEM_RESPOSTA.map((l, i) => ({
-      conversaId: c.conversaId,
-      clienteId: clienteId ?? cv.clienteId,
-      negocioId: negocioId ?? cv.negocioId,
-      usuarioId: cv.responsavelId,
-      agendadoPara: new Date(agora.getTime() + l.minutos * 60_000),
-      notas: `${nome ?? "O cliente"} só cumprimentou e não respondeu mais. ${i + 1}º lembrete (${l.rotulo}): chame de novo na conversa${i === 2 ? " (último: depois de 24 h o WhatsApp só aceita mensagem modelo)" : ""}.`,
-      tipo: "retorno_cliente",
-      motivo: `Sem resposta depois do cumprimento (${l.rotulo})`,
-      origem: "ia",
-      contexto: { semResposta: true, etapa: i + 1, detectadoPor: "ia" },
-    })),
-  );
-  return { lembretes: LEMBRETES_SEM_RESPOSTA.length };
+  return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo: c.intencao === "compra" ? c.modeloDaConversa : null });
 }
 
 /** Tarefa "Revisar atendimento da IA" em Follow-ups quando o cliente reclama (Arine, 06/10/2026). Uma pendente por conversa. */
@@ -950,6 +925,18 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   buffer_outra: (c) => ({ fim: "parou", detalhe: `Chegou mensagem nova durante a espera (${c.motivoTransferencia}): a execução dela responde tudo junto` }),
 
   buffer_junta: async (c) => {
+    /* a resposta anterior ainda está saindo ("digitando"): espera ela terminar (até 90 s) para não responder por cima e
+       repetir a mesma pergunta (Damarys, 07/10/2026: "Como posso te ajudar?" duas vezes seguidas) */
+    const E = schema.iaWorkflowExecucoes;
+    for (let i = 0; i < 45; i++) {
+      const [anterior] = await db
+        .select({ id: E.id })
+        .from(E)
+        .where(and(eq(E.conversaId, c.conversaId), eq(E.status, "rodando"), lt(E.mensagemId, c.mensagemId!), gt(E.iniciadoEm, sql`now() - interval '5 minutes'`)))
+        .limit(1);
+      if (!anterior) break;
+      await esperar(2000);
+    }
     const mem = await lerMemoria(c.conversaId);
     const [ultimaResposta] = await db
       .select({ id: schema.mensagens.id })
@@ -977,7 +964,9 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 
   memoria_carrega: async (c) => {
     const mem = await lerMemoria(c.conversaId);
-    const filtros = [eq(schema.mensagens.conversaId, c.conversaId), ne(schema.mensagens.autor, "sistema"), lt(schema.mensagens.id, c.primeiraDoBuffer ?? c.mensagemId!)];
+    /* tudo antes das mensagens desta vez e o que a loja mandou depois delas (a resposta anterior que terminou de sair
+       enquanto o cliente escrevia): a IA vê o que acabou de perguntar e não repete */
+    const filtros = [eq(schema.mensagens.conversaId, c.conversaId), ne(schema.mensagens.autor, "sistema"), sql`(${schema.mensagens.id} < ${c.primeiraDoBuffer ?? c.mensagemId!} or ${schema.mensagens.direcao} = 'outgoing')`];
     if (mem?.limpaEm) filtros.push(gt(schema.mensagens.criadoEm, mem.limpaEm));
     const msgs = (await db.select().from(schema.mensagens).where(and(...filtros)).orderBy(desc(schema.mensagens.id)).limit(c.config.janelaMemoria)).reverse();
     const historico = formatarHistorico(msgs.map((m) => ({ autor: m.autor, tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m), criadoEm: m.criadoEm })));
@@ -1014,7 +1003,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${veioDoSite(textoDoCliente(c)) ? 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe; atenda e pergunte o que ele procura.\n\n' : ""}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${instrucaoDoSite(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1255,7 +1244,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       }
       /* dados do pedido no cadastro, com o resumo para a equipe */
       pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
-      /* só cumprimentou e sumiu: lembretes para a equipe chamar de novo (10 min, 1 h, 23 h) */
+      /* parou de responder: a IA chama de novo em 10 min, 1 h e 23 h 53 min (follow-up de aquecimento) */
       await lembretesSemResposta(c, q.clienteId, q.negocioId).catch(() => null);
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
