@@ -40,7 +40,7 @@ import { entradaDoTexto, simularCartao, tabelaCompleta } from "@/lib/ia/simulaca
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, textoTabelaCompleta, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { candidatosDaFoto, instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -66,6 +66,8 @@ const semPontoFinal = (s: string) => s.trim().replace(/[.\s]+$/u, "");
    com "Como posso te ajudar?" e não pergunta o nome (o nome completo só vem na lista de dados do fechamento). */
 const APRESENTACAO = ["Me chamo Milton, sou da Gêmeos Motors e vou te ajudar por aqui!", "Aqui é o Milton, da Gêmeos Motors, e vou te ajudar por aqui!", "Me chamo Milton, da Gêmeos Motors, e vou te ajudar por aqui!"];
 const TUDO_CERTO = ["Tudo certo por aqui 😊 Como posso te ajudar?", "Tudo ótimo por aqui! Em que posso te ajudar? 🙂", "Por aqui tudo bem 😊 Me conta, o que você precisa?"];
+const TEXTO_CATALOGO_AUDIO = "Recebi o seu áudio! 😊 Pra te atender direitinho, dá uma olhadinha no nosso catálogo com todos os modelos, fotos e preços: gemeosmotors.com.br. Me conta qual te chamou atenção, ou escreve aqui o que você procura que eu te ajudo.";
+const TEXTO_CATALOGO_FOTO = "Recebi a sua foto! 😊 Pra você ver todos os nossos modelos com foto e preço, é só dar uma olhada no catálogo: gemeosmotors.com.br. Me diz qual é a da foto, ou qual te chamou atenção, que eu te ajudo.";
 const PERGUNTAS_NOME = ["Com quem eu falo? 😊", "Qual é o seu nome? 😊", "Como posso te chamar? 😊"];
 const PRAZER: ((nome: string) => string)[] = [(n) => `Prazer, ${n}!`, (n) => `Prazer em te conhecer, ${n}!`, (n) => `Que bom falar com você, ${n}!`, (n) => `Muito prazer, ${n}!`];
 const VARIANTES_FORA_HORARIO = [
@@ -1054,6 +1056,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        equipe... quer saber mais alguma coisa?": no pós-venda o texto é do sistema, com empatia e sem insistir. */
     /* o cliente reclamou do atendimento da IA ("não veio foto", "acho que é atendente virtual... depois passo aí"):
        desculpas e uma pessoa da equipe (Arine, 06/10/2026). Fica marcado para a equipe revisar a conversa. */
+    /* áudio, ou foto sem texto: a IA não tenta entender nem sugere moto (dono, 09/10/2026: "ofereça o catálogo pro cliente ver,
+       não dê sugestões, vá aprendendo depois"). Texto do sistema com o site da loja; o cliente escolhe por ele. */
+    const semTexto = !c.mensagem?.conteudo?.trim();
+    if (r.ctx.texto && (c.mensagem?.tipo === "audio" || (c.mensagem?.tipo === "imagem" && semTexto))) {
+      const texto = c.mensagem?.tipo === "audio" ? TEXTO_CATALOGO_AUDIO : TEXTO_CATALOGO_FOTO;
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, catalogo: c.mensagem?.tipo } };
+    }
     if (intencao !== "assistencia" && r.ctx.texto && reclamouDoAtendimento(c.textoBuffer)) {
       const texto = textoQueixa({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
@@ -1485,30 +1495,12 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
   final: (c) => ({ fim: "sucesso", detalhe: c.enviados ? `${c.enviados} mensagem(ns) enviada(s)` : "Nada a enviar", saida: { enviados: c.enviados, transferida: !!c.pipe?.humano } }),
 };
 
-/* Foto de moto do cliente (08/10/2026, dono): identificar a moto pela foto ERRA muito (era uma DF17 e a IA ofereceu a X Gêmeos).
-   Em vez de adivinhar, a IA mostra 3 opções em faixas de preço diferentes (a mais em conta, uma do meio e a mais cara) e o
-   cliente aponta "é essa". O sistema escolhe as 3; a IA só apresenta, e o sistema manda a foto de cada uma. */
-async function motoParecidaDoEstoque(c: CtxWorkflow): Promise<string | null> {
-  const [dados, falas] = await Promise.all([
-    db.select({ nome: schema.modelos.nome, tipo: schema.modelos.tipo, preco: schema.modelos.precoTabela }).from(schema.modelos).where(eq(schema.modelos.ativo, true)),
-    db.select({ conteudo: schema.mensagens.conteudo }).from(schema.mensagens).where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "incoming"))).orderBy(desc(schema.mensagens.id)).limit(12),
-  ]);
-  const comTipo = (await motosComMidia(c)).filter((x) => x.fotos.length).map((x) => {
-    const d = dados.find((t) => t.nome === x.nome);
-    return { ...x, tipo: d?.tipo ?? "moto_eletrica", preco: d?.preco ? Number(d.preco) : 0 };
-  });
-  const candidatos = candidatosDaFoto(comTipo, falas.map((f) => f.conteudo ?? "").join("\n")).filter((x) => x.preco > 0).sort((a, b) => a.preco - b.preco);
-  if (candidatos.length < 2) return null;
-  const meio = candidatos[Math.floor((candidatos.length - 1) / 2)];
-  const escolhidos = candidatos.length <= 3 ? candidatos : [candidatos[0], meio, candidatos[candidatos.length - 1]];
-  const lista = escolhidos.map((x) => `• ${x.nome}: ${reais(x.preco)}`).join("\n");
-  return `[SISTEMA] O cliente mandou a foto de uma moto. Identificar pela foto erra muito: NÃO diga qual é, nem que é parecida com alguma. Diga que a loja tem opções em várias faixas de preço e apresente EXATAMENTE estas, uma por linha, com o preço:\n${lista}\nO sistema manda a foto de cada uma. Pergunte qual delas é a da foto (ou a mais parecida). Termine dizendo que ele também pode ver todos os modelos no site gemeosmotors.com.br (escreva o endereço exatamente assim).`;
-}
-
 /* Áudio, imagem e documento: analisa uma vez e guarda na própria mensagem (metadados.transcricao),
    para o buffer e a memória lerem depois. Falha na análise não derruba o atendimento. */
 async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento", ligado: boolean) {
   const m = c.mensagem!;
+  /* áudio não é transcrito (dono, 09/10/2026: a IA se confunde com o áudio): o cliente recebe o catálogo e escolhe por ele */
+  if (tipo === "audio") return { ctx: { textoEntrada: "[áudio] (o cliente mandou um áudio; a IA não o transcreve)" }, saida: { texto: "áudio não transcrito" } };
   const ja = transcricaoDe(m);
   if (ja) return { saida: { texto: ja, reaproveitada: true } };
   if (!ligado) return { saida: { texto: c.textoEntrada, observacao: "análise desligada nos ajustes do nó" } };
@@ -1517,9 +1509,7 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
   if (!arq) return { saida: { texto: c.textoEntrada, observacao: "arquivo da mídia não encontrado" } };
   try {
     const analise = await analisarMidia(tipo, arq.bytes, m.midiaMime ?? arq.mime);
-    /* foto de moto: diz qual moto do estoque é parecida (a falha aqui não derruba a descrição) */
-    const parecida = tipo === "imagem" ? await motoParecidaDoEstoque(c).catch(() => null) : null;
-    const texto = [analise, m.conteudo ? `(legenda: ${m.conteudo})` : "", parecida].filter(Boolean).join("\n");
+    const texto = [analise, m.conteudo ? `(legenda: ${m.conteudo})` : ""].filter(Boolean).join("\n");
     await db.update(schema.mensagens).set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ transcricao: texto })}::jsonb` }).where(eq(schema.mensagens.id, m.id));
     const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento" }[tipo];
     return { ctx: { textoEntrada: `[${rotulo}] ${texto}` }, entrada: { arquivo: m.midiaNome ?? m.midiaUrl, mime: m.midiaMime, bytes: arq.bytes.length }, saida: { texto } };

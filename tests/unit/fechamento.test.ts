@@ -145,7 +145,7 @@ test("a proposta antiga sai da resposta da IA", () => {
 test("sem modelo: pediu opções (pesquisando) ou só quer comprar (pergunta se já tem modelo em mente)", () => {
   for (const t of ["quais motos vocês têm?", "quais são as mais baratas?", "tô pesquisando", "me mostra as opções"]) assert.equal(m(t, "", false), "pesquisando", t);
   assert.equal(m("quero comprar uma moto", "", false), "sem_modelo");
-  assert.match(instrucaoDeFechamento("pesquisando", null), /2 a 3 opções/);
+  assert.match(instrucaoDeFechamento("pesquisando", null), /gemeosmotors.com.br/);
   assert.deepEqual(validarResposta(PERGUNTA_TEM_MODELO).violacoes, []);
 });
 
