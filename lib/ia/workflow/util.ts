@@ -152,11 +152,13 @@ export function pagamentoDoTexto(texto: string) {
 
 export type MensagemMemoria ={ autor: string; tipo: string; conteudo: string | null; transcricao?: string | null; criadoEm: Date };
 
-/** Texto que representa a mensagem para a IA (mídia usa a transcrição/descrição). */
+/** Texto que representa a mensagem para a IA (mídia usa a transcrição/descrição).
+ *  Foto nunca leva a descrição (dono, 10/10/2026): com ela a IA adivinhava a moto e oferecia modelo nada a ver;
+ *  fica só a legenda que o cliente escreveu (lib/ia/foto-cliente.ts). */
 export function textoDaMensagem(m: Pick<MensagemMemoria, "tipo" | "conteudo" | "transcricao">) {
   if (m.tipo === "texto") return m.conteudo ?? "";
   const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento", video: "vídeo", localizacao: "localização", contato: "contato" }[m.tipo] ?? m.tipo;
-  if (m.transcricao) return `[${rotulo}] ${m.transcricao}`;
+  if (m.transcricao && m.tipo !== "imagem") return `[${rotulo}] ${m.transcricao}`;
   return `[${rotulo}${m.conteudo ? `: ${m.conteudo}` : ""}]`;
 }
 

@@ -42,6 +42,7 @@ import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRAN
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
+import { instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -66,8 +67,6 @@ const semPontoFinal = (s: string) => s.trim().replace(/[.\s]+$/u, "");
    com "Como posso te ajudar?" e não pergunta o nome (o nome completo só vem na lista de dados do fechamento). */
 const APRESENTACAO = ["Me chamo Milton, sou da Gêmeos Motors e vou te ajudar por aqui!", "Aqui é o Milton, da Gêmeos Motors, e vou te ajudar por aqui!", "Me chamo Milton, da Gêmeos Motors, e vou te ajudar por aqui!"];
 const TUDO_CERTO = ["Tudo certo por aqui 😊 Como posso te ajudar?", "Tudo ótimo por aqui! Em que posso te ajudar? 🙂", "Por aqui tudo bem 😊 Me conta, o que você precisa?"];
-const TEXTO_CATALOGO_AUDIO = "Recebi o seu áudio! 😊 Pra te atender direitinho, dá uma olhadinha no nosso catálogo com todos os modelos, fotos e preços: gemeosmotors.com.br. Me conta qual te chamou atenção, ou escreve aqui o que você procura que eu te ajudo.";
-const TEXTO_CATALOGO_FOTO = "Recebi a sua foto! 😊 Pra você ver todos os nossos modelos com foto e preço, é só dar uma olhada no catálogo: gemeosmotors.com.br. Me diz qual é a da foto, ou qual te chamou atenção, que eu te ajudo.";
 const PERGUNTAS_NOME = ["Com quem eu falo? 😊", "Qual é o seu nome? 😊", "Como posso te chamar? 😊"];
 const PRAZER: ((nome: string) => string)[] = [(n) => `Prazer, ${n}!`, (n) => `Prazer em te conhecer, ${n}!`, (n) => `Que bom falar com você, ${n}!`, (n) => `Muito prazer, ${n}!`];
 const VARIANTES_FORA_HORARIO = [
@@ -1005,7 +1004,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${instrucaoDoSite(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1056,13 +1055,14 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        equipe... quer saber mais alguma coisa?": no pós-venda o texto é do sistema, com empatia e sem insistir. */
     /* o cliente reclamou do atendimento da IA ("não veio foto", "acho que é atendente virtual... depois passo aí"):
        desculpas e uma pessoa da equipe (Arine, 06/10/2026). Fica marcado para a equipe revisar a conversa. */
-    /* áudio, ou foto sem texto: a IA não tenta entender nem sugere moto (dono, 09/10/2026: "ofereça o catálogo pro cliente ver,
-       não dê sugestões, vá aprendendo depois"). Texto do sistema com o site da loja; o cliente escolhe por ele. */
-    const semTexto = !c.mensagem?.conteudo?.trim();
-    if (r.ctx.texto && (c.mensagem?.tipo === "audio" || (c.mensagem?.tipo === "imagem" && semTexto))) {
-      const texto = c.mensagem?.tipo === "audio" ? TEXTO_CATALOGO_AUDIO : TEXTO_CATALOGO_FOTO;
+    /* foto ou áudio do cliente, de qualquer jeito que venha (só, com legenda, foto e depois "tem essa?"): a IA não tenta
+       reconhecer nem sugere moto (dono, 09 e 10/10/2026: oferecia moto nada a ver, e às vezes a foto é de modelo que a
+       loja nem trabalha). Texto do sistema com o catálogo; escreveu o nome de um modelo, a IA atende sobre ele. */
+    const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
+    if (r.ctx.texto && paraMidia) {
+      const texto = TEXTO_DA_RESPOSTA[paraMidia];
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
-      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, catalogo: c.mensagem?.tipo } };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, catalogo: paraMidia } };
     }
     if (intencao !== "assistencia" && r.ctx.texto && reclamouDoAtendimento(c.textoBuffer)) {
       const texto = textoQueixa({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
@@ -1501,6 +1501,9 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
   const m = c.mensagem!;
   /* áudio não é transcrito (dono, 09/10/2026: a IA se confunde com o áudio): o cliente recebe o catálogo e escolhe por ele */
   if (tipo === "audio") return { ctx: { textoEntrada: "[áudio] (o cliente mandou um áudio; a IA não o transcreve)" }, saida: { texto: "áudio não transcrito" } };
+  /* foto não é descrita (dono, 10/10/2026: com a descrição a IA adivinhava a moto, muitas vezes de modelo que a loja nem
+     trabalha): a IA vê só "[imagem]" e a legenda, e o cliente recebe o catálogo (lib/ia/foto-cliente.ts) */
+  if (tipo === "imagem") return { ctx: { textoEntrada: textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: null }) }, saida: { texto: "foto não descrita (a IA não tenta reconhecer a moto)" } };
   const ja = transcricaoDe(m);
   if (ja) return { saida: { texto: ja, reaproveitada: true } };
   if (!ligado) return { saida: { texto: c.textoEntrada, observacao: "análise desligada nos ajustes do nó" } };
