@@ -95,9 +95,9 @@ test("parcelamento: quer parcelar, depois parcelas e bandeira viram simulação 
   assert.equal(m("master", pergunta), "pediu_simulacao");
   /* com os dois numa mensagem só, mesmo sem a pergunta */
   assert.equal(m("quero parcelar em 10 vezes no elo"), "pediu_simulacao");
-  assert.deepEqual(simulacaoPedida("12x no Visa"), { parcelas: 12, bandeira: "Visa" });
-  assert.deepEqual(simulacaoPedida("em 10 vezes no mastercard"), { parcelas: 10, bandeira: "Mastercard" });
-  assert.deepEqual(simulacaoPedida("hiper"), { parcelas: null, bandeira: "Hipercard" });
+  assert.deepEqual(simulacaoPedida("12x no Visa"), { parcelas: 12, todas: [12], bandeira: "Visa", debito: false });
+  assert.deepEqual(simulacaoPedida("em 10 vezes no mastercard"), { parcelas: 10, todas: [10], bandeira: "Mastercard", debito: false });
+  assert.deepEqual(simulacaoPedida("hiper"), { parcelas: null, todas: [], bandeira: "Hipercard", debito: false });
   const t = textoSimulacao({ parcelas: 12, bandeira: "Visa", modelo: "AG08" });
   assert.match(t, /^Perfeito! Já passei pro nosso vendedor fazer a simulação em 12 vezes no Visa pra \*AG08\*/);
   assert.doesNotMatch(t, /R\$|juros|taxa de/);

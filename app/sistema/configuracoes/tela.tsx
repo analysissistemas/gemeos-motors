@@ -7,7 +7,9 @@ import { CabecalhoPagina, Painel, Selo, TituloSecao } from "@/components/ui/basi
 import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, Entrada } from "@/components/ui/campos";
 import { Dialogo } from "@/components/ui/dialogo";
+import type { TaxasMaquineta } from "@/lib/ia/simulacao-cartao";
 import { PainelApiOficial, type ApiOficial } from "./api-oficial";
+import { PainelTaxas } from "./taxas";
 import { acaoCarregarDemo, acaoExcluirResposta, acaoLimparDemo, acaoSalvarEmpresa, acaoSalvarResposta, acaoTriagemAutomatica } from "./acoes";
 
 type Empresa = Record<string, unknown> | null;
@@ -21,6 +23,7 @@ export function TelaConfiguracoes({
   info,
   apiOficial,
   urlCallback,
+  taxas,
 }: {
   empresa: Empresa;
   respostas: Resposta[];
@@ -29,6 +32,7 @@ export function TelaConfiguracoes({
   info: { provedor: string; simulado: boolean; modeloIa: string };
   apiOficial: ApiOficial;
   urlCallback: string;
+  taxas: TaxasMaquineta;
 }) {
   const router = useRouter();
   const [e, setE] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(empresa ?? {}).map(([k, v]) => [k, v == null ? "" : String(v)])));
@@ -52,6 +56,11 @@ export function TelaConfiguracoes({
 
       <div className="mb-4">
         <PainelApiOficial inicial={apiOficial} urlCallback={urlCallback} />
+      </div>
+
+      <div className="mb-4">
+        {/* key: depois de salvar ou restaurar, o painel recomeça com o que está no banco */}
+        <PainelTaxas key={JSON.stringify(taxas)} inicial={taxas} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

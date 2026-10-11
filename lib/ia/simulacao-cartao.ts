@@ -1,63 +1,124 @@
-/* Simulação de parcelas no cartão de crédito, feita pelo SISTEMA (a IA nunca calcula).
-   Tabelas de taxa da maquininha passadas pelo dono em 06/10/2026 (% por número de parcelas, de 2x a 21x):
-   - Elo (tabela mais cara);
-   - Visa e Mastercard ("melhores taxas").
-   Regras do dono (06/10/2026): quem paga a taxa é o CLIENTE (preço × (1 + taxa)); 1x não tem taxa; só Visa,
-   Master e Elo têm tabela; American Express segue a tabela do Elo, mas acima de 12x o vendedor consulta se o
-   cartão do cliente permite; Hipercard e Diners vão para o vendedor. Não há entrada mínima; com entrada, a taxa
-   vale só sobre o que sobra para parcelar. Tudo no DÉBITO tem taxa e o dono confirma a margem: não calcula aqui. */
+/* Simulação de parcelas no cartão, feita pelo SISTEMA (a IA nunca calcula e nunca escolhe a taxa).
+   Taxas da maquineta: relatório do dono de 10/10/2026 (antes, 06/10/2026), editáveis em Configurações → Taxas da
+   maquineta (lib/ia/taxas-maquineta.ts guarda no banco; aqui ficam os valores do relatório como padrão).
+   Regras do dono:
+   - quem paga a taxa é o CLIENTE: valor × (1 + taxa), dividido pelas parcelas (ex.: R$ 1.000 em 21x no Master,
+     taxa 25% → R$ 1.250 ÷ 21);
+   - a parcela é ARREDONDADA PARA CIMA no centavo (10/10/2026: a loja nunca perde centavo) e o total é parcela × vezes;
+   - 1x no crédito não tem taxa; débito tem a taxa do débito (Master/Visa 1,5%, Elo/Amex 2%), também paga pelo cliente;
+   - Visa e Master usam a tabela das melhores taxas; Elo e American Express, a deles;
+   - American Express acima de 12x: o sistema pergunta se o cartão do cliente permite; com o "sim", calcula;
+   - Hipercard, Diners e outras: o vendedor faz;
+   - entrada: a taxa vale só sobre o que sobra para parcelar. */
 
-export const TAXAS_ELO: Record<number, number> = {
-  2: 7, 3: 9, 4: 11, 5: 12, 6: 13, 7: 14, 8: 16, 9: 16.5, 10: 17, 11: 17.5, 12: 20,
-  13: 21, 14: 21.5, 15: 22.5, 16: 25.5, 17: 26.5, 18: 27.5, 19: 28.5, 20: 29.5, 21: 31,
-};
-export const TAXAS_VISA_MASTER: Record<number, number> = {
-  2: 4.9, 3: 6, 4: 7, 5: 8, 6: 9.5, 7: 10.5, 8: 11.5, 9: 13, 10: 13, 11: 14, 12: 15,
-  13: 17, 14: 17, 15: 19.5, 16: 20, 17: 20.5, 18: 21, 19: 23.5, 20: 24, 21: 25,
-};
 export const MAX_PARCELAS = 21;
-/** Amex: até aqui a conta sai direto; acima, o vendedor consulta se o cartão do cliente permite. */
+/** Amex: até aqui a conta sai direto; acima, só com o cliente confirmando que o cartão permite. */
 export const AMEX_ATE = 12;
+/** Parcelas com taxa na tabela (1x no crédito não tem taxa). */
+export const FAIXAS = Array.from({ length: MAX_PARCELAS - 1 }, (_, i) => i + 2);
 
-/** Débito (informativo, não vai ao cliente): 1,5% Master e Visa, 2% Elo. */
-export const TAXA_DEBITO: Record<string, number> = { Mastercard: 1.5, Visa: 1.5, Elo: 2 };
+export type TaxasMaquineta = {
+  /** % por número de parcelas (2 a 21) */
+  visaMaster: Record<number, number>;
+  eloAmex: Record<number, number>;
+  debito: { visaMaster: number; eloAmex: number };
+};
 
-/** "acrescimo": o cliente paga preço × (1 + taxa), como o dono definiu. "liquido" fica só como alternativa. */
-export const MODO_TAXA: "acrescimo" | "liquido" = "acrescimo";
+/** Relatório "Taxas da maquineta" do dono, 10/10/2026. */
+export const TAXAS_PADRAO: TaxasMaquineta = {
+  visaMaster: {
+    2: 4.9, 3: 6, 4: 7, 5: 8, 6: 9.5, 7: 10.5, 8: 11.5, 9: 13, 10: 13, 11: 14, 12: 15,
+    13: 17, 14: 17, 15: 19.5, 16: 20, 17: 20.5, 18: 21, 19: 23.5, 20: 24, 21: 25,
+  },
+  eloAmex: {
+    2: 7, 3: 9, 4: 11, 5: 12, 6: 13, 7: 14, 8: 16, 9: 16.5, 10: 17, 11: 17.5, 12: 20,
+    13: 21, 14: 21.5, 15: 22.5, 16: 25.5, 17: 26.5, 18: 27.5, 19: 28.5, 20: 29.5, 21: 31,
+  },
+  debito: { visaMaster: 1.5, eloAmex: 2 },
+};
+export const TAXAS_VISA_MASTER = TAXAS_PADRAO.visaMaster;
+export const TAXAS_ELO = TAXAS_PADRAO.eloAmex;
 
+const taxaValida = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0 && x < 100;
+
+/** O que veio do banco, conferido: faixa faltando ou valor estranho fica com o padrão do relatório. */
+export function normalizarTaxas(v: unknown): TaxasMaquineta {
+  const o = (v ?? {}) as Partial<{ visaMaster: Record<string, unknown>; eloAmex: Record<string, unknown>; debito: Record<string, unknown> }>;
+  const tabela = (t: Record<string, unknown> | undefined, padrao: Record<number, number>) =>
+    Object.fromEntries(FAIXAS.map((n) => [n, taxaValida(t?.[n]) ? (t![n] as number) : padrao[n]]));
+  return {
+    visaMaster: tabela(o.visaMaster, TAXAS_PADRAO.visaMaster),
+    eloAmex: tabela(o.eloAmex, TAXAS_PADRAO.eloAmex),
+    debito: {
+      visaMaster: taxaValida(o.debito?.visaMaster) ? (o.debito!.visaMaster as number) : TAXAS_PADRAO.debito.visaMaster,
+      eloAmex: taxaValida(o.debito?.eloAmex) ? (o.debito!.eloAmex as number) : TAXAS_PADRAO.debito.eloAmex,
+    },
+  };
+}
+
+/** Para a tela: cada taxa entre 0 e 99,99 com até 2 casas. Devolve os erros (vazio = pode salvar). */
+export function errosDasTaxas(t: TaxasMaquineta): string[] {
+  const erros: string[] = [];
+  const confere = (x: unknown, onde: string) => {
+    if (!taxaValida(x) || Math.round(x * 100) !== Number((x * 100).toFixed(6))) erros.push(`${onde}: use um número de 0 a 99,99, com até 2 casas`);
+  };
+  for (const n of FAIXAS) {
+    confere(t.visaMaster[n], `Master/Visa ${n}x`);
+    confere(t.eloAmex[n], `Elo/Amex ${n}x`);
+  }
+  confere(t.debito.visaMaster, "Débito Master/Visa");
+  confere(t.debito.eloAmex, "Débito Elo/Amex");
+  return erros;
+}
+
+export type Modalidade = "credito" | "debito";
+export type MotivoConsultar = "amex_acima_12" | "bandeira_sem_tabela" | "parcelas_acima_de_21" | "dados_incompletos";
 export type ResultadoSimulacao =
-  | { tipo: "ok"; bandeira: string; parcelas: number; taxa: number; total: number; parcela: number; aVista: number; entrada: number }
-  | { tipo: "consultar"; motivo: "amex_acima_12" | "bandeira_sem_tabela" | "parcelas_acima_de_21" | "dados_incompletos" };
+  | { tipo: "ok"; modalidade: Modalidade; bandeira: string; parcelas: number; taxa: number; total: number; parcela: number; aVista: number; entrada: number }
+  | { tipo: "consultar"; motivo: MotivoConsultar };
 
-const arred = (x: number) => Math.round(x * 100) / 100;
+const centavos = (x: number) => Number((x * 100).toFixed(6));
+/** Para cima no centavo: 59,5238 → 59,53; 678,00 continua 678,00 (sem cair no erro de ponto flutuante). */
+export const paraCima = (x: number) => Math.ceil(centavos(x)) / 100;
+const arred = (x: number) => Math.round(centavos(x)) / 100;
 
-function tabelaDa(bandeira: string): Record<number, number> | null {
-  if (bandeira === "Visa" || bandeira === "Mastercard") return TAXAS_VISA_MASTER;
-  if (bandeira === "Elo" || bandeira === "American Express") return TAXAS_ELO;
+function grupo(bandeira: string): "visaMaster" | "eloAmex" | null {
+  if (bandeira === "Visa" || bandeira === "Mastercard") return "visaMaster";
+  if (bandeira === "Elo" || bandeira === "American Express") return "eloAmex";
   return null;
 }
 
-export function simularCartao(p: { preco: number | null; parcelas: number | null; bandeira: string | null; entrada?: number | null }): ResultadoSimulacao {
-  if (!p.preco || p.preco <= 0 || !p.parcelas || !p.bandeira) return { tipo: "consultar", motivo: "dados_incompletos" };
+export function simularCartao(
+  p: { preco: number | null; parcelas: number | null; bandeira: string | null; entrada?: number | null; modalidade?: Modalidade; amexConfirmado?: boolean },
+  taxas: TaxasMaquineta = TAXAS_PADRAO,
+): ResultadoSimulacao {
+  const modalidade = p.modalidade ?? "credito";
+  const parcelas = modalidade === "debito" ? 1 : p.parcelas;
+  if (!p.preco || p.preco <= 0 || !parcelas || parcelas < 1 || !p.bandeira) return { tipo: "consultar", motivo: "dados_incompletos" };
   const entrada = p.entrada && p.entrada > 0 ? p.entrada : 0;
   if (entrada >= p.preco) return { tipo: "consultar", motivo: "dados_incompletos" };
-  if (p.parcelas > MAX_PARCELAS) return { tipo: "consultar", motivo: "parcelas_acima_de_21" };
-  if (p.bandeira === "American Express" && p.parcelas > AMEX_ATE) return { tipo: "consultar", motivo: "amex_acima_12" };
-  const tabela = tabelaDa(p.bandeira);
-  if (!tabela) return { tipo: "consultar", motivo: "bandeira_sem_tabela" };
-  const taxa = p.parcelas === 1 ? 0 : tabela[p.parcelas];
+  if (parcelas > MAX_PARCELAS) return { tipo: "consultar", motivo: "parcelas_acima_de_21" };
+  if (modalidade === "credito" && p.bandeira === "American Express" && parcelas > AMEX_ATE && !p.amexConfirmado) return { tipo: "consultar", motivo: "amex_acima_12" };
+  const g = grupo(p.bandeira);
+  if (!g) return { tipo: "consultar", motivo: "bandeira_sem_tabela" };
+  const taxa = modalidade === "debito" ? taxas.debito[g] : parcelas === 1 ? 0 : taxas[g][parcelas];
   if (taxa === undefined) return { tipo: "consultar", motivo: "dados_incompletos" };
   const restante = p.preco - entrada;
-  const financiado = arred(MODO_TAXA === "acrescimo" ? restante * (1 + taxa / 100) : restante / (1 - taxa / 100));
-  return { tipo: "ok", bandeira: p.bandeira, parcelas: p.parcelas, taxa, total: arred(entrada + financiado), parcela: arred(financiado / p.parcelas), aVista: p.preco, entrada };
+  const parcela = paraCima((restante * (1 + taxa / 100)) / parcelas);
+  return { tipo: "ok", modalidade, bandeira: p.bandeira, parcelas, taxa, total: arred(entrada + parcela * parcelas), parcela, aVista: p.preco, entrada };
 }
 
-/** Todas as faixas (2x a 21x) de uma bandeira, para a tabela completa. Amex só até 12x. Vazio se a bandeira não tem tabela. */
-export function tabelaCompleta(p: { preco: number | null; bandeira: string | null; entrada?: number | null }) {
+/** Faixas de uma bandeira no crédito (de 2x até o máximo), para a tabela completa. Amex só até 12x, salvo com o cliente
+ *  confirmando que o cartão permite. `so` limita às parcelas pedidas ("12x ou 18x"). Vazio se a bandeira não tem tabela. */
+export function tabelaCompleta(
+  p: { preco: number | null; bandeira: string | null; entrada?: number | null; amexConfirmado?: boolean; so?: number[] },
+  taxas: TaxasMaquineta = TAXAS_PADRAO,
+) {
   const linhas: { parcelas: number; parcela: number; total: number }[] = [];
-  const maximo = p.bandeira === "American Express" ? AMEX_ATE : MAX_PARCELAS;
-  for (let n = 2; n <= maximo; n++) {
-    const r = simularCartao({ preco: p.preco, parcelas: n, bandeira: p.bandeira, entrada: p.entrada });
+  const maximo = p.bandeira === "American Express" && !p.amexConfirmado ? AMEX_ATE : MAX_PARCELAS;
+  for (const n of p.so ?? FAIXAS) {
+    if (n > maximo) continue;
+    const r = simularCartao({ preco: p.preco, parcelas: n, bandeira: p.bandeira, entrada: p.entrada, amexConfirmado: p.amexConfirmado }, taxas);
     if (r.tipo === "ok") linhas.push({ parcelas: n, parcela: r.parcela, total: r.total });
   }
   return linhas;

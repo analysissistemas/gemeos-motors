@@ -36,9 +36,10 @@ import {
   type Deps,
   type SaidaModelo,
 } from "@/lib/ia/pipeline";
-import { entradaDoTexto, simularCartao, tabelaCompleta } from "@/lib/ia/simulacao-cartao";
+import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
+import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, simulacaoPedida, textoSimulacao, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, PERGUNTA_SO_PARCELAS, PERGUNTA_SO_BANDEIRA, textoSimulacaoPronta, textoSimulacaoConsultar, textoTabelaCompleta, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -354,6 +355,26 @@ async function criarTarefaSimulacao(c: CtxWorkflow, sim: { parcelas: number | nu
     contexto: { detectadoPor: "ia", parcelas: sim.parcelas, bandeira: sim.bandeira, modelo },
   });
   await mensagemSistema(db, c.conversaId, `SIMULAÇÃO PARA O VENDEDOR: ${pedido}. Mande os valores ao cliente nesta conversa.`, { triagem: true });
+}
+/* O cliente não aceitou a simulação (relatório do dono, 10/10/2026): o vendedor consulta a gerência antes de concluir. */
+async function criarTarefaGerencia(c: CtxWorkflow, modelo: string | null, fala: string) {
+  const cv = await carregarConversa(c.conversaId);
+  const nome = primeiroNome(c.aprendido.fatos.nome || c.memoria.fatos.nome) ?? cv.contatoNome ?? "cliente";
+  const relato = fala.replace(/\s+/g, " ").trim().slice(0, 200);
+  await db.insert(schema.followUps).values({
+    conversaId: c.conversaId,
+    clienteId: cv.clienteId,
+    negocioId: cv.negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: new Date(),
+    notas: `${nome} não aceitou a simulação${modelo ? ` da ${modelo}` : ""}: "${relato}". Consultar a gerência e responder na conversa.`,
+    tipo: "simulacao",
+    motivo: "Consultar a gerência: cliente não aceitou a simulação",
+    origem: "ia",
+    modeloId: null,
+    contexto: { detectadoPor: "ia", gerencia: true, modelo },
+  });
+  await mensagemSistema(db, c.conversaId, `CONSULTAR GERÊNCIA: o cliente não aceitou a simulação ("${relato}"). Veja com a gerência o que dá pra fazer e responda nesta conversa.`, { triagem: true });
 }
 
 /** "segunda a sábado, das 8h às 18h" a partir do horário da loja (tela da IA). */
@@ -1106,40 +1127,30 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     }
     if (momento === "pediu_simulacao") {
       const recentes = leadAntes.split("\n").slice(-2).join("\n");
-      const agora = simulacaoPedida(c.textoBuffer);
-      const antes = simulacaoPedida(recentes);
-      const sim = { parcelas: agora.parcelas ?? antes.parcelas, bandeira: agora.bandeira ?? antes.bandeira };
-      const jaPerguntouOQueFalta = jaPerguntouSoOQueFalta(ultimaDaLoja, !sim.parcelas ? "parcelas" : "bandeira");
-      let texto: string;
-      let tarefa = false;
-      const precoTabela = !sim.parcelas && sim.bandeira && modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
-      const linhasTabela = precoTabela ? tabelaCompleta({ preco: precoTabela, bandeira: sim.bandeira, entrada: entradaDoTexto(c.textoBuffer) }) : [];
-      if (linhasTabela.length && modeloDaConversa && sim.bandeira && precoTabela) {
-        /* bandeira dita, parcelas não: a tabela completa (2x a 21x) vai de uma vez */
-        texto = textoTabelaCompleta({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, bandeira: sim.bandeira, aVista: precoTabela, entrada: entradaDoTexto(c.textoBuffer) ?? undefined, linhas: linhasTabela });
-        await mensagemSistema(db, c.conversaId, `Tabela de parcelas enviada pela IA: ${modeloDaConversa} no ${sim.bandeira} (2x a ${linhasTabela[linhasTabela.length - 1].parcelas}x).`, { triagem: true });
-      } else if ((!sim.parcelas || !sim.bandeira) && !jaPerguntouOQueFalta) texto = !sim.parcelas ? PERGUNTA_SO_PARCELAS : PERGUNTA_SO_BANDEIRA;
-      else {
-        /* simulação pelo sistema (tabela da maquininha, 06/10/2026); com entrada, bandeira sem tabela ou Amex acima de
-           12x o vendedor confirma antes de passar valor */
-        const preco = modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
-        const falouEntrada = /entrada/i.test(c.textoBuffer);
-        const entrada = entradaDoTexto(c.textoBuffer);
-        /* falou de entrada sem dizer o valor: o vendedor combina */
-        const calc = falouEntrada && !entrada ? ({ tipo: "consultar", motivo: "dados_incompletos" } as const) : simularCartao({ preco, parcelas: sim.parcelas, bandeira: sim.bandeira, entrada });
-        if (calc.tipo === "ok" && modeloDaConversa) {
-          texto = textoSimulacaoPronta({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, aVista: calc.aVista, parcelas: calc.parcelas, bandeira: calc.bandeira, parcela: calc.parcela, total: calc.total, entrada: calc.entrada });
-          await mensagemSistema(db, c.conversaId, `Simulação enviada pela IA: ${modeloDaConversa}, ${calc.parcelas}x no ${calc.bandeira} (taxa ${calc.taxa}%): parcela ${calc.parcela.toFixed(2)}, total ${calc.total.toFixed(2)}.`, { triagem: true });
-        } else if (calc.tipo === "consultar" && calc.motivo === "parcelas_acima_de_21") {
-          texto = textoSimulacaoConsultar({ motivo: calc.motivo, modelo: modeloDaConversa });
-        } else {
-          await criarTarefaSimulacao(c, sim, modeloDaConversa);
-          tarefa = true;
-          texto = calc.tipo === "consultar" && calc.motivo !== "dados_incompletos" ? textoSimulacaoConsultar({ motivo: calc.motivo, modelo: modeloDaConversa }) : textoSimulacao({ ...sim, modelo: modeloDaConversa });
-        }
-      }
+      /* simulação 100% do sistema (relatório "Taxas da maquineta", 10/10/2026): decidirSimulacao escolhe UMA ação com
+         o texto pronto (calcula, pergunta o que falta ou passa ao vendedor); aqui só se executa. Taxas: Configurações. */
+      const d = decidirSimulacao({
+        textoCliente: c.textoBuffer,
+        recentesCliente: recentes,
+        ultimaDaLoja,
+        modelo: modeloDaConversa,
+        preco: modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null,
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
+        taxas: await lerTaxas(),
+        jaPerguntou: (o) => jaPerguntouSoOQueFalta(ultimaDaLoja, o),
+      });
+      if (d.acao === "enviar") await mensagemSistema(db, c.conversaId, `Simulação enviada pela IA (calculada pelo sistema): ${d.registro}.`, { triagem: true });
+      if (d.acao === "vendedor") await criarTarefaSimulacao(c, d.pedido, modeloDaConversa);
+      const pipe = { ...r.ctx, texto: d.texto, textoCatalogo: d.texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, simulacao: { acao: d.acao, ...(d.acao === "enviar" ? { registro: d.registro } : {}), ...(d.acao === "vendedor" ? { pedido: d.pedido } : {}) } } };
+    }
+    /* não aceitou a simulação: o vendedor consulta a gerência antes de concluir (relatório do dono, 10/10/2026) */
+    if (momento === "recusou_simulacao") {
+      const preco = modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
+      const texto = textoConsultaGerencia({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, aVista: preco, lojaAberta: aberta });
+      await criarTarefaGerencia(c, modeloDaConversa, c.textoBuffer);
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
-      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, simulacao: { ...sim, tarefa } } };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, gerencia: true } };
     }
     /* o cliente disse quando vem à loja: o sistema marca na agenda de test drive (mesma regra de conflito
        da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
@@ -1423,7 +1434,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        meio de um passo importante (parcelas, entrega, dados, visita) — dono, 07/10/2026 */
     if (!abertura && resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
       /* pela etapa da conversa, não por palavra solta ("pronta para entrega" bloqueava a pergunta, teste de 07/10/2026) */
-      const passoImportante = ["quer_parcelar", "pediu_simulacao", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
+      const passoImportante = ["quer_parcelar", "pediu_simulacao", "recusou_simulacao", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
       if (!passoImportante && !RX_PERGUNTA_NOME.test(resposta.join(" "))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
     }
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */

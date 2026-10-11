@@ -7,6 +7,8 @@ import { autorizarConfig } from "@/lib/auth/desbloqueio";
 import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { carregarDemonstracao, limparDemonstracao } from "@/lib/mensageria/demo";
+import { errosDasTaxas, FAIXAS, TAXAS_PADRAO, type TaxasMaquineta } from "@/lib/ia/simulacao-cartao";
+import { salvarTaxas } from "@/lib/ia/taxas-maquineta";
 import { gerarVerifyToken, lerConfigWhatsApp, salvarConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
 
 const texto = (max: number) => z.string().trim().max(max).nullable().optional().transform((v) => v || null);
@@ -92,6 +94,35 @@ export async function acaoTriagemAutomatica(ligada: boolean) {
     revalidatePath("/sistema/configuracoes");
     return null;
   }, ligada ? "Triagem automática ligada" : "Triagem automática desligada");
+}
+
+/* Taxas da maquineta (dono, 10/10/2026): a simulação da IA usa estes números. Taxa errada = cliente recebendo valor
+   errado, então nada é salvo se um campo estiver fora do formato, e o histórico guarda cada taxa que mudou. */
+/* sem coerce: campo vazio viraria 0% sem ninguém perceber (Armadilhas, CLAUDE.md); a tela manda número ou null */
+const taxa = z.number({ error: "Preencha todas as taxas com um número" });
+const tabela = z.record(z.string(), taxa);
+const esquemaTaxas = z.object({ visaMaster: tabela, eloAmex: tabela, debito: z.object({ visaMaster: taxa, eloAmex: taxa }) });
+
+export async function acaoSalvarTaxas(dados: unknown) {
+  return executar(async () => {
+    const u = await autorizarConfig("config");
+    const d = esquemaTaxas.parse(dados);
+    const t: TaxasMaquineta = {
+      visaMaster: Object.fromEntries(FAIXAS.map((n) => [n, d.visaMaster[n]])),
+      eloAmex: Object.fromEntries(FAIXAS.map((n) => [n, d.eloAmex[n]])),
+      debito: d.debito,
+    };
+    const erros = errosDasTaxas(t);
+    if (erros.length) throw new ErroRegra(`Nada foi salvo. ${erros.slice(0, 3).join("; ")}${erros.length > 3 ? ` (e mais ${erros.length - 3})` : ""}.`);
+    const mudou = await salvarTaxas(t, u.id);
+    if (mudou.length) await registrarLog(u, { acao: "configuracao.taxas", entidade: "configuracao", descricao: `Alterou as taxas da maquineta: ${mudou.join("; ")}` });
+    revalidatePath("/sistema/configuracoes");
+    return mudou.length;
+  }, "Taxas salvas. A simulação da IA já usa os novos valores.");
+}
+
+export async function acaoRestaurarTaxas() {
+  return acaoSalvarTaxas(TAXAS_PADRAO);
 }
 
 export async function acaoCarregarDemo() {
