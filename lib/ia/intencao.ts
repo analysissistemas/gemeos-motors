@@ -178,3 +178,6 @@ export function instrucaoIntermediario(textoDoCliente: string): string {
   if (!clienteIntermediario(textoDoCliente)) return "";
   return "# CLIENTE VENDO PARA OUTRA PESSOA\nO cliente está pesquisando para outra pessoa (vai mostrar, repassar ou é para alguém da família). Facilite o repasse: ofereça deixar um resumo pronto (o modelo, o preço e que a foto já foi) para ele mandar para a pessoa, e diga que a pessoa pode chamar a loja direto por aqui. NÃO ofereça visita nem test drive agora, não pergunte o nome dele de novo e não insista.\n\n";
 }
+
+/** Assistência sem relato ainda: a IA pede o que aconteceu para registrar (sem oferecer moto). */
+export const TEXTO_PEDE_RELATO = "Entendi! Me conta o que está acontecendo com o seu aparelho, qual é o modelo e quando você comprou, que eu já registro tudo pra nossa assistência técnica 🙏";

@@ -39,11 +39,11 @@ test("bandeira sem tabela, acima de 21x e dados faltando não geram valor", () =
   assert.deepEqual(simularCartao({ preco: null, parcelas: 6, bandeira: "Visa" }), { tipo: "consultar", motivo: "dados_incompletos" });
 });
 
-test("mensagem pronta: moto, à vista, parcela e total, sem prometer aprovação", () => {
+test("mensagem pronta: moto, à vista e parcela, sem o total (só se o cliente pedir) e sem prometer aprovação", () => {
   const t = textoSimulacaoPronta({ nome: "Rita", modelo: "T1", aVista: 10000, parcelas: 12, bandeira: "Visa", parcela: 958.33, total: 11500 });
   assert.match(t, /^Rita, fiz a simulação/);
-  assert.match(t, /12 parcelas de R\$ 958,33/);
-  assert.match(t, /R\$ 11\.500,00/);
+  assert.match(t, /12x de R\$ 958,33/);
+  assert.doesNotMatch(t, /R\$ 11\.500,00|total/);
   assert.doesNotMatch(t, /aprova/i);
   assert.match(textoSimulacaoConsultar({ motivo: "amex_acima_12", modelo: "T1" }), /American Express.*acima de 12 vezes/);
 });
@@ -86,15 +86,14 @@ test("o validador não reprova a simulação montada pelo sistema, mas reprova v
   assert.ok(r.encerrar, "sem a marca de texto do sistema, o valor continua barrado");
 });
 
-test("cada bloco da simulação passa no validador quando o texto do sistema é fonte autorizada", async () => {
+test("simulação numa mensagem só, sem 'consulta a gerência', com persuasão, e passa no validador (12/10/2026)", async () => {
   const { validarResposta } = await import("../../lib/ia/validador.ts");
   const texto = textoSimulacaoPronta({ nome: "Carlos", modelo: "DF17", aVista: 7190, parcelas: 12, bandeira: "Visa", parcela: 689.04, total: 8268.5 });
-  const blocos = texto.split(/\n\n/);
-  assert.ok(blocos.length >= 2);
-  for (const b of blocos) {
-    assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [texto] }).aprovada, b);
-  }
-  assert.ok(!validarResposta(blocos[1], { promptSistema: "", fontesAutorizadas: [] }).aprovada);
+  assert.doesNotMatch(texto, /\n\n/);
+  assert.doesNotMatch(texto, /gerência/u);
+  assert.match(texto, /esquece a gasolina.*Posso separar a sua\?$/u);
+  assert.ok(validarResposta(texto, { promptSistema: "", fontesAutorizadas: [texto] }).aprovada, JSON.stringify(validarResposta(texto, { promptSistema: "", fontesAutorizadas: [texto] }).violacoes));
+  assert.ok(!validarResposta(texto, { promptSistema: "", fontesAutorizadas: [] }).aprovada);
 });
 
 test("tabela completa: 2x a 21x da bandeira (Amex só até 12x), num bloco só, e cada linha passa no validador", async () => {
@@ -110,9 +109,12 @@ test("tabela completa: 2x a 21x da bandeira (Amex só até 12x), num bloco só, 
   assert.equal(tabelaCompleta({ preco: 7190, bandeira: "Hipercard" }).length, 0);
   const t = textoTabelaCompleta({ nome: "Marcos", modelo: "DF17", bandeira: "Visa", aVista: 7190, linhas: visa });
   assert.match(t, /^Marcos, segue a simulação da \*DF17\* no Visa/);
-  assert.match(t, /• 12x de R\$ 689,05 \(total R\$ 8\.268,60\)/);
+  assert.match(t, /• 12x de R\$ 689,05\n/);
+  assert.doesNotMatch(t, /total|gerência/u);
   assert.match(t, /• 21x de R\$ 427,98/);
-  for (const b of t.split(/\n\n/)) assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, b.slice(0, 60));
+  /* a tabela inteira não vai mais ao cliente (Milton, 12/10/2026): só as parcelas pedidas, numa mensagem */
+  const pedidas = textoTabelaCompleta({ nome: "Marcos", modelo: "DF17", bandeira: "Visa", aVista: 7190, linhas: [visa[8], visa[10], visa[16]] });
+  assert.ok(validarResposta(pedidas, { promptSistema: "", fontesAutorizadas: [pedidas] }).aprovada, JSON.stringify(validarResposta(pedidas, { promptSistema: "", fontesAutorizadas: [pedidas] }).violacoes));
 });
 
 test("o endereço do site da loja pode aparecer; outro link não (08/10/2026)", async () => {

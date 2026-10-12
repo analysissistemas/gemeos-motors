@@ -20,6 +20,9 @@ import {
   RX_PERGUNTOU_AMEX,
   RX_PERGUNTOU_MOTO,
   respostaSimNao,
+  RX_PEDE_TOTAL,
+  RX_SIMULACAO_ENVIADA,
+  textoTotais,
   RX_LOJA_PERGUNTOU_VEZES,
   simulacaoPedida,
   textoSimulacao,
@@ -69,6 +72,11 @@ export function decidirSimulacao(p: {
     pedido: { parcelas, bandeira },
   });
 
+  /* perguntou o total depois da simulação: a conta sai da simulação que foi (parcelas × valor) */
+  if (RX_SIMULACAO_ENVIADA.test(loja) && RX_PEDE_TOTAL.test(semAcento(p.textoCliente)) && !agora.parcelas) {
+    const t = textoTotais(p.ultimaDaLoja);
+    if (t) return { acao: "enviar", texto: t.texto, registro: `total pedido pelo cliente: ${t.registro}` };
+  }
   /* 2. sem a moto (ou sem preço no catálogo) não há conta */
   if (!p.modelo || !p.preco) {
     if (!RX_PERGUNTOU_MOTO.test(loja) && !p.modelo) return { acao: "perguntar", texto: PERGUNTA_QUAL_MOTO };
@@ -134,9 +142,7 @@ export function decidirSimulacao(p: {
     return vendedor(todas[0], bandeira, semTabela ? "bandeira_sem_tabela" : undefined);
   }
   const registro = `${modelo} no ${bandeira}${entrada ? ` com entrada de ${reais(entrada)}` : ""}: ${ok.map((r) => `${linhaRegistro(r.parcelas, r.parcela, r.total)} [taxa ${r.taxa}%]`).join("; ")}`;
-  const limite = passou ? `No cartão o máximo é ${MAX_PARCELAS} vezes, então simulei em ${MAX_PARCELAS} 😉
-
-` : "";
+  const limite = passou ? `No cartão o máximo é ${MAX_PARCELAS} vezes, então simulei em ${MAX_PARCELAS} 😉 ` : "";
   if (ok.length === 1) {
     const r = ok[0];
     return { acao: "enviar", texto: limite + textoSimulacaoPronta({ nome: p.nome, modelo, aVista: r.aVista, parcelas: r.parcelas, bandeira: r.bandeira, parcela: r.parcela, total: r.total, entrada: r.entrada }), registro };

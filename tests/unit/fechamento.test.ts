@@ -191,3 +191,21 @@ test("Milton: o orçamento sai sem 'o que está faltando para concluirmos?' (vir
   /* outra pergunta fica */
   assert.deepEqual(semPerguntaDeFechamento(["Tem sim! Quer que eu mande o vídeo?"]), ["Tem sim! Quer que eu mande o vídeo?"]);
 });
+
+test("Milton: 'quanto custa a M6?' → o orçamento numa mensagem, sem despejar a ficha (12/10/2026)", async () => {
+  const { soOQuePerguntou } = await import("../../lib/ia/fechamento.ts");
+  const resposta = [
+    "A *M6* está disponível na cor cinza e tem pronta entrega. Ela tem motor de 1000W, autonomia de 45 a 55 km com uma carga, e bateria de lítio 60V 32Ah que carrega em 6 a 8 horas.",
+    "O preço da *M6* é R$ 11.900 💰",
+  ];
+  assert.deepEqual(soOQuePerguntou(resposta, "Oi, quanto custa a M6?"), ["A *M6* está disponível na cor cinza e tem pronta entrega. O preço da *M6* é R$ 11.900 💰"]);
+  /* perguntou da autonomia: a ficha fica */
+  assert.deepEqual(soOQuePerguntou(resposta, "quanto anda a M6 com uma carga? qual a autonomia?"), resposta);
+});
+
+test("caso Mayna: assistência e a IA ofereceu moto → a oferta sai e ela pede o relato (12/10/2026)", async () => {
+  const { tirarOfertaDeProduto, TEXTO_PEDE_RELATO } = await import("../../lib/ia/intencao.ts");
+  const b = "No momento, não temos o modelo *LC* disponível no estoque. Enquanto isso, posso apresentar algumas motos elétricas que temos prontas para entrega, como a *T1*, *M6* ou *AG08*. Qual delas você gostaria de conhecer melhor? 😊";
+  assert.doesNotMatch(tirarOfertaDeProduto(b, ["T1", "M6", "AG08"]), /T1|estoque|motos/u);
+  assert.equal(validarResposta(TEXTO_PEDE_RELATO).aprovada, true);
+});

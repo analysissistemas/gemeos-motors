@@ -68,6 +68,10 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (sim.bandeira && RX_QUER_PARCELAR.test(t) && /simula/.test(t)) return "pediu_simulacao";
   /* débito: com a bandeira, ou com a moto já escolhida (o sistema pergunta a bandeira) */
   if (sim.debito && (sim.bandeira || p.conheceModelo)) return "pediu_simulacao";
+  /* "Posso separar a sua?" (fecho da simulação) e o cliente disse sim: decidiu */
+  if (/posso separar/.test(loja) && !sim.parcelas && respostaSimNao(p.textoCliente) === "sim" && !RX_PRECO_OBJ.test(t)) return "decidido";
+  /* perguntou o total depois da simulação (a simulação vai só com a parcela, usuário 12/10/2026) */
+  if (RX_SIMULACAO_ENVIADA.test(loja) && RX_PEDE_TOTAL.test(t) && !sim.parcelas) return "pediu_simulacao";
   /* não aceitou a simulação que o sistema mandou: o vendedor consulta a gerência (relatório do dono, 10/10/2026) */
   if (RX_SIMULACAO_ENVIADA.test(loja) && !sim.parcelas && !RX_VAI_DE_PIX.test(t) && (RX_RECUSA.test(t) || RX_PRECO_OBJ.test(t))) return "recusou_simulacao";
   if (RX_QUER_PARCELAR.test(t)) return "quer_parcelar";
@@ -101,8 +105,8 @@ export const PERGUNTAS_ENTREGA_OU_RETIRADA = [
 const RX_QUER_PARCELAR = /(?<![a-z])(parcel\w*|divid\w*|dividir|em quantas vezes|quantas vezes|no cartao|cartao de credito|credito|vezes no cartao|simula\w*)(?![a-z])/;
 /** A loja perguntou as parcelas: "em quantas vezes?", ou a simulação enviada ("simulo em outro número de parcelas"):
  *  aí "em 18" ou "10, 12 e 18" sem o x valem como parcelas (Milton, 12/10/2026). Texto sem acento. */
-export const RX_LOJA_PERGUNTOU_VEZES = /quantas vezes|numero de parcelas|em mais vezes/;
-const RX_PEDIU_PARCELAS = /quantas vezes|bandeira|numero de parcelas|em mais vezes/;
+export const RX_LOJA_PERGUNTOU_VEZES = /quantas vezes|numero de parcelas|em mais vezes|(?:fiz|segue) a simulacao/;
+const RX_PEDIU_PARCELAS = /quantas vezes|bandeira|numero de parcelas|em mais vezes|(?:fiz|segue) a simulacao/;
 const BANDEIRAS: [RegExp, string][] = [
   [/\bvisa\b/, "Visa"],
   [/\bmaster(card)?\b/, "Mastercard"],
@@ -114,7 +118,7 @@ const BANDEIRAS: [RegExp, string][] = [
 /* frases dos textos do sistema (sem acento, como detectarMomento compara a fala da loja) */
 export const RX_PERGUNTOU_AMEX = /american express[^?]*seu cartao permite/;
 export const RX_PERGUNTOU_MOTO = /pra qual moto voce quer a simulacao/;
-const RX_SIMULACAO_ENVIADA = /(?:fiz|segue) a simulacao/;
+export const RX_SIMULACAO_ENVIADA = /(?:fiz|segue) a simulacao/;
 const RX_RECUSA =
   /(?<![a-z])(nao (da|deu|rola|cabe|aceito|compensa|consigo|gostei|fica bom|ficou bom|tenho como)|ficou (caro|alto|pesad[oa]|salgad[oa]|puxad[oa])|(muito|bem|mt|mto) (caro|alto|juros)|juros? (alto|muito|demais)|taxa (alta|muito|demais)|caro demais|achei (caro|alto|salgado|puxado))(?![a-z])/;
 /* "não, vou pagar no pix" não é recusa: é outra forma de pagar */
@@ -178,30 +182,32 @@ export function textoSimulacaoPronta(p: { nome: string | null; modelo: string; a
   const abre = p.nome ? `${p.nome}, fiz a simulação pra você 😊` : "Fiz a simulação pra você 😊";
   const ent = p.entrada && p.entrada > 0 ? `• Entrada: ${brl(p.entrada)}
 ` : "";
-  if (p.parcelas === 1) return `${abre}
-
+  if (p.parcelas === 1)
+    return `${abre}
 • Moto: *${p.modelo}*
 • No cartão ${p.bandeira}, em 1 vez: *${brl(p.total)}* (sem acréscimo)
-
-No *dinheiro ou Pix* o valor é o mesmo, sem taxa 😉 Quer seguir assim ou prefere simular em mais vezes?`;
+No *dinheiro ou Pix* o valor é o mesmo, sem taxa 😉 ${persuasao(p.modelo)}`;
+  /* sem o total (usuário, 12/10/2026: "se o cliente perguntar o valor total a IA fala, se não, não precisa") */
   return `${abre}
-
 • Moto: *${p.modelo}*
 • Valor à vista: ${brl(p.aVista)}
-${ent}• No ${p.bandeira}, em ${p.parcelas} vezes: *${p.parcelas} parcelas de ${brl(p.parcela)}* (total de ${brl(p.total)})
-
-Pagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 Se preferir, simulo em outro número de parcelas, e se não ficar bom pra você, o vendedor consulta a gerência pra ver o que dá pra fazer. O que acha?`;
+${ent}• No ${p.bandeira}: *${p.parcelas}x de ${brl(p.parcela)}*
+No *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 ${persuasao(p.modelo)}`;
+}
+/** Fecho da simulação com persuasão, sem "o vendedor consulta a gerência" (usuário, 12/10/2026: "a IA tem que ter
+ *  persuasão"): o benefício da elétrica e o fechamento assumido. Uma mensagem só, sem linha em branco (senão vira 3). */
+export function persuasao(modelo: string) {
+  const a = artigo(modelo);
+  return `Com ${a} *${modelo}* você esquece a gasolina e não paga IPVA nem emplacamento. Posso separar ${a === "o" ? "o seu" : "a sua"}?`;
 }
 /** Simulação no débito (relatório do dono, 10/10/2026: o cliente paga a taxa do débito). */
 export function textoSimulacaoDebito(p: { nome: string | null; modelo: string; aVista: number; bandeira: string; total: number }) {
   const abre = p.nome ? `${p.nome}, fiz a simulação pra você 😊` : "Fiz a simulação pra você 😊";
   return `${abre}
-
 • Moto: *${p.modelo}*
 • Valor à vista: ${brl(p.aVista)}
 • No débito ${p.bandeira}: *${brl(p.total)}* (com a taxa da maquininha)
-
-Pagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 Qual forma fica melhor pra você?`;
+Pagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 ${persuasao(p.modelo)}`;
 }
 /** O cliente pediu simulação sem a loja saber de qual moto (Beatriz, 07/10/2026, ficou esperando o vendedor). */
 export const PERGUNTA_QUAL_MOTO = "Pra qual moto você quer a simulação? 😊";
@@ -220,13 +226,27 @@ export function textoConsultaGerencia(p: { nome: string | null; modelo: string |
 export function textoTabelaCompleta(p: { nome: string | null; modelo: string; bandeira: string; aVista: number; entrada?: number; amexConfirmado?: boolean; linhas: { parcelas: number; parcela: number; total: number }[] }) {
   const abre = p.nome ? `${p.nome}, segue a simulação` : "Segue a simulação";
   const ent = p.entrada && p.entrada > 0 ? ` com entrada de ${brl(p.entrada)}` : "";
-  const linha = (l: { parcelas: number; parcela: number; total: number }) => `• ${l.parcelas}x de ${brl(l.parcela)} (total ${brl(l.total)})`;
-  /* duas mensagens: o validador limita cada uma a 1000 caracteres */
-  const meio = Math.ceil(p.linhas.length / 2);
-  const tabela = [p.linhas.slice(0, meio), p.linhas.slice(meio)].filter((x) => x.length).map((x) => x.map(linha).join("\n")).join("\n\n");
-  const amex = p.bandeira === "American Express" && !p.amexConfirmado && p.linhas.length > 2 ? "\n\nNo American Express, acima de 12 vezes depende do cartão: se o seu permitir, me fala em quantas vezes que eu simulo 😉" : "";
-  return `${abre} d${artigo(p.modelo)} *${p.modelo}* no ${p.bandeira}${ent}, valor à vista ${brl(p.aVista)}:\n${tabela}${amex}\n\nPagando em *dinheiro ou Pix* fica ${brl(p.aVista)}, sem taxa 😉 Qual dessas opções fica melhor pra você? Se não ficar bom, o vendedor consulta a gerência pra ver o que dá pra fazer.`;
+  /* só a parcela, sem o total (usuário, 12/10/2026); numa mensagem só */
+  const linha = (l: { parcelas: number; parcela: number; total: number }) => `• ${l.parcelas}x de ${brl(l.parcela)}`;
+  const tabela = p.linhas.map(linha).join("\n");
+  const amex = p.bandeira === "American Express" && !p.amexConfirmado && p.linhas.length > 2 ? "\nNo American Express, acima de 12 vezes depende do cartão: se o seu permitir, me fala em quantas vezes que eu simulo 😉" : "";
+  return `${abre} d${artigo(p.modelo)} *${p.modelo}* no ${p.bandeira}${ent} (à vista ${brl(p.aVista)}):\n${tabela}${amex}\nNo *dinheiro ou Pix* fica ${brl(p.aVista)}, sem taxa 😉 Com ${artigo(p.modelo)} *${p.modelo}* você esquece a gasolina e não paga IPVA nem emplacamento. Qual dessas fica melhor pra você?`;
 }
+/** O cliente perguntou o total depois da simulação: a conta sai da própria simulação enviada (parcelas × valor). */
+export function textoTotais(ultimaDaLoja: string): { texto: string; registro: string } | null {
+  const valor = (x: string) => Number(x.replace(/\./g, "").replace(",", "."));
+  const linhas = Array.from(ultimaDaLoja.matchAll(/(\d{1,2})x de R\$\s*([\d.]+,\d{2})/g)).map((m) => ({ n: Number(m[1]), parcela: valor(m[2]) }));
+  if (!linhas.length) return null;
+  const entrada = /Entrada:\s*R\$\s*([\d.]+,\d{2})/.exec(ultimaDaLoja);
+  const ent = entrada ? valor(entrada[1]) : 0;
+  const total = (l: { n: number; parcela: number }) => Math.round((l.n * l.parcela + ent) * 100) / 100;
+  const corpo = linhas.map((l) => `• ${l.n}x de ${brl(l.parcela)}: total de *${brl(total(l))}*`).join("\n");
+  return {
+    texto: `No cartão, o total fica assim${ent ? " (com a entrada)" : ""}:\n${corpo}\nNo *dinheiro ou Pix* sai mais em conta, sem taxa 😉 Qual fica melhor pra você?`,
+    registro: linhas.map((l) => `${l.n}x: total ${total(l).toFixed(2)}`).join("; "),
+  };
+}
+export const RX_PEDE_TOTAL = /(?<![a-z])(?:total|valor final|no final|ao todo|tudo junto|quanto (?:da|fica|vai dar) (?:tudo|no total|no final))(?![a-z])/;
 /** Casos em que a conta não sai direto: Amex acima de 12x (pergunta ao cliente), acima de 21x (pergunta de novo) e o
  *  resto (o vendedor faz). */
 export function textoSimulacaoConsultar(p: { motivo: "amex_acima_12" | "bandeira_sem_tabela" | "parcelas_acima_de_21" | "dados_incompletos"; modelo: string | null; parcelas?: number | null }) {
@@ -418,4 +438,21 @@ export function jaPerguntouSoOQueFalta(ultimaDaLoja: string, falta: "parcelas" |
   const perguntas = (t.match(/\?/g) ?? []).length;
   const alvo = falta === "parcelas" ? /e\s+em\s+quantas\s+vezes/iu : /e\s+qual\s+[ée]\s+a\s+bandeira/iu;
   return perguntas === 1 && alvo.test(t);
+}
+
+/* o cliente perguntou de ficha técnica (autonomia, bateria, motor, velocidade, peso, garantia...) */
+const RX_PEDIU_FICHA = /(?<![a-z])(?:autonomia|bateria|motor|potencia|km|quilometr\w*|velocidade|carrega\w*|recarga|peso|kg|aguenta|suporta|garantia|ficha|detalhes?|especifica\w*|tamanho|aro|freio|roda|watts?)(?![a-z])/;
+/* frase de ficha: autonomia, bateria, motor, potência, velocidade, carga, recarga */
+const RX_FRASE_FICHA = /autonomia|bateria|motor|pot[êe]ncia|velocidade|recarga|carrega(?!mos)|l[íi]tio|suporta|aguenta|\d+\s*(?:W|V|Ah|km|kg)(?![\p{L}])|km\/h/iu;
+/** Milton (12/10/2026): "quero a M6" ou "quanto custa a M6?" → o orçamento (preço, cor, pronta entrega) e a foto, numa
+ *  mensagem só; a ficha (motor, bateria, autonomia) só se ele perguntar. Teste de 12/10/2026: a IA mandou motor,
+ *  autonomia e bateria em 3 mensagens para quem só perguntou o preço. */
+export function soOQuePerguntou(resposta: string[], textoCliente: string): string[] {
+  if (RX_PEDIU_FICHA.test(semAcento(textoCliente))) return resposta;
+  const r = resposta
+    .map((b) => (/\n\s*[•\-]/.test(b) ? b : (b.match(RX_FRASES) ?? [b]).filter((f) => /R\$/.test(f) || !RX_FRASE_FICHA.test(f)).join("").trim()))
+    .filter((b) => /\p{L}/u.test(b));
+  /* sobrou pouco texto: vai junto, numa mensagem */
+  const junto = r.join(" ");
+  return r.length > 1 && junto.length <= 400 && !r.some((b) => /\n/.test(b)) ? [junto] : r;
 }

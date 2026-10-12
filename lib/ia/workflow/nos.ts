@@ -40,8 +40,8 @@ import {
 import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
+import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
@@ -656,6 +656,18 @@ async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
    Sai a frase que oferece produto e as perguntas saem; fica UMA, aberta: "Como posso te ajudar?" (fase 2:
    o nome não é mais a pergunta). */
 async function entenderPrimeiro(resposta: string[], intencao: Intencao | null, c?: CtxWorkflow): Promise<string[]> {
+  /* assistência e a IA ofereceu moto mesmo assim (teste de 12/10/2026, caso Mayna: "Só mostra LC" virou "não temos o
+     modelo LC... posso apresentar a T1, M6 ou AG08?"): a oferta sai e a IA pede o relato para a assistência */
+  if (intencao === "assistencia" && !c?.recado) {
+    const nomes = await nomesDoCatalogo();
+    const ofereceu = resposta.some((b) => tirarOfertaDeProduto(b, nomes) !== b.trim());
+    if (!ofereceu) return resposta;
+    const r = resposta
+      .map((b) => tirarOfertaDeProduto(b, nomes))
+      .map((b) => (b.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [b]).filter((f) => !/\?/.test(f)).join("").trim())
+      .filter((b) => /\p{L}/u.test(b));
+    return [...r, TEXTO_PEDE_RELATO];
+  }
   if (intencao || c?.recado) return resposta;
   const nomes = await nomesDoCatalogo();
   let r = resposta.map((b) => tirarOfertaDeProduto(b, nomes)).filter((b) => /\p{L}/u.test(b));
@@ -684,7 +696,7 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
     case "interesse":
       /* Milton (12/10/2026): passa o orçamento e a foto e espera. "O que está faltando para concluirmos?" é o
          1º follow-up, 1 h depois, se o cliente não responder (lib/ia/aquecimento.ts); uso e km também não agora */
-      return semPerguntaDeFechamento(resposta);
+      return semPerguntaDeFechamento(soOQuePerguntou(resposta, c.textoBuffer));
     case "decidido": {
       const corpo = semPerguntas(resposta);
       const comParabens = corpo.some((b) => RX_PARABENS.test(b)) ? corpo : [variar(parabens(c.modeloDaConversa)), ...corpo.filter((b) => !/R\$|autonomia|km/iu.test(b))];
@@ -1440,7 +1452,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
          do preço da M6, o cliente via uma pergunta antes da resposta) */
       if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) {
         if (soCumprimentou) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
-        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta, `E com quem eu falo? 😊`];
+        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)} E com quem eu falo? 😊`];
       }
     } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
