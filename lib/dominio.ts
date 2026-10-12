@@ -140,6 +140,8 @@ export const CAMPOS_FICHA = [
   { chave: "peso", rotulo: "Carga máxima", exemplo: "180 kg", comoSai: (v: string) => `Aguenta até ${v}` },
   { chave: "recarga", rotulo: "Recarga", exemplo: "4h a 8h", comoSai: (v: string) => `Recarga ${v}` },
   { chave: "freio", rotulo: "Freio", exemplo: "Disco na frente e atrás", comoSai: (v: string) => `Freio ${v}` },
+  /* só para a IA e a equipe (Heverton, 11/10/2026: a IA chutou "a partir de 3 meses"); o site não mostra */
+  { chave: "garantia", rotulo: "Garantia", exemplo: "1 ano", comoSai: (v: string) => `Garantia de ${v}`, foraDoSite: true },
 ] as const;
 export type ChaveFicha = (typeof CAMPOS_FICHA)[number]["chave"];
 /** "—" e "-" eram o jeito antigo de dizer "sem informação": contam como vazio. */

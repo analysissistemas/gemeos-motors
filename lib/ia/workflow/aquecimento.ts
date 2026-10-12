@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
@@ -10,10 +10,13 @@ import { lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { limparEmojis } from "@/lib/ia/validador";
 import {
-  comDesculpaDoHorario,
   decidirAquecimento,
-  ETAPAS_AQUECIMENTO,
   instrucaoAquecimento,
+  INTERVALO_MIN_AQUECIMENTO,
+  LIMITE_JANELA_MIN,
+  lojaFicouDeVer,
+  planejarAquecimento,
+  proximaAbertura,
   mensagemPadraoAquecimento,
   ROTULO_PULAR,
   textoDeAquecimentoAceito,
@@ -23,7 +26,8 @@ import { lerConfigWorkflow } from "./config";
 /* ============================================================
    FOLLOW-UP DE AQUECIMENTO (07/10/2026) — regras e textos em lib/ia/aquecimento.ts
    1. Depois de cada resposta da IA, `agendarAquecimento` cancela as tentativas que ainda não saíram (o cliente
-      falou) e agenda 3 novas em Follow-ups (10 min, 1 h, 23 h 53 min), visíveis e canceláveis pela equipe.
+      falou) e agenda até 3 novas em Follow-ups (10 min, 1 h, 23 h 53 min, só com a loja aberta: planejarAquecimento), visíveis e
+      canceláveis pela equipe. Se a IA ficou de ver algo com a equipe, em vez disso vira tarefa "responder o cliente".
    2. O vigia (a cada minuto) chama `enviarAquecimentos`: na hora, confere de novo (respondeu? vendedor assumiu?
       janela de 24 h?), a IA escreve a mensagem pela conversa e ela sai pelo único caminho autorizado
       (enviarRespostaDaIa: chave geral, permissão de envio, validador). Texto da IA que não passa vira mensagem pronta.
@@ -33,6 +37,8 @@ const M = schema.mensagens;
 const C = schema.conversas;
 /** Tarefas em que a LOJA deve a resposta ao cliente: enquanto pendentes, nada de "ainda está por aí?". */
 const TAREFAS_DA_LOJA = ["simulacao", "entrega", "revisar_ia"];
+/** Tarefa pendente em que a loja deve a resposta (as acima, ou a pergunta que a IA não soube responder). */
+const lojaDeve = (conversaId: number) => and(eq(F.conversaId, conversaId), eq(F.status, "pendente"), or(inArray(F.tipo, TAREFAS_DA_LOJA), sql`${F.contexto}->>'iaFicouDeVer' = 'true'`));
 
 export async function agendarAquecimento(p: {
   conversaId: number;
@@ -52,20 +58,42 @@ export async function agendarAquecimento(p: {
     .where(and(eq(F.conversaId, p.conversaId), eq(F.status, "pendente"), sql`(${F.contexto}->>'aquecimento' = 'true' or ${F.contexto}->>'semResposta' = 'true')`));
   if (!p.qualifica || !(await lerConfigWorkflow()).followUpAquecimento) return null;
   const [ultima] = await db
-    .select({ id: M.id, em: M.criadoEm })
+    .select({ id: M.id, em: M.criadoEm, conteudo: M.conteudo })
     .from(M)
     .where(and(eq(M.conversaId, p.conversaId), eq(M.direcao, "incoming")))
     .orderBy(desc(M.id))
     .limit(1);
   if (!ultima) return null;
-  const base = new Date(ultima.em).getTime();
-  await db.insert(F).values(
-    ETAPAS_AQUECIMENTO.map((e) => ({
+  /* a loja ficou de ver algo (Heverton, 11/10/2026: "Quer que eu veja com eles?"): tarefa para a equipe, sem aquecimento */
+  const resposta = await db.select({ conteudo: M.conteudo }).from(M).where(and(eq(M.conversaId, p.conversaId), eq(M.direcao, "outgoing"), gt(M.id, ultima.id)));
+  if (lojaFicouDeVer(resposta.map((r) => r.conteudo ?? "").join("\n"))) {
+    const [pendente] = await db.select({ id: F.id }).from(F).where(lojaDeve(p.conversaId)).limit(1);
+    if (pendente) return { agendados: 0 };
+    const pergunta = (ultima.conteudo ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    await db.insert(F).values({
       conversaId: p.conversaId,
       clienteId: p.clienteId,
       negocioId: p.negocioId,
       usuarioId: p.usuarioId,
-      agendadoPara: new Date(base + e.minutos * 60_000),
+      agendadoPara: new Date(),
+      notas: `${p.nome ?? "O cliente"} perguntou: "${pergunta}". A IA não tinha a resposta e disse que a equipe confirma. Responda na conversa.`,
+      tipo: "retorno_cliente",
+      motivo: "Responder o que a IA não soube",
+      origem: "ia",
+      contexto: { detectadoPor: "ia", iaFicouDeVer: true, modelo: p.modelo },
+    });
+    await mensagemSistema(db, p.conversaId, `RESPONDER O CLIENTE: ele perguntou "${pergunta}" e a IA não tinha a resposta. O follow-up automático fica parado até a equipe responder.`, { triagem: true });
+    return { agendados: 0 };
+  }
+  const plano = planejarAquecimento(new Date(ultima.em), await lerHorario());
+  if (!plano.length) return { agendados: 0 };
+  await db.insert(F).values(
+    plano.map((e) => ({
+      conversaId: p.conversaId,
+      clienteId: p.clienteId,
+      negocioId: p.negocioId,
+      usuarioId: p.usuarioId,
+      agendadoPara: e.quando,
       notas: `Aquecimento ${e.etapa}/3 (${e.rotulo} sem resposta): a IA chama ${p.nome ?? "o cliente"} de novo${p.modelo ? ` sobre a ${p.modelo}` : ""}. Cancele se não quiser que saia.`,
       tipo: "aquecimento",
       motivo: `Cliente sem responder (${e.rotulo})`,
@@ -73,7 +101,7 @@ export async function agendarAquecimento(p: {
       contexto: { aquecimento: true, etapa: e.etapa, mensagemId: ultima.id, nome: p.nome, modelo: p.modelo, detectadoPor: "ia" },
     })),
   );
-  return { agendados: ETAPAS_AQUECIMENTO.length };
+  return { agendados: plano.length };
 }
 
 const SAIDA = z.object({ mensagem: z.string() });
@@ -113,7 +141,7 @@ export async function enviarAquecimentos(agora = new Date()) {
       const [pendente] = await db
         .select({ id: F.id })
         .from(F)
-        .where(and(eq(F.conversaId, f.conversaId), eq(F.status, "pendente"), inArray(F.tipo, TAREFAS_DA_LOJA)))
+        .where(lojaDeve(f.conversaId))
         .limit(1);
       const motivo = !cv || !ultima
         ? "conversa_encerrada"
@@ -130,8 +158,26 @@ export async function enviarAquecimentos(agora = new Date()) {
         r.pulados++;
         continue;
       }
+      /* só com a loja aberta e com 50 min desde a tentativa anterior (Heverton, 12/10/2026); passou da janela, não sai */
+      const [anterior] = await db
+        .select({ em: F.concluidoEm })
+        .from(F)
+        .where(and(eq(F.conversaId, f.conversaId), eq(F.tipo, "aquecimento"), eq(F.status, "concluido"), sql`${F.id} <> ${f.id}`, sql`${F.notas} like 'Aquecimento % enviado pela IA%'`))
+        .orderBy(desc(F.concluidoEm))
+        .limit(1);
+      const minimo = anterior?.em ? new Date(new Date(anterior.em).getTime() + INTERVALO_MIN_AQUECIMENTO * 60_000) : agora;
+      if (!aberta || minimo > agora) {
+        const quando = proximaAbertura(minimo > agora ? minimo : agora, horario);
+        const limite = new Date(new Date(ultima!.em).getTime() + LIMITE_JANELA_MIN * 60_000);
+        if (quando && quando <= limite) await db.update(F).set({ status: "pendente", concluidoEm: null, agendadoPara: quando }).where(eq(F.id, f.id));
+        else {
+          await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: a loja estava fechada e a próxima abertura passa da janela de 24 h do WhatsApp.`.slice(0, 1000) }).where(eq(F.id, f.id));
+          r.pulados++;
+        }
+        continue;
+      }
       const { texto, daIa } = await escreverMensagem(f.conversaId, etapa, ctx.nome ?? null, ctx.modelo ?? null);
-      const enviar = (t: string) => enviarRespostaDaIa(db, { conversaId: f.conversaId!, telefone: cv!.telefone, texto: comDesculpaDoHorario(t, ctx.nome ?? null, aberta), origem: `follow-up de aquecimento ${etapa}/3`, simulado: cv!.demo });
+      const enviar = (t: string) => enviarRespostaDaIa(db, { conversaId: f.conversaId!, telefone: cv!.telefone, texto: t, origem: `follow-up de aquecimento ${etapa}/3`, simulado: cv!.demo });
       let env = await enviar(texto);
       let final = texto;
       /* o validador barrou o texto da IA: vai a mensagem pronta */

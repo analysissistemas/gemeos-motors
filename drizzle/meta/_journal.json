@@ -267,6 +267,13 @@
       "when": 1791240298632,
       "tag": "0037_cancela_lembretes_sem_resposta",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791807078086,
+      "tag": "0038_garantia_por_modelo",
+      "breakpoints": true
     }
   ]
 }

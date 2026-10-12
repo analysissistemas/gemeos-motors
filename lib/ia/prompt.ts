@@ -90,7 +90,7 @@ export async function fontesAutorizadas() {
   return [...(await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`), ...(catalogo.texto ? [catalogo.texto] : [])];
 }
 
-const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", /* o campo "peso" guarda quanto a moto AGUENTA (carga máxima), não o peso dela */ peso: "aguenta até (carga máxima)", recarga: "recarga", freio: "freio" };
+const ROTULO_FICHA: Record<string, string> = { motor: "motor", autonomia: "autonomia", velocidade: "velocidade máxima", bateria: "bateria", pneu: "pneu", /* o campo "peso" guarda quanto a moto AGUENTA (carga máxima), não o peso dela */ peso: "aguenta até (carga máxima)", recarga: "recarga", freio: "freio", garantia: "garantia" };
 
 /** "R$ 8.999,90"; preço redondo sai sem centavos ("R$ 7.190"). */
 export const reais = (x: number) => `R$ ${x.toLocaleString("pt-BR", Number.isInteger(x) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -49,7 +49,7 @@ export async function GET() {
       /* ficha: só as chaves conhecidas e preenchidas, para o site esconder o chip vazio */
       const ficha: Record<string, string> = {};
       if (x.tipo !== "acessorio" && x.ficha)
-        for (const { chave } of CAMPOS_FICHA) if (!valorFichaVazio(x.ficha[chave])) ficha[chave] = String(x.ficha[chave]).trim();
+        for (const c of CAMPOS_FICHA) if (!("foraDoSite" in c) && !valorFichaVazio(x.ficha[c.chave])) ficha[c.chave] = String(x.ficha[c.chave]).trim();
       return {
         id: x.id,
         nome: x.nome,

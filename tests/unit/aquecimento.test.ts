@@ -1,7 +1,7 @@
 /* Follow-up de aquecimento (lib/ia/aquecimento.ts) e a abertura da Damarys (07/10/2026). Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { comDesculpaDoHorario, decidirAquecimento, ETAPAS_AQUECIMENTO, LIMITE_JANELA_MIN, mensagemPadraoAquecimento, textoDeAquecimentoAceito } from "../../lib/ia/aquecimento.ts";
+import { decidirAquecimento, ETAPAS_AQUECIMENTO, LIMITE_JANELA_MIN, mensagemPadraoAquecimento, textoDeAquecimentoAceito } from "../../lib/ia/aquecimento.ts";
 import { instrucaoDoSite } from "../../lib/ia/intencao.ts";
 import { semRepeticao } from "../../lib/ia/workflow/util.ts";
 import { validarResposta } from "../../lib/ia/validador.ts";
@@ -31,7 +31,8 @@ test("mensagem pronta: com nome e moto, sem número, e passa no validador", () =
       if (modelo) assert.ok(t.includes(`*${modelo}*`), t);
     }
   }
-  assert.match(mensagemPadraoAquecimento({ etapa: 1, nome: "Damarys", modelo: "X GÊMEOS" }), /^Damarys, conseguiu ver as fotos e o vídeo da \*X GÊMEOS\*\?/u);
+  /* sem "conseguiu ver as fotos e o vídeo": nem sempre a loja mandou vídeo (Heverton, 12/10/2026) */
+  assert.match(mensagemPadraoAquecimento({ etapa: 1, nome: "Damarys", modelo: "X GÊMEOS" }), /^Damarys, ficou alguma dúvida sobre a \*X GÊMEOS\*/u);
   assert.match(mensagemPadraoAquecimento({ etapa: 2, nome: null, modelo: "Patinete 800W" }), /^Lembrando que o \*Patinete 800W\* é elétrico/u);
 });
 
@@ -41,14 +42,6 @@ test("texto da IA: sem preço, número, link, promoção nem cumprimento; precis
   assert.equal(textoDeAquecimentoAceito("Oi Damarys! Ainda pensando na moto?"), false);
   assert.equal(textoDeAquecimentoAceito("Damarys, é a última unidade, quer garantir?"), false);
   assert.equal(textoDeAquecimentoAceito("Damarys, veja em www.loja.com, gostou?"), false);
-});
-
-test("fora do horário a mensagem começa pedindo desculpa pela hora; dentro, fica igual", () => {
-  const t = "Damarys, conseguiu ver as fotos e o vídeo da *X GÊMEOS*? Ficou alguma dúvida? 😊";
-  assert.equal(comDesculpaDoHorario(t, "Damarys", true), t);
-  assert.equal(comDesculpaDoHorario(t, "Damarys", false), "Damarys, desculpa estar te mandando mensagem a essa hora 🙏 Conseguiu ver as fotos e o vídeo da *X GÊMEOS*? Ficou alguma dúvida? 😊");
-  assert.equal(comDesculpaDoHorario("Ainda está por aí? 😊", null, false), "Desculpa estar te mandando mensagem a essa hora 🙏 Ainda está por aí? 😊");
-  assert.equal(validarResposta(comDesculpaDoHorario(t, "Damarys", false)).aprovada, true);
 });
 
 test("Damarys: veio do site e perguntou disponível e valor — a IA responde em vez de perguntar o que ela procura", () => {
@@ -99,4 +92,29 @@ test("Guilherme: respondeu só o nome — a IA não repete a ficha (detector)", 
   for (const t of ["Guilherme", "guilherme abreu", "Meu nome é Carla", "É a Rui!", "Sou o João 😊"]) assert.equal(respondeuSoONome(t, perguntou), true, t);
   for (const t of ["Guilherme, quanto custa?", "quero a tank", "Sim", "ok", "Guilherme 81 9999"]) assert.equal(respondeuSoONome(t, perguntou), false, t);
   assert.equal(respondeuSoONome("Guilherme", "A TANK custa R$ 12.900."), false);
+});
+
+test("Heverton: só com a loja aberta, 50 min entre uma e outra, e a última dentro da janela de 24 h (12/10/2026)", async () => {
+  const { planejarAquecimento } = await import("../../lib/ia/aquecimento.ts");
+  const { HORARIO_PADRAO } = await import("../../lib/ia/horario.ts");
+  const recife = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Recife", weekday: "short", hour: "2-digit", minute: "2-digit" });
+  /* domingo 21:43 (loja fechada; abre segunda 8h): 8:00, 8:50 e a última antes de fechar (a janela acaba segunda 21:40) */
+  const domingo = planejarAquecimento(new Date("2026-10-12T00:43:00Z"), HORARIO_PADRAO);
+  assert.deepEqual(domingo.map((e) => recife(e.quando)), ["seg., 08:00", "seg., 08:50", "seg., 17:55"]);
+  /* terça 10:00 (aberta): 10:10, 11:00 e quarta 9:53, como antes */
+  const terca = planejarAquecimento(new Date("2026-10-13T13:00:00Z"), HORARIO_PADRAO);
+  assert.deepEqual(terca.map((e) => recife(e.quando)), ["ter., 10:10", "ter., 11:00", "qua., 09:53"]);
+  /* terça 17:45: 17:55; a de 1 h cairia às 18:45 (fechada) e vai para quarta 8:00; a última, no horário de sempre */
+  const fim = planejarAquecimento(new Date("2026-10-13T20:45:00Z"), HORARIO_PADRAO);
+  assert.deepEqual(fim.map((e) => recife(e.quando)), ["ter., 17:55", "qua., 08:00", "qua., 17:38"]);
+  /* sábado 21:00: domingo fechado e segunda 8h passa da janela; nada sai */
+  assert.deepEqual(planejarAquecimento(new Date("2026-10-18T00:00:00Z"), HORARIO_PADRAO), []);
+});
+
+test("Heverton: a loja ficou de ver algo com a equipe; o follow-up não sai, vira tarefa (12/10/2026)", async () => {
+  const { lojaFicouDeVer } = await import("../../lib/ia/aquecimento.ts");
+  assert.equal(lojaFicouDeVer("A garantia exata pode variar conforme o modelo, e a equipe confirma certinho para você. Quer que eu veja com eles para informar o prazo? 🙂"), true);
+  assert.equal(lojaFicouDeVer("Vou verificar com o vendedor e já te falo"), true);
+  assert.equal(lojaFicouDeVer("A DF17 tem garantia de 1 ano. O que está faltando para concluirmos a sua compra? 🙂"), false);
+  assert.equal(lojaFicouDeVer("Você prefere retirar aqui na loja ou receber por entrega? 😊"), false);
 });

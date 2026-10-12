@@ -1,12 +1,14 @@
 /* Follow-up de AQUECIMENTO (pedido de 07/10/2026, conversa da Damarys: perguntou o preço, disse "Brgd" e sumiu; nada
    ficou agendado). O cliente parou de responder depois da resposta da IA: o Milton chama de novo, sozinho, em 3
    tentativas — 10 min, 1 h e 23 h 53 min depois da última mensagem do CLIENTE (a última fica dentro da janela de
-   24 h do WhatsApp, depois dela só mensagem modelo). Fora do horário da loja, a mensagem começa pedindo desculpa
-   pelo horário. Respondeu, as tentativas que faltam são canceladas.
+   24 h do WhatsApp, depois dela só mensagem modelo). Respondeu, as tentativas que faltam são canceladas.
+   Desde 12/10/2026 (Heverton) só sai com a loja aberta e não sai quando a loja ficou de ver algo: ver
+   planejarAquecimento e lojaFicouDeVer no fim do arquivo.
 
    Puro (sem banco), para os testes rodarem direto no Node. Quem envia é lib/ia/workflow/aquecimento.ts, pelo único
    caminho autorizado (enviarRespostaDaIa: chave geral, permissão de envio e validador). */
 import { artigo } from "./estoque-tipos.ts";
+import { lojaAberta, type HorarioLoja } from "./horario.ts";
 
 export const ETAPAS_AQUECIMENTO = [
   { etapa: 1, minutos: 10, rotulo: "10 min" },
@@ -61,8 +63,7 @@ export function decidirAquecimento(p: {
 export function mensagemPadraoAquecimento(p: { etapa: number; nome: string | null; modelo: string | null }): string {
   const N = (t: string) => (p.nome ? `${p.nome}, ${t}` : `${t[0].toUpperCase()}${t.slice(1)}`);
   const m = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : null;
-  const dm = p.modelo ? `d${m}` : null;
-  if (p.etapa === 1) return m ? N(`conseguiu ver as fotos e o vídeo ${dm}? Ficou alguma dúvida que eu possa te ajudar? 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
+  if (p.etapa === 1) return m ? N(`ficou alguma dúvida sobre ${m} que eu possa te ajudar? 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
   if (p.etapa === 2)
     return m
       ? N(`lembrando que ${m} é elétric${artigo(p.modelo)}: você carrega na tomada de casa e esquece a gasolina. Quer que eu te explique como fica pra você? 😊`)
@@ -83,14 +84,6 @@ export function textoDeAquecimentoAceito(texto: string | null | undefined): bool
   return /\?/.test(t);
 }
 
-/** Fora do horário: "Damarys, desculpa estar te mandando mensagem a essa hora 🙏" antes da mensagem (pedido de 07/10/2026). */
-export function comDesculpaDoHorario(texto: string, nome: string | null, lojaAberta: boolean): string {
-  if (lojaAberta) return texto;
-  const corpo = nome ? texto.replace(new RegExp(`^${nome.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},\\s*`, "iu"), "") : texto;
-  const abre = `${nome ? `${nome}, d` : "D"}esculpa estar te mandando mensagem a essa hora 🙏`;
-  return `${abre} ${corpo[0].toUpperCase()}${corpo.slice(1)}`;
-}
-
 /** Instrução para a IA escrever o follow-up a partir da conversa (como o "followUp - Mari" do n8n, com as travas da loja). */
 export function instrucaoAquecimento(p: { etapa: number; nome: string | null; modelo: string | null }): string {
   const objetivo =
@@ -102,4 +95,57 @@ export function instrucaoAquecimento(p: { etapa: number; nome: string | null; mo
   return `Você é o Milton, vendedor da Gêmeos Motors (motos elétricas, Goiana-PE), no WhatsApp. O cliente parou de responder. Escreva UMA mensagem de follow-up curta (1 ou 2 frases, até 280 caracteres), humana e calorosa, em português do Brasil.
 ${objetivo}
 Regras: ${p.nome ? `chame o cliente de ${p.nome} no começo; ` : "não invente nome; "}${p.modelo ? `a moto de interesse é a ${p.modelo} (escreva *${p.modelo}*); ` : ""}NUNCA escreva número (preço, parcela, km, prazo, horário), desconto, promoção, link ou "última unidade"; não cumprimente ("oi", "bom dia"); não repita a última mensagem da loja; no máximo 1 emoji (😊, 🙂 ou 🙏); termine com uma pergunta. Responda só com a mensagem.`;
+}
+
+/* ---------- lógica nova (análise do Heverton, 12/10/2026) ----------
+   1. Só com a loja ABERTA: caiu fora do horário, vai para a abertura seguinte (nada de "desculpa a essa hora").
+   2. Entre uma tentativa e outra, no mínimo 50 min (na abertura não saem duas juntas).
+   3. A última precisa caber na janela de 24 h do WhatsApp: se a abertura seguinte passar dela, vai no último horário
+      aberto antes do fim da janela; se nem isso der, as que faltam não saem.
+   4. A loja ficou de ver alguma coisa ("a equipe confirma", "quer que eu veja com eles?"): quem deve a resposta é a
+      loja. Nada de aquecimento; vira tarefa para a equipe responder o que o cliente perguntou. */
+export const INTERVALO_MIN_AQUECIMENTO = 50;
+const MIN = 60_000;
+
+/** Primeiro momento com a loja aberta a partir de `t` (até 8 dias); null se a loja nunca abre. */
+export function proximaAbertura(t: Date, h: HorarioLoja): Date | null {
+  if (lojaAberta(h, t)) return t;
+  for (let x = t.getTime() + 5 * MIN; x < t.getTime() + 8 * 24 * 60 * MIN; x += 5 * MIN) {
+    if (!lojaAberta(h, new Date(x))) continue;
+    /* volta minuto a minuto até a hora exata em que abriu */
+    while (lojaAberta(h, new Date(x - MIN))) x -= MIN;
+    return new Date(x);
+  }
+  return null;
+}
+
+/** Último momento com a loja aberta até `t` (olhando até 24 h para trás); null se não houver. */
+export function ultimaAbertaAntes(t: Date, h: HorarioLoja): Date | null {
+  for (let x = t.getTime(); x > t.getTime() - 24 * 60 * MIN; x -= 5 * MIN) if (lojaAberta(h, new Date(x))) return new Date(x);
+  return null;
+}
+
+/** Quando sai cada tentativa, contando da última mensagem do cliente. Tentativa que não cabe não entra. */
+export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja): { etapa: number; rotulo: string; quando: Date }[] {
+  const base = ultimaDoCliente.getTime();
+  const limite = new Date(base + LIMITE_JANELA_MIN * MIN);
+  const plano: { etapa: number; rotulo: string; quando: Date }[] = [];
+  for (const e of ETAPAS_AQUECIMENTO) {
+    const anterior = plano.at(-1)?.quando.getTime();
+    const minimo = anterior ? anterior + INTERVALO_MIN_AQUECIMENTO * MIN : 0;
+    let quando: Date | null = proximaAbertura(new Date(Math.max(base + e.minutos * MIN, minimo)), h);
+    if (!quando || quando > limite) {
+      quando = ultimaAbertaAntes(limite, h);
+      if (!quando || quando.getTime() <= Math.max(minimo, base)) break;
+    }
+    plano.push({ etapa: e.etapa, rotulo: e.rotulo, quando });
+  }
+  return plano;
+}
+
+/** A última fala da loja deixou algo para a equipe ver ("a equipe confirma", "quer que eu veja com eles?",
+ *  "vou verificar"): o cliente está esperando a LOJA, não precisa ser "aquecido". */
+export function lojaFicouDeVer(textoDaLoja: string): boolean {
+  const t = textoDaLoja.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return /(?<![a-z])(?:(?:equipe|vendedor|consultor|time|pessoal|eles)\s+(?:te\s+)?(?:confirma|confirmam|verifica|verificam|informa|informam|retorna|retornam|passa|passam)|quer que eu (?:veja|confirme|verifique|pergunte|cheque)|vou (?:verificar|confirmar|ver com|perguntar|checar|consultar))(?![a-z])/.test(t);
 }
