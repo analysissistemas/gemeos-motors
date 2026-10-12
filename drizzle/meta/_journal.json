@@ -281,6 +281,13 @@
       "when": 1791807138086,
       "tag": "0039_fechamento_vira_follow_up",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791807198086,
+      "tag": "0040_garantias_e_m6",
+      "breakpoints": true
     }
   ]
 }
