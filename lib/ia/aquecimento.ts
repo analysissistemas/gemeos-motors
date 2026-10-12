@@ -169,3 +169,19 @@ export function clienteVaiRetornar(textoDoCliente: string): boolean {
   const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
   return /(?<![a-z])(?:(?:vou|irei|deixa eu|deixe eu) (?:mostrar|passar|repassar|pensar|analisar|ver com|falar com|conversar com)|(?:te|lhe) (?:aviso|chamo|falo|retorno|procuro)|(?:qualquer coisa|se (?:ele|ela|eu) (?:tiver|gostar|quiser|decidir)|caso (?:ele |ela |eu )?(?:tenha|goste|queira|decida))[^.?!\n]{0,40}(?:chamo|falo|aviso|solicito|retorno|procuro|mando)|depois (?:eu )?(?:te )?(?:chamo|falo|volto|retorno|aviso)|(?:preciso|vou) pensar|mais tarde (?:eu )?(?:te )?(?:chamo|falo))(?![a-z])/.test(t);
 }
+
+/** O cliente encerrou o assunto ("Já resolveu!", "obrigado, era só isso", "tudo certo", "valeu"): nada de follow-up
+ *  (Mayna Dornelas, 11/10/2026: disse "Já resolveu!" e recebeu mais dois follow-ups de venda). Mensagem curta e sem
+ *  pergunta; "obrigado, quanto custa a T1?" segue normal. */
+export function clienteEncerrou(textoDoCliente: string): boolean {
+  const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  if (!t || /\?/.test(t) || t.split(/\s+/).length > 10) return false;
+  return /(?<![a-z])(?:ja\s+(?:resolv\w*|consegui|deu\s+certo|sei|vi|entendi)|(?:esta\s+|ta\s+)?resolvid[oa]|(?:era|e)\s+so\s+isso|so\s+isso\s+mesmo|tudo\s+(?:certo|ok|resolvido)|deu\s+certo|nao\s+precis[ao]\s+mais|ja\s+nao\s+precis[ao]|obrigad[oa]|obg|brigad[oa]|valeu|vlw|agradec\w*)(?![a-z])/.test(t);
+}
+
+/** A conversa já virou recado ou assistência em algum momento (o histórico mostra o texto do sistema): follow-up de
+ *  VENDA não sai, a não ser que o cliente esteja falando de compra agora (Mayna, 11/10/2026: o recado foi anotado,
+ *  mas na mensagem seguinte, uma foto, o sistema esqueceu e voltou a vender). */
+export function conversaForaDaVenda(historico: string | null | undefined): boolean {
+  return /passar o seu recado|juntei isso ao seu recado|respons[áa]veis da assist[êe]ncia|equipe da assist[êe]ncia/iu.test(historico ?? "");
+}

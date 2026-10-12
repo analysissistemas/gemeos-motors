@@ -78,3 +78,18 @@ test("os textos do sistema passam no validador e não dizem que a loja tem a mot
     assert.doesNotMatch(texto, /temos\s+(?:essa|sim)|é\s+a\s+da\s+foto|qual é a da foto/iu);
   }
 });
+
+test("Mayna Dornelas: áudio transcrito vale como texto; a IA entende o assunto e não manda o catálogo (12/10/2026)", async () => {
+  const { instrucaoDeAudio } = await import("../../lib/ia/foto-cliente.ts");
+  const ouvido = textoDaMensagem({ tipo: "audio", conteudo: null, transcricao: "Oi, a scooter que eu comprei aí tá mostrando LC no painel e não anda" });
+  assert.equal(ouvido, "[áudio] Oi, a scooter que eu comprei aí tá mostrando LC no painel e não anda");
+  /* transcrito: a IA responde (assistência segue o caminho dela; compra, a IA atende) */
+  assert.equal(r(ouvido), null);
+  assert.equal(r(textoDaMensagem({ tipo: "audio", conteudo: null, transcricao: "vocês parcelam no cartão?" })), null);
+  assert.match(instrucaoDeAudio(ouvido), /Nunca sugira nem escolha um modelo/u);
+  /* sem transcrição (desligada ou falhou): o catálogo, como antes */
+  assert.equal(r(textoDaMensagem({ tipo: "audio", conteudo: null, transcricao: null })), "catalogo_audio");
+  assert.equal(r(audio), "catalogo_audio");
+  assert.equal(instrucaoDeAudio(audio), "");
+  assert.equal(instrucaoDeAudio("quanto custa a DF17?"), "");
+});

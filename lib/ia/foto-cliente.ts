@@ -7,6 +7,8 @@
      o nome ou a escolha no catálogo (sem mandar o link de novo);
    - escreveu o nome de um modelo: atendimento normal, só daquele modelo.
    Assistência (foto do defeito) e recado ficam fora: seguem o caminho deles.
+   Áudio TRANSCRITO (desde 12/10/2026, Mayna Dornelas: o áudio explicava o problema do aparelho e a IA não ouviu) vale
+   como texto: a IA entende o assunto e responde; o catálogo só vai para áudio sem transcrição.
    Puro (sem banco), testado em tests/unit/foto-cliente.test.ts. Quem usa é lib/ia/workflow/nos.ts. */
 import { ultimaCitada } from "./midia-tipos.ts";
 
@@ -22,6 +24,13 @@ export const TEXTO_AUDIO_NAO_OUVE =
 /* o que o buffer traz de mídia: textoDaMensagem rotula "[imagem]" / "[imagem: legenda]" e "[áudio] ..." */
 const RX_FOTO_NO_BUFFER = /^\[imagem[\]:]/mu;
 const RX_AUDIO_NO_BUFFER = /^\[áudio[\]\s]/mu;
+/* áudio que ficou sem transcrição (falhou, ou a transcrição está desligada no workflow) */
+const RX_AUDIO_SEM_TEXTO = /^\[áudio\](?:\s*\(o cliente mandou um áudio; a IA não o transcreve\))?\s*$/u;
+const blocos = (textoBuffer: string) => textoBuffer.split(/\n\s*\n/).map((b) => b.trim());
+/** Tem áudio no buffer que ficou sem transcrição. */
+const audioNaoOuvido = (textoBuffer: string) => blocos(textoBuffer).some((b) => RX_AUDIO_SEM_TEXTO.test(b));
+/** Tem áudio transcrito no buffer. */
+const audioOuvido = (textoBuffer: string) => blocos(textoBuffer).some((b) => /^\[áudio\]\s+\S/u.test(b) && !RX_AUDIO_SEM_TEXTO.test(b));
 /* a loja já mandou o catálogo por causa de foto ou áudio (os textos acima) */
 const RX_JA_MANDOU_CATALOGO = /^Recebi (?:a sua foto|o seu áudio)!|^Pela foto eu não consigo|^Por aqui eu ainda não consigo ouvir/u;
 /* "tem essa?", "quanto é essa aí?", "é igual a da foto", "vocês têm essa moto?" */
@@ -62,7 +71,7 @@ export function respostaParaMidia(p: {
   /* escreveu o nome de um modelo da loja: a IA atende sobre ele */
   if (ultimaCitada(p.modelos.map((nome) => ({ nome })), escrito)) return null;
   const foto = RX_FOTO_NO_BUFFER.test(p.textoBuffer);
-  const audio = RX_AUDIO_NO_BUFFER.test(p.textoBuffer);
+  const audio = audioNaoOuvido(p.textoBuffer);
   const jaMandou = RX_JA_MANDOU_CATALOGO.test(p.ultimaDaLoja.trim());
   if (foto) return jaMandou ? "foto_nao_confirma" : "catalogo_foto";
   if (audio) return jaMandou ? "audio_nao_ouve" : "catalogo_audio";
@@ -75,4 +84,10 @@ export function respostaParaMidia(p: {
 export function instrucaoDeFoto(textoBuffer: string): string {
   if (!RX_FOTO_NO_BUFFER.test(textoBuffer)) return "";
   return "# FOTO DO CLIENTE\nO cliente mandou uma foto, mas você NÃO vê a foto. Nunca diga qual moto é a da foto, que é parecida com algum modelo, nem que a loja tem a moto da foto. Fale só do modelo que ele escreveu pelo nome. Se ele citar uma moto que não está no CATÁLOGO, diga que esse modelo a loja não trabalha e convide a ver os modelos em gemeosmotors.com.br.\n\n";
+}
+
+/** Instrução para a IA quando o áudio do cliente foi transcrito: entender e responder, sem adivinhar moto. */
+export function instrucaoDeAudio(textoBuffer: string): string {
+  if (!RX_AUDIO_NO_BUFFER.test(textoBuffer) || !audioOuvido(textoBuffer)) return "";
+  return "# ÁUDIO DO CLIENTE\nO texto depois de [áudio] é a transcrição automática do áudio do cliente: pode ter palavra trocada. Use para ENTENDER o que ele quer (compra, dúvida, problema com o que comprou, recado) e responda a isso. Nunca sugira nem escolha um modelo que ele não falou; se o nome de modelo na transcrição não bater com o CATÁLOGO, pergunte qual modelo ele quis dizer. Não diga que ouviu ou transcreveu o áudio.\n\n";
 }

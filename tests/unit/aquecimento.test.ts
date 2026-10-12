@@ -139,3 +139,17 @@ test("Milton: a 1ª tentativa com moto é sempre a pergunta do dono, sem a IA re
   assert.equal(aquecimentoFixo(1, null), false);
   assert.equal(aquecimentoFixo(2, "M6"), false);
 });
+
+test("Mayna Dornelas: dúvida de um aparelho que já comprou não recebe follow-up de venda (11/10/2026)", async () => {
+  const { clienteEncerrou, conversaForaDaVenda } = await import("../../lib/ia/aquecimento.ts");
+  const { intencaoDoTexto } = await import("../../lib/ia/intencao.ts");
+  /* "Só mostra LC": código no painel da scooter dela é assistência, não interesse em comprar */
+  for (const t of ["Só mostra LC", "tá dando erro E3", "no painel aparece uma luz piscando", "apareceu um código de erro"]) assert.equal(intencaoDoTexto(t), "assistencia", t);
+  for (const t of ["me mostra as motos", "mostra o catálogo", "quanto custa a DF17?", "Bom dia !"]) assert.notEqual(intencaoDoTexto(t), "assistencia", t);
+  /* "Já resolveu!": encerrou, nada de follow-up */
+  for (const t of ["Já resolveu !", "obrigado, era só isso", "tudo certo", "valeu", "Deu certo, obrigada", "não precisa mais"]) assert.equal(clienteEncerrou(t), true, t);
+  for (const t of ["obrigado, quanto custa a T1?", "Bom dia !", "certo, e no cartão como fica?", "quero a DF17", "Ok"]) assert.equal(clienteEncerrou(t), false, t);
+  /* virou recado antes: a próxima mensagem (a foto) não volta a vender */
+  assert.equal(conversaForaDaVenda("Agente IA: Entendi! Vou passar o seu recado para a nossa equipe, e o responsável fala com você por aqui assim que a loja abrir 🙏"), true);
+  assert.equal(conversaForaDaVenda("Agente IA: A DF17 custa R$ 7.190."), false);
+});

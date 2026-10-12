@@ -8,6 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
+import { clienteEncerrou, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -43,7 +44,7 @@ import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRAN
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
+import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -525,7 +526,10 @@ async function tarefaEntregaFora(c: CtxWorkflow, clienteId: number | null, negoc
 async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
   const cv = await carregarConversa(c.conversaId);
   const qualifica =
-    !c.recado && !c.pipe?.humano && !c.aguardaEquipe && !c.motivoTransferencia && c.intencao !== "assistencia" && !["mandou_dados", "dados_parciais"].includes(c.momento ?? "") && cv.modo !== "humano";
+    !c.recado && !c.pipe?.humano && !c.aguardaEquipe && !c.motivoTransferencia && c.intencao !== "assistencia" && !["mandou_dados", "dados_parciais"].includes(c.momento ?? "") && cv.modo !== "humano" &&
+    /* Mayna (11/10/2026): virou recado antes e o assunto não é compra agora; ou ela encerrou ("Já resolveu!") */
+    !(conversaForaDaVenda(c.memoria.historico) && c.intencao !== "compra") &&
+    !clienteEncerrou(c.textoBuffer);
   const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
   return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo: c.intencao === "compra" ? c.modeloDaConversa : null });
 }
@@ -1020,7 +1024,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1260,7 +1264,7 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       }
       /* dados do pedido no cadastro, com o resumo para a equipe */
       pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
-      /* parou de responder: a IA chama de novo em 10 min, 1 h e 23 h 53 min (follow-up de aquecimento) */
+      /* parou de responder: a IA chama de novo em 1 h, 3 h e 23 h (follow-up de aquecimento) */
       await lembretesSemResposta(c, q.clienteId, q.negocioId).catch(() => null);
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
@@ -1505,8 +1509,9 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
    para o buffer e a memória lerem depois. Falha na análise não derruba o atendimento. */
 async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento", ligado: boolean) {
   const m = c.mensagem!;
-  /* áudio não é transcrito (dono, 09/10/2026: a IA se confunde com o áudio): o cliente recebe o catálogo e escolhe por ele */
-  if (tipo === "audio") return { ctx: { textoEntrada: "[áudio] (o cliente mandou um áudio; a IA não o transcreve)" }, saida: { texto: "áudio não transcrito" } };
+  /* áudio: transcrito de novo desde 12/10/2026 (Mayna Dornelas: o áudio explicava o problema do aparelho e a IA não
+     ouviu), só para ENTENDER o assunto; a IA não sugere moto pelo áudio (instrucaoDeAudio, lib/ia/foto-cliente.ts).
+     Transcrição desligada no nó ou falhou: o cliente recebe o catálogo, como antes */
   /* foto não é descrita (dono, 10/10/2026: com a descrição a IA adivinhava a moto, muitas vezes de modelo que a loja nem
      trabalha): a IA vê só "[imagem]" e a legenda, e o cliente recebe o catálogo (lib/ia/foto-cliente.ts) */
   if (tipo === "imagem") return { ctx: { textoEntrada: textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: null }) }, saida: { texto: "foto não descrita (a IA não tenta reconhecer a moto)" } };

@@ -13,7 +13,7 @@ export type Intencao = "compra" | "assistencia";
 
 /* pós-venda sem dúvida: defeito, conserto, "comprei", "minha moto"... */
 const RX_ASSISTENCIA =
-  /(?<![\p{L}])(?:assist[êe]ncia|defeito|conserto|consertar|arrumar\s+(?:a\s+|minha\s+)?moto|quebr\p{L}*|problemas?|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|esquentando|vazamento|(?<!nunca\s)comprei|minha\s+(?:moto|scooter|el[ée]trica|patinete))(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:assist[êe]ncia|defeito|conserto|consertar|arrumar\s+(?:a\s+|minha\s+)?moto|quebr\p{L}*|problemas?|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|esquentando|vazamento|(?<!nunca\s)comprei|minha\s+(?:moto|scooter|el[ée]trica|patinete)|(?:mostra|mostrando|aparece|apareceu|aparecendo|marca|marcando|piscando|t[áa]\s+dando|deu|dando)\s+(?:o\s+|um\s+|uma\s+|a\s+)?(?:c[óo]digo|erro|letra|luz|sinal|lc|e\d{1,3})|c[óo]digo\s+de\s+erro|(?:no|o)\s+(?:painel|visor|display)\s+(?:mostra|aparece|apareceu|t[áa]|est[áa]|fica|piscando))(?![\p{L}])/iu;
 /* pode ser pergunta de quem vai comprar ("qual a garantia da T1?", "vem com carregador?"): só vale como
    assistência quando o cliente não está falando de compra */
 const RX_ASSISTENCIA_TALVEZ = /(?<![\p{L}])(?:garantia|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|carregador)(?![\p{L}])/iu;
