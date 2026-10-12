@@ -838,8 +838,8 @@ function ultimasFalasDaLoja(historico: string | null | undefined, n: number) {
 /** Endereços de foto/vídeo que a IA já mandou nesta conversa (para não repetir sem o cliente pedir). */
 /* Só conta o que foi mandado nas últimas 24 h: cliente que volta outro dia e se interessa de novo recebe a foto e o
    vídeo outra vez (conversa real de 05/10/2026: a TANK tinha ido dias antes e a IA não mandou). */
-async function midiasJaEnviadas(conversaId: number) {
-  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+async function midiasJaEnviadas(conversaId: number, horas = 24) {
+  const desde = new Date(Date.now() - horas * 60 * 60 * 1000);
   const linhas = await db
     .select({ url: schema.mensagens.midiaUrl })
     .from(schema.mensagens)
@@ -1430,8 +1430,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     let jaForam: string[] = [];
     if (midia) {
       const pedidoAgora = midia.pedido.length > 0;
-      const itens = midia.itens.filter((i) => !jaEnviadas.includes(i.url)).slice(0, 3);
-      if (pedidoAgora) jaForam = midia.itens.filter((i) => jaEnviadas.includes(i.url)).map((i) => i.legenda.replace(/\*/g, "").replace(/^Vídeo d[aeo]s?\s+/iu, "").split(" na cor")[0].trim());
+      /* o cliente PEDIU (usuário, 12/10/2026: "pedi foto da M6 e ele não enviou"; tinha ido na véspera): vai de novo,
+         a não ser que tenha ido há menos de 30 min. Sem pedido, a trava de 24 h continua */
+      const bloqueadas = pedidoAgora ? await midiasJaEnviadas(c.conversaId, 0.5) : jaEnviadas;
+      const itens = midia.itens.filter((i) => !bloqueadas.includes(i.url)).slice(0, 3);
+      if (pedidoAgora) jaForam = midia.itens.filter((i) => bloqueadas.includes(i.url)).map((i) => i.legenda.replace(/\*/g, "").replace(/^Vídeo d[aeo]s?\s+/iu, "").split(" na cor")[0].trim());
       midia = itens.length ? { ...midia, itens } : { ...midia, itens: [] };
     }
     const antesDoFiltro = resposta.length;

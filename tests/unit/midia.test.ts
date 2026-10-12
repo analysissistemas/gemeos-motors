@@ -89,3 +89,10 @@ test("texto e foto batem: promessa de foto de moto que não vai sai (Arine, 06/1
   assert.equal(tirarPromessaDeOutras("Aqui estão as fotos da *DF17* e da *AG08* 👇", ["DF17", "AG08"], todos), "Aqui estão as fotos da *DF17* e da *AG08* 👇");
   assert.equal(tirarPromessaDeOutras("A AG08 anda até 45 km.", [], todos), "A AG08 anda até 45 km.");
 });
+
+test("'Olha ela aí' sem a foto junto sai do texto (usuário, 12/10/2026: pediu a foto da M6 e veio só a frase)", () => {
+  assert.equal(tirarPromessaDeMidia("Olha ela aí"), "");
+  assert.equal(tirarPromessaDeMidia("Olha ela aí 👇"), "");
+  assert.equal(tirarPromessaDeMidia("Olha ela aí! A M6 custa R$ 11.900."), "A M6 custa R$ 11.900.");
+  assert.equal(tirarPromessaDeMidia("Olha, ela é ótima para a cidade."), "Olha, ela é ótima para a cidade.");
+});
