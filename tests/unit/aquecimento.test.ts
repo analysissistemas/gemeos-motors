@@ -115,6 +115,8 @@ test("Heverton: a loja ficou de ver algo com a equipe; o follow-up não sai, vir
   const { lojaFicouDeVer } = await import("../../lib/ia/aquecimento.ts");
   assert.equal(lojaFicouDeVer("A garantia exata pode variar conforme o modelo, e a equipe confirma certinho para você. Quer que eu veja com eles para informar o prazo? 🙂"), true);
   assert.equal(lojaFicouDeVer("Vou verificar com o vendedor e já te falo"), true);
+  /* (81) 7301-7155, 11/10/2026: carga do Patinete 800W fora do catálogo */
+  assert.equal(lojaFicouDeVer("• Patinete 800W: a carga máxima não está especificada, mas confirmo para você com a equipe."), true);
   assert.equal(lojaFicouDeVer("A DF17 tem garantia de 1 ano. O que está faltando para concluirmos a sua compra? 🙂"), false);
   assert.equal(lojaFicouDeVer("Você prefere retirar aqui na loja ou receber por entrega? 😊"), false);
 });

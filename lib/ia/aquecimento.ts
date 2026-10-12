@@ -147,5 +147,5 @@ export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja): { et
  *  "vou verificar"): o cliente está esperando a LOJA, não precisa ser "aquecido". */
 export function lojaFicouDeVer(textoDaLoja: string): boolean {
   const t = textoDaLoja.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-  return /(?<![a-z])(?:(?:equipe|vendedor|consultor|time|pessoal|eles)\s+(?:te\s+)?(?:confirma|confirmam|verifica|verificam|informa|informam|retorna|retornam|passa|passam)|quer que eu (?:veja|confirme|verifique|pergunte|cheque)|vou (?:verificar|confirmar|ver com|perguntar|checar|consultar))(?![a-z])/.test(t);
+  return /(?<![a-z])(?:(?:equipe|vendedor|consultor|time|pessoal|eles)\s+(?:te\s+)?(?:confirma|confirmam|verifica|verificam|informa|informam|retorna|retornam|passa|passam)|(?:confirmo|verifico|vejo|checo|pergunto|consulto)(?![a-z])[^.?!\n]{0,40}com (?:a |o )?(?:equipe|vendedor|gerencia|pessoal|time)|quer que eu (?:veja|confirme|verifique|pergunte|cheque)|vou (?:verificar|confirmar|ver com|perguntar|checar|consultar))(?![a-z])/.test(t);
 }
