@@ -229,3 +229,40 @@ export function respondeuSoONome(texto: string, ultimaDaLoja: string): boolean {
   const palavras = t.split(/\s+/);
   return palavras.length <= 3 && palavras.every((p) => /^\p{L}+$/u.test(p)) && !/moto|patinete|pre[çc]o|valor|quanto|tem|quero|foto|v[ií]deo|sim|n[ãa]o|ok|obrigad/iu.test(t);
 }
+
+/** Todas as mensagens novas repetem, sem tirar nem pôr (fora maiúsculas, acento e espaço), um texto que o cliente já
+ *  mandou e a IA já respondeu. Mensagem curta ("ok", "sim") não conta: repetir é normal. */
+export function mensagensRepetidas(novas: string[], jaRespondidas: string[]): boolean {
+  const n = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const antes = new Set(jaRespondidas.map(n));
+  return novas.length > 0 && novas.every((t) => n(t).length >= 12 && antes.has(n(t)));
+}
+
+const FRASES_PERGUNTA = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu;
+/** Uma pergunta por resposta (Milton, 12/10/2026: 5 perguntas em 2 minutos na conversa (81) 7301-7155). Fica a ÚLTIMA
+ *  pergunta; as de antes saem (a frase toda). Bloco com várias linhas (lista de dados, simulação) não se mexe. */
+export function umaPerguntaSo(resposta: string[]): string[] {
+  const ehPergunta = (f: string) => /\?/.test(f);
+  let ultimaVista = false;
+  const saida: string[] = [];
+  for (let i = resposta.length - 1; i >= 0; i--) {
+    const b = resposta[i];
+    if (/\n/.test(b)) {
+      if (ehPergunta(b)) ultimaVista = true;
+      saida.unshift(b);
+      continue;
+    }
+    const frases = b.match(FRASES_PERGUNTA) ?? [b];
+    const ficam: string[] = [];
+    for (let j = frases.length - 1; j >= 0; j--) {
+      if (ehPergunta(frases[j])) {
+        if (ultimaVista) continue;
+        ultimaVista = true;
+      }
+      ficam.unshift(frases[j]);
+    }
+    const t = ficam.join("").trim();
+    if (/\p{L}/u.test(t)) saida.unshift(t);
+  }
+  return saida;
+}

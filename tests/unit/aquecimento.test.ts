@@ -153,3 +153,31 @@ test("Mayna Dornelas: dúvida de um aparelho que já comprou não recebe follow-
   assert.equal(conversaForaDaVenda("Agente IA: Entendi! Vou passar o seu recado para a nossa equipe, e o responsável fala com você por aqui assim que a loja abrir 🙏"), true);
   assert.equal(conversaForaDaVenda("Agente IA: A DF17 custa R$ 7.190."), false);
 });
+
+test("Milton: uma pergunta por resposta, fica a última (12/10/2026)", async () => {
+  const { umaPerguntaSo } = await import("../../lib/ia/workflow/util.ts");
+  /* (81) 7301-7155: "quer agendar uma visita ou tem mais dúvidas?" + "qual é o seu nome?" na mesma resposta */
+  assert.deepEqual(umaPerguntaSo(["Certo! Quer agendar uma visita ou tem mais alguma dúvida? 😊", "E me diz, qual é o seu nome? 😊"]), ["Certo!", "E me diz, qual é o seu nome? 😊"]);
+  assert.deepEqual(umaPerguntaSo(["A DF17 custa R$ 7.190. Quer ver o vídeo? Ou prefere a foto?"]), ["A DF17 custa R$ 7.190. Ou prefere a foto?"]);
+  /* lista de dados e simulação (várias linhas) não se mexem */
+  const lista = "Show! Para finalizar seu pedido, me manda por aqui:\n• Nome completo\n• CPF";
+  assert.deepEqual(umaPerguntaSo([lista, "Prefere retirar na loja? 😊"]), [lista, "Prefere retirar na loja? 😊"]);
+  assert.deepEqual(umaPerguntaSo(["A M6 sai por R$ 11.900 ✅"]), ["A M6 sai por R$ 11.900 ✅"]);
+});
+
+test("mensagem repetida que a IA já respondeu não ganha outra resposta (teste de 12/10/2026)", async () => {
+  const { mensagensRepetidas } = await import("../../lib/ia/workflow/util.ts");
+  assert.equal(mensagensRepetidas(["Valor dos patinetes elétricos?"], ["valor dos patinetes eletricos?"]), true);
+  assert.equal(mensagensRepetidas(["Valor dos patinetes elétricos?", "e da DF17?"], ["Valor dos patinetes elétricos?"]), false);
+  /* curta ("ok", "sim") repetir é normal */
+  assert.equal(mensagensRepetidas(["sim"], ["sim"]), false);
+  assert.equal(mensagensRepetidas([], ["oi"]), false);
+});
+
+test("(81) 7301-7155: cliente vendo para outra pessoa — a IA facilita o repasse, sem visita (12/10/2026)", async () => {
+  const { clienteIntermediario, instrucaoIntermediario } = await import("../../lib/ia/intencao.ts");
+  for (const t of ["Irei mostrar a ele, caso tenha interesse, solicito a você", "é pra minha mãe", "estou vendo pra um amigo", "vou passar pra minha esposa"]) assert.equal(clienteIntermediario(t), true, t);
+  for (const t of ["quero a DF17", "Valor dos patinetes elétricos?", "vou pensar", "pra mim mesmo"]) assert.equal(clienteIntermediario(t), false, t);
+  assert.match(instrucaoIntermediario("vou mostrar a ele"), /NÃO ofereça visita/u);
+  assert.equal(instrucaoIntermediario("quanto custa?"), "");
+});

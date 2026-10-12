@@ -8,7 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
-import { clienteEncerrou, conversaForaDaVenda } from "@/lib/ia/aquecimento";
+import { clienteEncerrou, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -41,8 +41,8 @@ import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -55,7 +55,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corNoTexto, deveRepetirPerguntaDoNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 import { ETAPAS_ABERTAS, TIPOS_ELETRICOS } from "@/lib/dominio";
@@ -974,6 +974,18 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       .map((m) => (m.id === c.mensagemId ? c.textoEntrada : textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m) })))
       .filter((t) => t.trim());
     const textoBuffer = textos.join("\n\n") || c.textoEntrada;
+    /* mensagem repetida que a IA acabou de responder (teste de 12/10/2026: "Valor dos patinetes elétricos?" entrou duas
+       vezes e saíram duas respostas quase iguais; cliente que reenvia achando que não foi): não responde de novo */
+    /* a mensagem desta execução pode ter chegado antes da resposta anterior sair (aí não está em msgs) */
+    const novas = msgs.length ? msgs : c.mensagem ? [c.mensagem] : [];
+    if (ultimaResposta && novas.length && novas.every((m) => m.tipo === "texto")) {
+      const respondidas = await db
+        .select({ conteudo: schema.mensagens.conteudo })
+        .from(schema.mensagens)
+        .where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "incoming"), lt(schema.mensagens.id, ultimaResposta.id), ne(schema.mensagens.id, c.mensagemId!), gt(schema.mensagens.criadoEm, sql`now() - interval '5 minutes'`)));
+      if (mensagensRepetidas(novas.map((m) => m.conteudo ?? ""), respondidas.map((r) => r.conteudo ?? "")))
+        return { fim: "parou", detalhe: "Mensagem repetida: a IA já respondeu esse mesmo texto há menos de 5 min", saida: { repetida: true, texto: textoBuffer } };
+    }
     return { ctx: { textoBuffer, primeiraDoBuffer: msgs[0]?.id ?? c.mensagemId }, saida: { mensagens: textos.length, texto: textoBuffer } };
   },
 
@@ -1024,7 +1036,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1321,7 +1333,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       resposta = [/\n/.test(primeiro) ? prazer : `${prazer} ${primeiro[0].toUpperCase()}${primeiro.slice(1)}`, ...(/\n/.test(primeiro) ? [primeiro] : []), ...resto];
     }
     /* o cliente só cumprimentou (a IA não tinha o que responder): a apresentação vai no cumprimento e aqui a pergunta */
-    if (saudacao && !resposta.length) resposta = [variar(PERGUNTAS_INTENCAO)];
+    const soCumprimentou = !!saudacao && !resposta.length;
+    if (soCumprimentou) resposta = [variar(PERGUNTAS_INTENCAO)];
     /* a loja já falou hoje e a IA só cumprimentou de novo ("Olá! Tudo bem?"): o cumprimento repetido saiu e
        não sobrou nada. O cliente NUNCA fica sem resposta (pedido do dono, 27/09/2026). */
     const textoPronto = !!c.pipe?.texto && [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
@@ -1372,13 +1385,10 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     if (!midia && intencao === "compra" && respostaDaIa && resposta.length) {
       try {
         const modelos = await motosComMidia(c);
-        /* pesquisando: 2 ou 3 opções, uma foto de cada (Diretrizes do Milton, 04/10/2026) */
-        midia =
-          c.momento === "pesquisando"
-            ? planejarOpcoes({ modelos, resposta: resposta.join("\n"), jaEnviadas })
-            : /* a resposta apresentou 2 ou 3 opções ("vocês têm patinete?"): uma foto de cada (teste de 05/10/2026) */
-              (planejarApresentacao({ modelos, textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas }) ??
-              planejarOpcoes({ modelos, resposta: resposta.join("\n"), jaEnviadas }));
+        /* Milton (12/10/2026): foto só do modelo que o cliente escolheu. Pesquisando ou com 2 ou 3 opções na resposta
+           ("valor dos patinetes?"), vão os preços em texto e a pergunta de qual interessou; a foto vai quando ele escolher
+           (antes ia uma foto de cada: 6 fotos em 1 minuto na conversa (81) 7301-7155). planejarOpcoes fica para consulta. */
+        midia = c.momento === "pesquisando" ? null : planejarApresentacao({ modelos, textoCliente: c.textoBuffer, resposta: resposta.join("\n"), jaEnviadas });
       } catch {
         midia = null;
       }
@@ -1414,6 +1424,8 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     }
     /* abertura do Milton (P2 a P4): "Boa tarde, Carla! Tudo certinho? 😊 Me chamo Milton, sou da Gêmeos Motors…". O nome
        é só o que o cliente disse; se a resposta já fala do Milton (perguntou se é robô), não repete */
+    /* uma pergunta por resposta: fica a última (Milton, 12/10/2026) */
+    resposta = umaPerguntaSo(resposta);
     let abertura = saudacao;
     /* conversa indo para a equipe (reclamação, recado, pós-venda, dados do fechamento): nada de "Qual é o seu nome?" depois
        do pedido de desculpas (Arine, 06/10/2026) */
@@ -1423,18 +1435,25 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
       const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome);
       if (!nomeNovo) abertura = saudacaoComNome(abertura, nome);
       if (!/milton/iu.test(resposta.join(" "))) abertura = `${abertura} ${reclamando ? "Aqui é o Milton, da Gêmeos Motors." : variar(APRESENTACAO)}`;
-      /* a IA SEMPRE pergunta o nome do cliente (dono, 06/10/2026): na abertura, uma vez */
-      if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
+      /* a IA SEMPRE pergunta o nome do cliente (dono, 06/10/2026), uma vez. Só cumprimentou: na abertura. Perguntou algo:
+         a resposta primeiro e o nome no fim, se não houver outra pergunta (teste de 12/10/2026: "Com quem eu falo?" antes
+         do preço da M6, o cliente via uma pergunta antes da resposta) */
+      if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) {
+        if (soCumprimentou) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
+        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta, `E com quem eu falo? 😊`];
+      }
     } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
       resposta = [...resposta, variar(PERGUNTAS_NOME)];
     }
     /* perguntou o nome e o cliente não respondeu: pergunta de novo depois de 2 mensagens dele (no máximo 3 vezes), menos no
        meio de um passo importante (parcelas, entrega, dados, visita) — dono, 07/10/2026 */
-    if (!abertura && resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
+    /* disse que ele volta a falar ("vou mostrar a ele") ou encerrou ("já resolveu"): não cobra o nome (12/10/2026) */
+    const fechandoAConversa = clienteVaiRetornar(c.textoBuffer) || clienteEncerrou(c.textoBuffer);
+    if (!abertura && resposta.length && !vaiParaEquipe && !fechandoAConversa && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
       /* pela etapa da conversa, não por palavra solta ("pronta para entrega" bloqueava a pergunta, teste de 07/10/2026) */
       const passoImportante = ["quer_parcelar", "pediu_simulacao", "recusou_simulacao", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
-      if (!passoImportante && !RX_PERGUNTA_NOME.test(resposta.join(" "))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
+      if (!passoImportante && !resposta.some((b) => /\?/.test(b))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
     }
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
     if (resposta.length) {

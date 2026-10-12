@@ -166,3 +166,15 @@ export function textoQueixa(p: { nome: string | null; lojaAberta: boolean }): st
     ? `Desculpa pela confusão${n} 🙏 Vou chamar agora alguém da nossa equipe para continuar com você por aqui e te mandar certinho o que você pediu.`
     : `Desculpa pela confusão${n} 🙏 Já deixei o seu pedido anotado com prioridade, e assim que a loja abrir alguém da nossa equipe te manda certinho o que você pediu.`;
 }
+
+/* "vou mostrar a ele", "é pra meu pai", "estou vendo pra minha esposa", "caso ele tenha interesse" ((81) 7301-7155, 11/10/2026:
+   o cliente era intermediário e a IA ofereceu visita e cobrou com follow-up em 10 min) */
+const RX_INTERMEDIARIO =
+  /(?<![\p{L}])(?:vou|irei|vou te|preciso)\s+(?:mostrar|passar|repassar|mandar)\s+(?:pra|para|a|ao|à)?\s*(?:ele|ela|eles|meu|minha|o\s+meu|a\s+minha)|(?:[ée]|seria|estou\s+vendo|t[ôo]\s+vendo|to\s+vendo|procurando|olhando)\s+(?:pra|para)\s+(?:o\s+|a\s+)?(?:meu|minha|um\s+amigo|uma\s+amiga|outra\s+pessoa|ele|ela)|caso\s+(?:ele|ela)\s+(?:tenha|tiver|queira|goste)|se\s+(?:ele|ela)\s+(?:tiver|quiser|gostar)\s+(?:interesse)?/iu;
+export const clienteIntermediario = (texto: string) => RX_INTERMEDIARIO.test(texto);
+
+/** Instrução para quem está vendo para outra pessoa: facilitar o repasse, sem visita e sem pressão. */
+export function instrucaoIntermediario(textoDoCliente: string): string {
+  if (!clienteIntermediario(textoDoCliente)) return "";
+  return "# CLIENTE VENDO PARA OUTRA PESSOA\nO cliente está pesquisando para outra pessoa (vai mostrar, repassar ou é para alguém da família). Facilite o repasse: ofereça deixar um resumo pronto (o modelo, o preço e que a foto já foi) para ele mandar para a pessoa, e diga que a pessoa pode chamar a loja direto por aqui. NÃO ofereça visita nem test drive agora, não pergunte o nome dele de novo e não insista.\n\n";
+}
