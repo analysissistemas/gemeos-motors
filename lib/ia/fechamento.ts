@@ -456,3 +456,19 @@ export function soOQuePerguntou(resposta: string[], textoCliente: string): strin
   const junto = r.join(" ");
   return r.length > 1 && junto.length <= 400 && !r.some((b) => /\n/.test(b)) ? [junto] : r;
 }
+
+/** Não aceitou a simulação ("ficou caro, não dá"): persuasão em vez de "vou levar pra gerência" (usuário, 12/10/2026:
+ *  "lembrar da economia, oferecer outra quantidade de parcelas ou o Pix, oferecer uma moto mais em conta"). Uma
+ *  mensagem, as saídas em lista e UMA pergunta. `maiorParcela`: a maior quantidade já simulada (21 = não oferece mais
+ *  vezes). `maisEmConta`: modelo do mesmo tipo, mais barato e com unidade disponível. */
+export function textoRecusouSimulacao(p: { nome: string | null; modelo: string | null; aVista: number | null; maiorParcela: number | null; maisEmConta: { nome: string; preco: number } | null }) {
+  const voc = p.nome ? `, ${p.nome}` : "";
+  const a = artigo(p.modelo);
+  const opcoes = [
+    p.aVista && p.modelo ? `• No *Pix ou dinheiro* ${a} *${p.modelo}* sai por ${brl(p.aVista)}, sem nenhuma taxa` : "• No *Pix ou dinheiro* sai sem nenhuma taxa",
+    ...((p.maiorParcela ?? 0) < 21 ? ["• Dá pra simular em mais vezes, com a parcela menor (até 21 vezes)"] : []),
+    ...(p.maisEmConta ? [`• Se preferir, tem ${artigo(p.maisEmConta.nome)} *${p.maisEmConta.nome}* por ${brl(p.maisEmConta.preco)}, também com pronta entrega`] : []),
+  ];
+  const eletrico = artigo(p.modelo) === "o" ? "o patinete elétrico" : "a moto elétrica";
+  return `Entendo${voc}! Vamos achar um jeito que caiba no seu bolso 😊\n${opcoes.join("\n")}\nE lembra: com ${eletrico} você esquece a gasolina, e essa economia já ajuda a pagar a parcela. Qual dessas fica melhor pra você?`;
+}

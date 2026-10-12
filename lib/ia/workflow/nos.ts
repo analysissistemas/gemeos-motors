@@ -40,7 +40,7 @@ import {
 import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -333,6 +333,21 @@ async function precoDoModelo(modelo: string) {
   const [m] = await db.select({ preco: schema.modelos.precoTabela }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${modelo.toLowerCase()}`).limit(1);
   return m?.preco ? Number(m.preco) : null;
 }
+/** Modelo do mesmo tipo (moto ou patinete), mais barato que `preco` e com unidade disponível: o mais caro entre eles
+ *  (o mais parecido com o que o cliente queria). */
+async function modeloMaisEmConta(c: CtxWorkflow, modelo: string, preco: number) {
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const [atual] = await db.select({ tipo: m.tipo }).from(m).where(sql`lower(${m.nome}) = ${modelo.toLowerCase()}`).limit(1);
+  if (!atual) return null;
+  const [mais] = await db
+    .select({ nome: m.nome, preco: m.precoTabela })
+    .from(m)
+    .where(and(eq(m.ativo, true), eq(m.tipo, atual.tipo), sql`${m.precoTabela} < ${preco}`, sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`))
+    .orderBy(desc(m.precoTabela))
+    .limit(1);
+  return mais?.preco ? { nome: mais.nome, preco: Number(mais.preco) } : null;
+}
 async function criarTarefaSimulacao(c: CtxWorkflow, sim: { parcelas: number | null; bandeira: string | null }, modelo: string | null) {
   const cv = await carregarConversa(c.conversaId);
   let preco: string | null = null;
@@ -368,7 +383,7 @@ async function criarTarefaGerencia(c: CtxWorkflow, modelo: string | null, fala: 
     negocioId: cv.negocioId,
     usuarioId: cv.responsavelId,
     agendadoPara: new Date(),
-    notas: `${nome} não aceitou a simulação${modelo ? ` da ${modelo}` : ""}: "${relato}". Consultar a gerência e responder na conversa.`,
+    notas: `${nome} não aceitou a simulação${modelo ? ` da ${modelo}` : ""}: "${relato}". A IA ofereceu o Pix, mais parcelas e um modelo mais em conta; se ele não aceitar, consultar a gerência e responder na conversa.`,
     tipo: "simulacao",
     motivo: "Consultar a gerência: cliente não aceitou a simulação",
     origem: "ia",
@@ -1170,7 +1185,15 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* não aceitou a simulação: o vendedor consulta a gerência antes de concluir (relatório do dono, 10/10/2026) */
     if (momento === "recusou_simulacao") {
       const preco = modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null;
-      const texto = textoConsultaGerencia({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), modelo: modeloDaConversa, aVista: preco, lojaAberta: aberta });
+      /* persuasão (usuário, 12/10/2026): Pix, mais parcelas e um modelo mais em conta; a equipe fica sabendo pela tarefa */
+      const simuladas = Array.from(ultimaDaLoja.matchAll(/(\d{1,2})x de R\$/g)).map((m) => Number(m[1]));
+      const texto = textoRecusouSimulacao({
+        nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
+        modelo: modeloDaConversa,
+        aVista: preco,
+        maiorParcela: simuladas.length ? Math.max(...simuladas) : null,
+        maisEmConta: modeloDaConversa && preco ? await modeloMaisEmConta(c, modeloDaConversa, preco) : null,
+      });
       await criarTarefaGerencia(c, modeloDaConversa, c.textoBuffer);
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, gerencia: true } };

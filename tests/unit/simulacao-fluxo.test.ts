@@ -219,3 +219,19 @@ test("'em 21' sem o x, respondendo 'em quantas vezes': calcula 21x, não manda a
   assert.equal(simulacaoPedida("R$ 50", true).parcelas, null);
   assert.equal(simulacaoPedida("até 18 no master", true).parcelas, 18);
 });
+
+test("recusou a simulação: persuasão (Pix, mais parcelas, modelo mais em conta), sem 'gerência' (12/10/2026)", async () => {
+  const { textoRecusouSimulacao } = await import("../../lib/ia/fechamento.ts");
+  const t = textoRecusouSimulacao({ nome: "Rita", modelo: "M6", aVista: 11900, maiorParcela: 12, maisEmConta: { nome: "T5 RETRÔ", preco: 11000 } });
+  assert.match(t, /^Entendo, Rita!/);
+  assert.match(t, /Pix ou dinheiro\* a \*M6\* sai por R\$ 11\.900,00/);
+  assert.match(t, /mais vezes/);
+  assert.match(t, /\*T5 RETRÔ\* por R\$ 11\.000,00/);
+  assert.match(t, /esquece a gasolina/);
+  assert.doesNotMatch(t, /gerência/u);
+  assert.equal((t.match(/\?/g) ?? []).length, 1);
+  assert.ok(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, JSON.stringify(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).violacoes));
+  /* já simulou em 21x e não há modelo mais barato: só o Pix e a economia */
+  const so = textoRecusouSimulacao({ nome: null, modelo: "DF17", aVista: 7190, maiorParcela: 21, maisEmConta: null });
+  assert.doesNotMatch(so, /mais vezes|Se preferir/u);
+});
