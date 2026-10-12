@@ -254,6 +254,25 @@ export const RX_PARABENS = /parab[eé]ns|[óo]tima (escolha|aquisi[çc][ãa]o)|e
 export const RX_PERGUNTA_USO_KM = /para que|pra que|quantos km|qual (vai ser )?o uso|uso principal|trabalho,? (o )?dia a dia|dia a dia ou/iu;
 export const RX_JA_PERGUNTOU_FALTA = /falta(ndo|ria)?\s+(pra|para)\s+(a gente\s+)?(fechar|concluir|concluirmos)/iu;
 
+const RX_FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu;
+/* "O que está faltando para concluirmos a sua compra? 😊", colada ou não no fim da frase do preço */
+const RX_FRASE_FALTA = /(?:ficou alguma d[uú]vida,?\s*ou\s+)?o\s+que\s+(?:est[áa]\s+|t[áa]\s+)?falta(?:ndo|ria)?\s+(?:pra|para)[^?]*\?\s*(?:\p{Extended_Pictographic}️?\s*)*/giu;
+/** Milton (12/10/2026): no orçamento, sem "o que falta para concluirmos?" (vira o 1º follow-up) e sem pergunta de uso/km.
+ *  Só essas perguntas saem; o resto da frase e as outras perguntas ficam. */
+export function semPerguntaDeFechamento(resposta: string[]) {
+  const usoKm = (f: string) => /\?/.test(f) && (RX_PERGUNTA_USO_KM.test(f) || /trabalho ou (?:passeio|lazer|dia a dia)|(?:passeio|lazer|dia a dia) ou trabalho/iu.test(f));
+  return resposta
+    .map((b) =>
+      b
+        .replace(RX_FRASE_FALTA, "")
+        .split("\n")
+        .map((l) => (l.match(RX_FRASES) ?? [l]).filter((f) => !usoKm(f)).join("").trimEnd())
+        .join("\n")
+        .trim(),
+    )
+    .filter((b) => /\p{L}/u.test(b));
+}
+
 /** Os dados que o Milton pede (lista do dono, P8/P11), sem o que o cliente já informou. */
 export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string | null; pagamento?: string | null }) {
   if (modo === "retirada") {
@@ -330,7 +349,7 @@ export function instrucaoDeFechamento(momento: Momento | null, modelo: string | 
   switch (momento) {
     case "interesse":
       return `# MOMENTO DA COMPRA
-O cliente tem interesse em ${m}. Responda SÓ o que ele perguntou, com os dados do catálogo: perguntou o preço, diga o preço, a cor e que tem a pronta entrega; perguntou autonomia, bateria ou garantia, responda isso. Não despeje a ficha inteira de uma vez (a foto e o vídeo vão junto). Termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?". Não pergunte uso nem km agora.`;
+O cliente tem interesse em ${m}. Responda SÓ o que ele perguntou, com os dados do catálogo: perguntou o preço, diga o preço, a cor e que tem a pronta entrega; perguntou autonomia, bateria ou garantia, responda isso. Não despeje a ficha inteira de uma vez (a foto e o vídeo vão junto). NÃO pergunte "o que está faltando para concluirmos?" agora: o sistema manda essa pergunta depois, se o cliente não responder. Não pergunte uso nem km agora.`;
     case "decidido":
       return `# MOMENTO DA COMPRA
 O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima aquisição: economia no dia a dia, sem gasolina, sem IPVA nem emplacamento, conforto) e pergunte só: "Você prefere retirar aqui na loja ou receber por entrega?".`;
@@ -357,7 +376,7 @@ O cliente quer vir à loja (visita ou test drive). Ótimo! Responda com entusias
 O cliente disse quando vem à loja. O sistema agenda e confirma: escreva só uma frase curta e calorosa, sem perguntas e sem dizer o horário.`;
     case "informou_km":
       return `# MOMENTO DA COMPRA
-O cliente disse quanto roda. A conta da economia é a CONTA DO CLIENTE que já vem pronta no catálogo: use só esses números, nunca faça conta. Termine com UMA pergunta de fechamento, como "O que está faltando para concluirmos a sua compra?".`;
+O cliente disse quanto roda. A conta da economia é a CONTA DO CLIENTE que já vem pronta no catálogo: use só esses números, nunca faça conta. NÃO pergunte "o que está faltando para concluirmos?" (o sistema manda depois, se o cliente não responder).`;
     case "objecao":
       return `# MOMENTO DA COMPRA
 O cliente está em dúvida. Com empatia e sem pressionar, entenda o motivo real com UMA pergunta aberta (ex.: "O que está pesando na sua decisão?") e responda a dúvida com dados do catálogo e da base. Não repita a pergunta de fechamento.`;

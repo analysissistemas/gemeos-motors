@@ -10,6 +10,8 @@ import { lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { limparEmojis } from "@/lib/ia/validador";
 import {
+  aquecimentoFixo,
+  clienteVaiRetornar,
   decidirAquecimento,
   instrucaoAquecimento,
   INTERVALO_MIN_AQUECIMENTO,
@@ -26,8 +28,8 @@ import { lerConfigWorkflow } from "./config";
 /* ============================================================
    FOLLOW-UP DE AQUECIMENTO (07/10/2026) — regras e textos em lib/ia/aquecimento.ts
    1. Depois de cada resposta da IA, `agendarAquecimento` cancela as tentativas que ainda não saíram (o cliente
-      falou) e agenda até 3 novas em Follow-ups (10 min, 1 h, 23 h 53 min, só com a loja aberta: planejarAquecimento), visíveis e
-      canceláveis pela equipe. Se a IA ficou de ver algo com a equipe, em vez disso vira tarefa "responder o cliente".
+      falou) e agenda até 3 novas em Follow-ups (1 h, 3 h e 23 h, só com a loja aberta: planejarAquecimento), visíveis e
+      canceláveis pela equipe. O cliente disse que ele volta a falar ("vou mostrar a ele"): só a de 23 h. Se a IA ficou de ver algo com a equipe, em vez disso vira tarefa "responder o cliente".
    2. O vigia (a cada minuto) chama `enviarAquecimentos`: na hora, confere de novo (respondeu? vendedor assumiu?
       janela de 24 h?), a IA escreve a mensagem pela conversa e ela sai pelo único caminho autorizado
       (enviarRespostaDaIa: chave geral, permissão de envio, validador). Texto da IA que não passa vira mensagem pronta.
@@ -85,7 +87,8 @@ export async function agendarAquecimento(p: {
     await mensagemSistema(db, p.conversaId, `RESPONDER O CLIENTE: ele perguntou "${pergunta}" e a IA não tinha a resposta. O follow-up automático fica parado até a equipe responder.`, { triagem: true });
     return { agendados: 0 };
   }
-  const plano = planejarAquecimento(new Date(ultima.em), await lerHorario());
+  /* "vou mostrar a ele", "te aviso", "vou pensar": só a última tentativa ((81) 7301-7155, 11/10/2026) */
+  const plano = planejarAquecimento(new Date(ultima.em), await lerHorario(), { soUltima: clienteVaiRetornar(ultima.conteudo ?? "") });
   if (!plano.length) return { agendados: 0 };
   await db.insert(F).values(
     plano.map((e) => ({
@@ -107,6 +110,8 @@ export async function agendarAquecimento(p: {
 const SAIDA = z.object({ mensagem: z.string() });
 
 async function escreverMensagem(conversaId: number, etapa: number, nome: string | null, modelo: string | null) {
+  /* 1ª tentativa com moto: a pergunta do dono, como está (Milton, 12/10/2026) */
+  if (aquecimentoFixo(etapa, modelo)) return { texto: mensagemPadraoAquecimento({ etapa, nome, modelo }), daIa: false };
   const msgs = (await db.select().from(M).where(and(eq(M.conversaId, conversaId), sql`${M.autor} <> 'sistema'`)).orderBy(desc(M.id)).limit(14)).reverse();
   try {
     const r = await gerarObjeto({ schema: SAIDA, sistema: instrucaoAquecimento({ etapa, nome, modelo }), prompt: `<conversa>\n${transcrever(msgs)}\n</conversa>`, maxTokens: 300 });

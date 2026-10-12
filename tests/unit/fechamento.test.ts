@@ -83,7 +83,8 @@ test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () =>
   assert.ok(pediuDadosDeRetirada(listaDeDados("retirada", {})));
   assert.ok(!pediuDadosDeRetirada(listaDeDados("entrega", {})));
   assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /Não ofereça desconto/);
-  assert.match(instrucaoDeFechamento("interesse", "AG08"), /O que está faltando para concluirmos/);
+  /* Milton (12/10/2026): a pergunta de fechamento sai da resposta e vira o 1º follow-up */
+  assert.match(instrucaoDeFechamento("interesse", "AG08"), /NÃO pergunte "o que está faltando para concluirmos\?" agora/);
   assert.equal(instrucaoDeFechamento(null, null), "");
 });
 
@@ -180,4 +181,13 @@ test("só a bandeira (\"Visa\") depois da pergunta da IA com as duas coisas: ain
   assert.equal(jaPerguntouSoOQueFalta("Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊", "parcelas"), false);
   assert.equal(jaPerguntouSoOQueFalta(PERGUNTA_SO_PARCELAS, "parcelas"), true);
   assert.equal(jaPerguntouSoOQueFalta("E qual é a bandeira do cartão? 😊", "parcelas"), false);
+});
+
+test("Milton: o orçamento sai sem 'o que está faltando para concluirmos?' (vira o 1º follow-up, 12/10/2026)", async () => {
+  const { semPerguntaDeFechamento } = await import("../../lib/ia/fechamento.ts");
+  assert.deepEqual(semPerguntaDeFechamento(["A *M6* sai por *R$ 11.900* à vista, na cor preta, pronta entrega ✅ O que está faltando para concluirmos a sua compra? 😊"]), ["A *M6* sai por *R$ 11.900* à vista, na cor preta, pronta entrega ✅"]);
+  assert.deepEqual(semPerguntaDeFechamento(["A DF17 custa R$ 7.190.", "O que falta pra gente fechar a sua compra? 🙂"]), ["A DF17 custa R$ 7.190."]);
+  assert.deepEqual(semPerguntaDeFechamento(["A DF17 custa R$ 7.190.\nVocê vai usar mais pra trabalho ou dia a dia?"]), ["A DF17 custa R$ 7.190."]);
+  /* outra pergunta fica */
+  assert.deepEqual(semPerguntaDeFechamento(["Tem sim! Quer que eu mande o vídeo?"]), ["Tem sim! Quer que eu mande o vídeo?"]);
 });

@@ -1,7 +1,9 @@
 /* Follow-up de AQUECIMENTO (pedido de 07/10/2026, conversa da Damarys: perguntou o preço, disse "Brgd" e sumiu; nada
    ficou agendado). O cliente parou de responder depois da resposta da IA: o Milton chama de novo, sozinho, em 3
-   tentativas — 10 min, 1 h e 23 h 53 min depois da última mensagem do CLIENTE (a última fica dentro da janela de
-   24 h do WhatsApp, depois dela só mensagem modelo). Respondeu, as tentativas que faltam são canceladas.
+   tentativas — 1 h, 3 h e 23 h depois da última mensagem do CLIENTE (Milton, 12/10/2026: 10 min era cedo demais;
+   a última fica dentro da janela de 24 h do WhatsApp). Respondeu, as tentativas que faltam são canceladas.
+   A 1ª, com moto na conversa, é a pergunta do dono "O que está faltando para concluirmos a sua compra?": ela saiu
+   da resposta do orçamento e só vai se o cliente não responder (Milton, 12/10/2026).
    Desde 12/10/2026 (Heverton) só sai com a loja aberta e não sai quando a loja ficou de ver algo: ver
    planejarAquecimento e lojaFicouDeVer no fim do arquivo.
 
@@ -11,9 +13,9 @@ import { artigo } from "./estoque-tipos.ts";
 import { lojaAberta, type HorarioLoja } from "./horario.ts";
 
 export const ETAPAS_AQUECIMENTO = [
-  { etapa: 1, minutos: 10, rotulo: "10 min" },
-  { etapa: 2, minutos: 60, rotulo: "1 h" },
-  { etapa: 3, minutos: 23 * 60 + 53, rotulo: "23 h 53 min" },
+  { etapa: 1, minutos: 60, rotulo: "1 h" },
+  { etapa: 2, minutos: 3 * 60, rotulo: "3 h" },
+  { etapa: 3, minutos: 23 * 60, rotulo: "23 h" },
 ] as const;
 
 /** Janela do WhatsApp: depois de 24 h sem mensagem do cliente, texto livre é recusado. Margem de 3 min. */
@@ -59,11 +61,16 @@ export function decidirAquecimento(p: {
   return null;
 }
 
+/** A pergunta do dono (03/10/2026), que desde 12/10/2026 é o 1º follow-up com moto na conversa. */
+export const PERGUNTA_DO_DONO = "o que está faltando para concluirmos a sua compra?";
+/** A 1ª tentativa com moto na conversa é sempre a pergunta do dono, sem a IA reescrever. */
+export const aquecimentoFixo = (etapa: number, modelo: string | null) => etapa === 1 && !!modelo;
+
 /** Mensagem pronta (quando a IA não escreve ou o texto dela não passa): leve, sem preço e sem pressão. */
 export function mensagemPadraoAquecimento(p: { etapa: number; nome: string | null; modelo: string | null }): string {
   const N = (t: string) => (p.nome ? `${p.nome}, ${t}` : `${t[0].toUpperCase()}${t.slice(1)}`);
   const m = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : null;
-  if (p.etapa === 1) return m ? N(`ficou alguma dúvida sobre ${m} que eu possa te ajudar? 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
+  if (p.etapa === 1) return m ? N(`${PERGUNTA_DO_DONO.replace("?", ` d${artigo(p.modelo)} *${p.modelo}*?`)} 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
   if (p.etapa === 2)
     return m
       ? N(`lembrando que ${m} é elétric${artigo(p.modelo)}: você carrega na tomada de casa e esquece a gasolina. Quer que eu te explique como fica pra você? 😊`)
@@ -125,14 +132,19 @@ export function ultimaAbertaAntes(t: Date, h: HorarioLoja): Date | null {
   return null;
 }
 
-/** Quando sai cada tentativa, contando da última mensagem do cliente. Tentativa que não cabe não entra. */
-export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja): { etapa: number; rotulo: string; quando: Date }[] {
+/** Quando sai cada tentativa, contando da última mensagem do cliente. Tentativa que não cabe não entra.
+ *  `soUltima`: o cliente disse que ele mesmo volta a falar; sai só a de 23 h. */
+export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja, o: { soUltima?: boolean } = {}): { etapa: number; rotulo: string; quando: Date }[] {
   const base = ultimaDoCliente.getTime();
   const limite = new Date(base + LIMITE_JANELA_MIN * MIN);
   const plano: { etapa: number; rotulo: string; quando: Date }[] = [];
-  for (const e of ETAPAS_AQUECIMENTO) {
-    const anterior = plano.at(-1)?.quando.getTime();
-    const minimo = anterior ? anterior + INTERVALO_MIN_AQUECIMENTO * MIN : 0;
+  for (const e of o.soUltima ? ETAPAS_AQUECIMENTO.slice(-1) : ETAPAS_AQUECIMENTO) {
+    /* loja fechada empurrou a anterior: mantém o espaço entre a 1ª e a 2ª (1 h → 3 h são 2 h; Milton, 12/10/2026).
+       A última conta da mensagem do cliente (janela de 24 h): dela, só os 50 min de distância. */
+    const ant = plano.at(-1);
+    const ultimaEtapa = e.etapa === ETAPAS_AQUECIMENTO.length;
+    const passo = !ant ? 0 : ultimaEtapa ? INTERVALO_MIN_AQUECIMENTO : Math.max(INTERVALO_MIN_AQUECIMENTO, e.minutos - ETAPAS_AQUECIMENTO[ant.etapa - 1].minutos);
+    const minimo = ant ? ant.quando.getTime() + passo * MIN : 0;
     let quando: Date | null = proximaAbertura(new Date(Math.max(base + e.minutos * MIN, minimo)), h);
     if (!quando || quando > limite) {
       quando = ultimaAbertaAntes(limite, h);
@@ -148,4 +160,12 @@ export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja): { et
 export function lojaFicouDeVer(textoDaLoja: string): boolean {
   const t = textoDaLoja.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
   return /(?<![a-z])(?:(?:equipe|vendedor|consultor|time|pessoal|eles)\s+(?:te\s+)?(?:confirma|confirmam|verifica|verificam|informa|informam|retorna|retornam|passa|passam)|(?:confirmo|verifico|vejo|checo|pergunto|consulto)(?![a-z])[^.?!\n]{0,40}com (?:a |o )?(?:equipe|vendedor|gerencia|pessoal|time)|quer que eu (?:veja|confirme|verifique|pergunte|cheque)|vou (?:verificar|confirmar|ver com|perguntar|checar|consultar))(?![a-z])/.test(t);
+}
+
+/** O cliente disse que ELE volta a falar ("vou mostrar a ele", "te aviso", "vou pensar", "qualquer coisa te chamo"):
+ *  cobrar em 1 h e 3 h é insistir ((81) 7301-7155, 11/10/2026: "Irei mostrar a ele, caso tenha interesse, solicito a
+ *  você", e 10 min depois saiu o follow-up). Fica só a última tentativa. */
+export function clienteVaiRetornar(textoDoCliente: string): boolean {
+  const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return /(?<![a-z])(?:(?:vou|irei|deixa eu|deixe eu) (?:mostrar|passar|repassar|pensar|analisar|ver com|falar com|conversar com)|(?:te|lhe) (?:aviso|chamo|falo|retorno|procuro)|(?:qualquer coisa|se (?:ele|ela|eu) (?:tiver|gostar|quiser|decidir)|caso (?:ele |ela |eu )?(?:tenha|goste|queira|decida))[^.?!\n]{0,40}(?:chamo|falo|aviso|solicito|retorno|procuro|mando)|depois (?:eu )?(?:te )?(?:chamo|falo|volto|retorno|aviso)|(?:preciso|vou) pensar|mais tarde (?:eu )?(?:te )?(?:chamo|falo))(?![a-z])/.test(t);
 }

@@ -39,7 +39,7 @@ import {
 import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_FALTA, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_JA_PERGUNTOU_FALTA, RX_PARABENS, RX_PEDE_PESSOA, RX_PERGUNTA_USO_KM, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoConsultaGerencia, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, intencaoDoTexto, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -677,15 +677,10 @@ function semPerguntas(resposta: string[]) {
 function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
   const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
   switch (c.momento) {
-    case "interesse": {
-      /* já perguntou "o que falta?" na última mensagem: não repete */
-      if (RX_JA_PERGUNTOU_FALTA.test(c.ultimaDaLoja)) return resposta;
-      const ultima = resposta[resposta.length - 1] ?? "";
-      if (RX_JA_PERGUNTOU_FALTA.test(ultima)) return resposta;
-      /* pergunta de uso/km, ou nenhuma: vira a de fechamento */
-      if (!/\?/.test(resposta.join(" ")) || RX_PERGUNTA_USO_KM.test(ultima)) return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
-      return resposta;
-    }
+    case "interesse":
+      /* Milton (12/10/2026): passa o orçamento e a foto e espera. "O que está faltando para concluirmos?" é o
+         1º follow-up, 1 h depois, se o cliente não responder (lib/ia/aquecimento.ts); uso e km também não agora */
+      return semPerguntaDeFechamento(resposta);
     case "decidido": {
       const corpo = semPerguntas(resposta);
       const comParabens = corpo.some((b) => RX_PARABENS.test(b)) ? corpo : [variar(parabens(c.modeloDaConversa)), ...corpo.filter((b) => !/R\$|autonomia|km/iu.test(b))];
@@ -697,8 +692,8 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       return [...semPerguntas(resposta), variar(PERGUNTAS_KM)];
     }
     case "informou_km":
-      /* a conta certa já entrou (garantirEconomia); a conversa volta para o fechamento */
-      return [...semPerguntas(resposta), variar(PERGUNTAS_FALTA)];
+      /* a conta certa já entrou (garantirEconomia); a pergunta de fechamento fica para o follow-up (Milton, 12/10/2026) */
+      return semPerguntaDeFechamento(resposta);
     case "quer_visitar":
       return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
     case "sem_modelo":
