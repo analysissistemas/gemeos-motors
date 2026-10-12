@@ -53,8 +53,10 @@ export function decidirSimulacao(p: {
 }): AcaoSimulacao {
   const taxas = p.taxas ?? TAXAS_PADRAO;
   const loja = semAcento(p.ultimaDaLoja);
-  const agora = simulacaoPedida(p.textoCliente);
-  const antes = simulacaoPedida(p.recentesCliente);
+  /* "em 21" sozinho vale como parcelas quando a loja perguntou "em quantas vezes" (agora) ou acabou de pedir a bandeira
+     depois dessa pergunta (antes: o "em 21" veio numa mensagem e o "visa" na seguinte) */
+  const agora = simulacaoPedida(p.textoCliente, /quantas vezes/.test(loja));
+  const antes = simulacaoPedida(p.recentesCliente, /quantas vezes|bandeira/.test(loja));
   const entrada = entradaDoTexto(p.textoCliente);
   const falouEntrada = /entrada/i.test(p.textoCliente);
   const vendedor = (parcelas: number | null, bandeira: string | null, motivo?: "bandeira_sem_tabela"): AcaoSimulacao => ({

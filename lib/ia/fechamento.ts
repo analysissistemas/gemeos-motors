@@ -59,7 +59,7 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (retirada && !entrega) return "escolheu_retirada";
   }
   /* parcelamento: respondeu "em quantas vezes / qual a bandeira", ou já disse os dois */
-  const sim = simulacaoPedida(p.textoCliente);
+  const sim = simulacaoPedida(p.textoCliente, /quantas vezes/.test(loja));
   /* respondendo "o seu cartão permite parcelar em 18 vezes?" (Amex acima de 12x) ou "pra qual moto é a simulação?" */
   if (RX_PERGUNTOU_AMEX.test(loja) && respostaSimNao(p.textoCliente)) return "pediu_simulacao";
   if (RX_PERGUNTOU_MOTO.test(loja) && p.conheceModelo) return "pediu_simulacao";
@@ -133,13 +133,19 @@ const RX_PARCELAS_EXTENSO = /(?<![a-z])(uma|um|duas|dois|tres|quatro|cinco|seis|
 /* "parcelar em 12", "dividir em 10 no visa" (sem o "x"); "em 12 mil" e "em 10%" não contam */
 const RX_PARCELAS_VERBO = /(?<![a-z])(?:parcel\w*|divid\w*)\s+(?:(?:ela|a moto|o valor|tudo)\s+)?em\s+(?:ate\s+)?(\d{1,2})(?!\d|[.,]\d|\s*(?:mil|reais|%|por\s*cento))/g;
 const RX_DEBITO = /(?<![a-z])debito(?![a-z])/;
+/* respondendo "em quantas vezes?": o número sozinho vale ("em 21", "21", "até 18 no visa"; Leandro, 11/10/2026).
+   Dinheiro, porcentagem, dias, horas, km e anos não contam */
+const RX_PARCELAS_SOLTAS =
+  /(?<![\d,.$]|\$\s)(?:(?:em|ate)\s+)?(\d{1,2})(?![\d.,%])(?!\s*(?:mil|reais|real|por\s*cento|dias?|horas?|h|min\w*|km|anos?|kg|de entrada)(?![a-z]))/g;
 
 /** Parcelas e bandeira que o cliente escreveu ("12x no Visa", "em 10 vezes", "doze vezes", "master", "no débito").
- *  `todas` = todas as quantidades citadas ("12x ou 18x"), na ordem, sem repetir; `parcelas` = a primeira. */
-export function simulacaoPedida(texto: string): { parcelas: number | null; todas: number[]; bandeira: string | null; debito: boolean } {
+ *  `todas` = todas as quantidades citadas ("12x ou 18x"), na ordem, sem repetir; `parcelas` = a primeira.
+ *  `respondendoVezes`: a loja acabou de perguntar em quantas vezes, então "em 21" sozinho é a resposta. */
+export function simulacaoPedida(texto: string, respondendoVezes = false): { parcelas: number | null; todas: number[]; bandeira: string | null; debito: boolean } {
   const t = semAcento(texto);
   const achados: { pos: number; n: number }[] = [];
   for (const m of t.matchAll(RX_PARCELAS_NUM)) achados.push({ pos: m.index ?? 0, n: Number(m[1]) });
+  if (respondendoVezes && !achados.length) for (const m of t.matchAll(RX_PARCELAS_SOLTAS)) achados.push({ pos: m.index ?? 0, n: Number(m[1]) });
   for (const m of t.matchAll(RX_PARCELAS_EXTENSO)) {
     if (m[1] === "uma" || m[1] === "um") continue; // "uma vez" não é parcelamento ("à vista, de uma vez")
     achados.push({ pos: m.index ?? 0, n: NUMEROS[m[1]] + (m[2] ? UNIDADES[m[2]] : 0) });

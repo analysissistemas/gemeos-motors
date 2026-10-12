@@ -174,3 +174,25 @@ test("todos os textos da simulação passam no validador como texto do sistema",
   for (const t of textos)
     for (const b of t.split(/\n\n/)) assert.ok(validarResposta(b, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, `${b.slice(0, 80)} → ${JSON.stringify(validarResposta(b, { promptSistema: "", fontesAutorizadas: [t] }).violacoes)}`);
 });
+
+test("'em 21' sem o x, respondendo 'em quantas vezes': calcula 21x, não manda a tabela inteira (Leandro, 11/10/2026)", () => {
+  const base = { modelo: "M6", preco: 11900, nome: null };
+  /* as duas mensagens no mesmo envio */
+  assert.equal(detectarMomento({ textoCliente: "em 21\nvisa", ultimaDaLoja: PERGUNTA_PARCELAS, conheceModelo: true }), "pediu_simulacao");
+  const juntas = decidirSimulacao({ ...base, textoCliente: "em 21\nvisa", recentesCliente: "", ultimaDaLoja: PERGUNTA_PARCELAS });
+  assert.equal(juntas.acao, "enviar");
+  assert.match(juntas.texto, /21 parcelas de R\$ 708,34/);
+  assert.doesNotMatch(juntas.texto, /2x de/);
+  /* "em 21" sozinho: pergunta só a bandeira; o "visa" seguinte calcula 21x */
+  assert.equal(detectarMomento({ textoCliente: "em 21", ultimaDaLoja: PERGUNTA_PARCELAS, conheceModelo: true }), "pediu_simulacao");
+  const so = decidirSimulacao({ ...base, textoCliente: "em 21", recentesCliente: "", ultimaDaLoja: PERGUNTA_PARCELAS });
+  assert.deepEqual(so, { acao: "perguntar", texto: PERGUNTA_SO_BANDEIRA });
+  const depois = decidirSimulacao({ ...base, textoCliente: "visa", recentesCliente: "em 21", ultimaDaLoja: PERGUNTA_SO_BANDEIRA });
+  assert.match(depois.texto, /21 parcelas de R\$ 708,34/);
+  /* número que não é parcela não conta, nem fora da pergunta */
+  assert.equal(simulacaoPedida("em 21", false).parcelas, null);
+  assert.equal(simulacaoPedida("dou 3 mil de entrada", true).parcelas, null);
+  assert.equal(simulacaoPedida("passo aí em 2 dias", true).parcelas, null);
+  assert.equal(simulacaoPedida("R$ 50", true).parcelas, null);
+  assert.equal(simulacaoPedida("até 18 no master", true).parcelas, 18);
+});
