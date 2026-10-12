@@ -118,7 +118,8 @@ const BANDEIRAS: [RegExp, string][] = [
 /* frases dos textos do sistema (sem acento, como detectarMomento compara a fala da loja) */
 export const RX_PERGUNTOU_AMEX = /american express[^?]*seu cartao permite/;
 export const RX_PERGUNTOU_MOTO = /pra qual moto voce quer a simulacao/;
-export const RX_SIMULACAO_ENVIADA = /(?:fiz|segue) a simulacao/;
+/* a simulação, ou a conta do total que o cliente pediu depois dela */
+export const RX_SIMULACAO_ENVIADA = /(?:fiz|segue) a simulacao|o total fica assim/;
 const RX_RECUSA =
   /(?<![a-z])(nao (da|deu|rola|cabe|aceito|compensa|consigo|gostei|fica bom|ficou bom|tenho como)|ficou (caro|alto|pesad[oa]|salgad[oa]|puxad[oa])|(muito|bem|mt|mto) (caro|alto|juros)|juros? (alto|muito|demais)|taxa (alta|muito|demais)|caro demais|achei (caro|alto|salgado|puxado))(?![a-z])/;
 /* "não, vou pagar no pix" não é recusa: é outra forma de pagar */

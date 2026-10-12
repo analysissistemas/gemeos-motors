@@ -235,3 +235,10 @@ test("recusou a simulação: persuasão (Pix, mais parcelas, modelo mais em cont
   const so = textoRecusouSimulacao({ nome: null, modelo: "DF17", aVista: 7190, maiorParcela: 21, maisEmConta: null });
   assert.doesNotMatch(so, /mais vezes|Se preferir/u);
 });
+
+test("'ficou caro' depois da conta do total ainda é recusa da simulação (teste no ar de 12/10/2026)", async () => {
+  const { textoTotais } = await import("../../lib/ia/fechamento.ts");
+  const sim = d("12x no visa").texto;
+  const total = textoTotais(sim)!.texto;
+  assert.equal(detectarMomento({ textoCliente: "ficou caro, não dá", ultimaDaLoja: total, conheceModelo: true }), "recusou_simulacao");
+});
