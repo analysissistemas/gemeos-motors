@@ -59,7 +59,7 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (retirada && !entrega) return "escolheu_retirada";
   }
   /* parcelamento: respondeu "em quantas vezes / qual a bandeira", ou já disse os dois */
-  const sim = simulacaoPedida(p.textoCliente, /quantas vezes/.test(loja));
+  const sim = simulacaoPedida(p.textoCliente, RX_LOJA_PERGUNTOU_VEZES.test(loja));
   /* respondendo "o seu cartão permite parcelar em 18 vezes?" (Amex acima de 12x) ou "pra qual moto é a simulação?" */
   if (RX_PERGUNTOU_AMEX.test(loja) && respostaSimNao(p.textoCliente)) return "pediu_simulacao";
   if (RX_PERGUNTOU_MOTO.test(loja) && p.conheceModelo) return "pediu_simulacao";
@@ -99,7 +99,10 @@ export const PERGUNTAS_ENTREGA_OU_RETIRADA = [
 ];
 /* ---------- parcelamento no cartão (simulação feita pelo vendedor, P5/P19) ---------- */
 const RX_QUER_PARCELAR = /(?<![a-z])(parcel\w*|divid\w*|dividir|em quantas vezes|quantas vezes|no cartao|cartao de credito|credito|vezes no cartao|simula\w*)(?![a-z])/;
-const RX_PEDIU_PARCELAS = /quantas vezes|bandeira/;
+/** A loja perguntou as parcelas: "em quantas vezes?", ou a simulação enviada ("simulo em outro número de parcelas"):
+ *  aí "em 18" ou "10, 12 e 18" sem o x valem como parcelas (Milton, 12/10/2026). Texto sem acento. */
+export const RX_LOJA_PERGUNTOU_VEZES = /quantas vezes|numero de parcelas|em mais vezes/;
+const RX_PEDIU_PARCELAS = /quantas vezes|bandeira|numero de parcelas|em mais vezes/;
 const BANDEIRAS: [RegExp, string][] = [
   [/\bvisa\b/, "Visa"],
   [/\bmaster(card)?\b/, "Mastercard"],
@@ -136,7 +139,7 @@ const RX_DEBITO = /(?<![a-z])debito(?![a-z])/;
 /* respondendo "em quantas vezes?": o número sozinho vale ("em 21", "21", "até 18 no visa"; Leandro, 11/10/2026).
    Dinheiro, porcentagem, dias, horas, km e anos não contam */
 const RX_PARCELAS_SOLTAS =
-  /(?<![\d,.$]|\$\s)(?:(?:em|ate)\s+)?(\d{1,2})(?![\d.,%])(?!\s*(?:mil|reais|real|por\s*cento|dias?|horas?|h|min\w*|km|anos?|kg|de entrada)(?![a-z]))/g;
+  /(?<![\d,.$]|\$\s)(?:(?:em|ate)\s+)?(\d{1,2})(?![\d%]|[.,]\d)(?!\s*(?:mil|reais|real|por\s*cento|dias?|horas?|h|min\w*|km|anos?|kg|de entrada)(?![a-z]))/g;
 
 /** Parcelas e bandeira que o cliente escreveu ("12x no Visa", "em 10 vezes", "doze vezes", "master", "no débito").
  *  `todas` = todas as quantidades citadas ("12x ou 18x"), na ordem, sem repetir; `parcelas` = a primeira.
@@ -155,7 +158,10 @@ export function simulacaoPedida(texto: string, respondendoVezes = false): { parc
   const bandeira = BANDEIRAS.find(([rx]) => rx.test(t))?.[1] ?? null;
   return { parcelas: todas[0] ?? null, todas, bandeira, debito: RX_DEBITO.test(t) };
 }
-export const PERGUNTA_PARCELAS = "Em quantas vezes você gostaria de dividir? E qual é a bandeira do cartão? 😊";
+/* Milton (12/10/2026): primeiro avisa da taxa e pergunta SÓ em quantas vezes; a bandeira vem depois, se faltar */
+export const PERGUNTA_PARCELAS = "No cartão de crédito tem a taxa da maquininha, que é repassada no valor. Em quantas vezes você gostaria de dividir? 😊";
+/** Amex, o cliente disse que o cartão não passa de 12x: pergunta em quantas (sem a tabela, Milton 12/10/2026). */
+export const PERGUNTA_AMEX_ATE_12 = "Sem problema! No American Express dá pra parcelar em até 12 vezes. Em quantas vezes você quer? 😊";
 /** Confirmação da simulação, depois que o sistema avisou o vendedor (nunca com valores). */
 export function textoSimulacao(p: { parcelas: number | null; bandeira: string | null; modelo: string | null }) {
   /* "em 10 vezes", não "10x": o validador só aceita "Nx" que esteja escrito na base (teste de 04/10/2026) */
@@ -364,7 +370,7 @@ O cliente ainda não escolheu e quer conhecer as opções. NÃO sugira nem escol
 O cliente quer comprar, mas ainda não falou de um modelo. Pergunte só: "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções?".`;
     case "quer_parcelar":
       return `# MOMENTO DA COMPRA
-O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e incentive, sem pressionar, pagar em dinheiro ou Pix, que é o melhor valor (sem taxa). Se ele quiser parcelar mesmo assim, diga que no cartão de crédito dá para dividir em até 21x, com uma pequena taxa da maquininha, e que a loja faz uma simulação para achar uma parcela que caiba no orçamento. Pergunte em quantas vezes ele quer dividir e a bandeira do cartão. Nunca diga valor de parcela, taxa ou juros (o sistema calcula e manda a simulação quando ele disser as parcelas e a bandeira), não liste bandeiras e nunca peça número do cartão, código ou senha.`;
+O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálogo) e incentive, sem pressionar, pagar em dinheiro ou Pix, que é o melhor valor (sem taxa). Se ele quiser parcelar mesmo assim, diga que no cartão de crédito dá para dividir em até 21x. NÃO pergunte as parcelas nem a bandeira: o sistema avisa da taxa da maquininha e pergunta em quantas vezes logo depois da sua resposta. Nunca diga valor de parcela, taxa ou juros (o sistema calcula e manda a simulação quando ele disser as parcelas e a bandeira), não liste bandeiras e nunca peça número do cartão, código ou senha.`;
     case "pediu_simulacao":
       return `# MOMENTO DA COMPRA
 O cliente passou os dados da simulação. O sistema calcula e manda a simulação (ou pergunta o que falta): escreva só uma frase curta, sem valores.`;

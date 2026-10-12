@@ -4,19 +4,23 @@
    Quem executa é lib/ia/workflow/nos.ts; testes em tests/unit/simulacao-fluxo.test.ts.
 
    Ordem das decisões:
-   1. Respondeu "sim/não" à pergunta do Amex acima de 12x → "sim" calcula; "não" manda a tabela até 12x.
+   1. Respondeu "sim/não" à pergunta do Amex acima de 12x → "sim" calcula; "não" pergunta em quantas vezes, até 12x.
    2. Sem saber a moto → pergunta qual (uma vez; perguntou e ainda não sabe → vendedor).
    3. Débito → com a bandeira, calcula; sem, pergunta a bandeira.
-   4. Crédito → bandeira sem parcelas: tabela completa; parcelas sem bandeira: pergunta a bandeira; as duas: calcula
-      (uma ou várias quantidades). Amex acima de 12x: pergunta se o cartão permite. Acima de 21x: diz o limite.
+   4. Crédito → nada dito: avisa da taxa e pergunta em quantas vezes; bandeira sem parcelas: pergunta em quantas vezes;
+      parcelas sem bandeira: pergunta a bandeira; as duas: calcula SÓ as pedidas (Milton, 12/10/2026: nunca a tabela
+      inteira). Amex acima de 12x: pergunta se o cartão permite. Acima de 21x: vai o 21x, avisando do limite.
    5. Falou em entrada sem dizer o valor, bandeira sem tabela (Hipercard, Diners) → o vendedor faz. */
 import {
+  PERGUNTA_AMEX_ATE_12,
   PERGUNTA_PARCELAS,
   PERGUNTA_QUAL_MOTO,
+  PERGUNTA_SO_PARCELAS,
   PERGUNTA_SO_BANDEIRA,
   RX_PERGUNTOU_AMEX,
   RX_PERGUNTOU_MOTO,
   respostaSimNao,
+  RX_LOJA_PERGUNTOU_VEZES,
   simulacaoPedida,
   textoSimulacao,
   textoSimulacaoConsultar,
@@ -55,7 +59,7 @@ export function decidirSimulacao(p: {
   const loja = semAcento(p.ultimaDaLoja);
   /* "em 21" sozinho vale como parcelas quando a loja perguntou "em quantas vezes" (agora) ou acabou de pedir a bandeira
      depois dessa pergunta (antes: o "em 21" veio numa mensagem e o "visa" na seguinte) */
-  const agora = simulacaoPedida(p.textoCliente, /quantas vezes/.test(loja));
+  const agora = simulacaoPedida(p.textoCliente, RX_LOJA_PERGUNTOU_VEZES.test(loja));
   const antes = simulacaoPedida(p.recentesCliente, /quantas vezes|bandeira/.test(loja));
   const entrada = entradaDoTexto(p.textoCliente);
   const falouEntrada = /entrada/i.test(p.textoCliente);
@@ -89,17 +93,13 @@ export function decidirSimulacao(p: {
           registro: `${modelo}, ${n}x no American Express (cliente confirmou que o cartão permite; taxa ${r.taxa}%): ${linhaRegistro(n, r.parcela, r.total)}`,
         };
     }
-    if (resp === "nao") {
-      const linhas = tabelaCompleta({ preco, bandeira: "American Express", entrada }, taxas);
-      return {
-        acao: "enviar",
-        texto: textoTabelaCompleta({ nome: p.nome, modelo, bandeira: "American Express", aVista: preco, entrada: entrada ?? undefined, linhas }),
-        registro: `${modelo} no American Express até ${AMEX_ATE}x (o cartão do cliente não permite mais)`,
-      };
-    }
+    /* não permite: pergunta em quantas vezes até 12x (Milton, 12/10/2026: só o que o cliente pedir, nada de tabela) */
+    if (resp === "nao") return { acao: "perguntar", texto: PERGUNTA_AMEX_ATE_12 };
   }
 
-  const bandeira = agora.bandeira ?? antes.bandeira;
+  /* a bandeira dita antes, ou a da última fala da loja ("No American Express dá pra parcelar em até 12 vezes. Em quantas
+     vezes?", "No Visa, em 12 vezes: ..." e o cliente pergunta "e em 18?") */
+  const bandeira = agora.bandeira ?? antes.bandeira ?? simulacaoPedida(p.ultimaDaLoja).bandeira;
   /* 3. débito: só falta a bandeira */
   const debito = agora.debito || (antes.debito && !agora.parcelas);
   if (debito) {
@@ -114,20 +114,17 @@ export function decidirSimulacao(p: {
   }
 
   /* 4. crédito */
-  const todas = agora.todas.length ? agora.todas : antes.todas;
-  if (!todas.length && !bandeira) return { acao: "perguntar", texto: PERGUNTA_PARCELAS };
-  if (!todas.length) {
-    /* bandeira sem parcelas: a tabela completa vai de uma vez */
-    const linhas = tabelaCompleta({ preco, bandeira, entrada }, taxas);
-    if (!linhas.length) return vendedor(null, bandeira, "bandeira_sem_tabela");
-    return {
-      acao: "enviar",
-      texto: textoTabelaCompleta({ nome: p.nome, modelo, bandeira: bandeira!, aVista: preco, entrada: entrada ?? undefined, linhas }),
-      registro: `${modelo} no ${bandeira}: tabela de 2x a ${linhas[linhas.length - 1].parcelas}x`,
-    };
+  const pedidas = agora.todas.length ? agora.todas : antes.todas;
+  /* Milton (12/10/2026): sem saber em quantas vezes, avisa da taxa e pergunta; nunca a tabela inteira */
+  if (!pedidas.length && !bandeira) return { acao: "perguntar", texto: PERGUNTA_PARCELAS };
+  if (!pedidas.length) {
+    if (!tabelaCompleta({ preco, bandeira, entrada }, taxas).length) return vendedor(null, bandeira, "bandeira_sem_tabela");
+    return p.jaPerguntou?.("parcelas") ? vendedor(null, bandeira) : { acao: "perguntar", texto: PERGUNTA_SO_PARCELAS };
   }
-  if (!bandeira) return p.jaPerguntou?.("bandeira") ? vendedor(todas[0], null) : { acao: "perguntar", texto: PERGUNTA_SO_BANDEIRA };
-  if (todas.some((n) => n > MAX_PARCELAS)) return { acao: "perguntar", texto: textoSimulacaoConsultar({ motivo: "parcelas_acima_de_21", modelo }) };
+  if (!bandeira) return p.jaPerguntou?.("bandeira") ? vendedor(pedidas[0], null) : { acao: "perguntar", texto: PERGUNTA_SO_BANDEIRA };
+  /* pediu mais que 21x (ex.: 22x): vai o máximo, 21x (Milton, 12/10/2026) */
+  const passou = pedidas.some((n) => n > MAX_PARCELAS);
+  const todas = Array.from(new Set(pedidas.map((n) => Math.min(n, MAX_PARCELAS))));
   if (bandeira === "American Express" && todas.some((n) => n > AMEX_ATE)) return { acao: "perguntar", texto: textoSimulacaoConsultar({ motivo: "amex_acima_12", modelo, parcelas: Math.max(...todas) }) };
 
   const resultados = todas.map((n) => simularCartao({ preco, parcelas: n, bandeira, entrada }, taxas));
@@ -137,13 +134,16 @@ export function decidirSimulacao(p: {
     return vendedor(todas[0], bandeira, semTabela ? "bandeira_sem_tabela" : undefined);
   }
   const registro = `${modelo} no ${bandeira}${entrada ? ` com entrada de ${reais(entrada)}` : ""}: ${ok.map((r) => `${linhaRegistro(r.parcelas, r.parcela, r.total)} [taxa ${r.taxa}%]`).join("; ")}`;
+  const limite = passou ? `No cartão o máximo é ${MAX_PARCELAS} vezes, então simulei em ${MAX_PARCELAS} 😉
+
+` : "";
   if (ok.length === 1) {
     const r = ok[0];
-    return { acao: "enviar", texto: textoSimulacaoPronta({ nome: p.nome, modelo, aVista: r.aVista, parcelas: r.parcelas, bandeira: r.bandeira, parcela: r.parcela, total: r.total, entrada: r.entrada }), registro };
+    return { acao: "enviar", texto: limite + textoSimulacaoPronta({ nome: p.nome, modelo, aVista: r.aVista, parcelas: r.parcelas, bandeira: r.bandeira, parcela: r.parcela, total: r.total, entrada: r.entrada }), registro };
   }
   return {
     acao: "enviar",
-    texto: textoTabelaCompleta({ nome: p.nome, modelo, bandeira, aVista: preco, entrada: entrada ?? undefined, linhas: ok.map((r) => ({ parcelas: r.parcelas, parcela: r.parcela, total: r.total })) }),
+    texto: limite + textoTabelaCompleta({ nome: p.nome, modelo, bandeira, aVista: preco, entrada: entrada ?? undefined, linhas: ok.map((r) => ({ parcelas: r.parcelas, parcela: r.parcela, total: r.total })) }),
     registro,
   };
 }

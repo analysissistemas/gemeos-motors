@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { errosDasTaxas, FAIXAS, normalizarTaxas, paraCima, simularCartao, tabelaCompleta, TAXAS_PADRAO } from "../../lib/ia/simulacao-cartao.ts";
 import { decidirSimulacao } from "../../lib/ia/simulacao-fluxo.ts";
-import { detectarMomento, PERGUNTA_PARCELAS, PERGUNTA_QUAL_MOTO, PERGUNTA_SO_BANDEIRA, simulacaoPedida, textoConsultaGerencia, textoPerguntaAmex, textoSimulacaoDebito } from "../../lib/ia/fechamento.ts";
+import { detectarMomento, jaPerguntouSoOQueFalta, PERGUNTA_AMEX_ATE_12, PERGUNTA_PARCELAS, PERGUNTA_QUAL_MOTO, PERGUNTA_SO_BANDEIRA, PERGUNTA_SO_PARCELAS, simulacaoPedida, textoConsultaGerencia, textoPerguntaAmex, textoSimulacaoDebito } from "../../lib/ia/fechamento.ts";
 import { validarResposta } from "../../lib/ia/validador.ts";
 
 const RELATORIO_MASTER_VISA = "2x: 4,9% 3x: 6% 4x: 7% 5x: 8% 6x: 9,5% 7x: 10,5% 8x: 11,5% 9x: 13% 10x: 13% 11x: 14% 12x: 15% 13x: 17% 14x: 17% 15x: 19,5% 16x: 20% 17x: 20,5% 18x: 21% 19x: 23,5% 20x: 24% 21x: 25%";
@@ -104,19 +104,33 @@ test("fluxo: falta um dado → pergunta (nunca chuta)", () => {
   assert.deepEqual(d("quero simular"), { acao: "perguntar", texto: PERGUNTA_PARCELAS });
   assert.deepEqual(d("em 10 vezes"), { acao: "perguntar", texto: PERGUNTA_SO_BANDEIRA });
   assert.deepEqual(d("no débito"), { acao: "perguntar", texto: PERGUNTA_SO_BANDEIRA });
-  /* acima de 21x: diz o limite e pergunta de novo */
-  const r = d("30x no visa");
-  assert.equal(r.acao, "perguntar");
-  assert.match(r.texto, /até 21 vezes/);
+  /* acima de 21x: vai o 21x, avisando do limite (Milton, 12/10/2026: pediu 22x, passa 21x) */
+  const r = d("22x no visa");
+  assert.equal(r.acao, "enviar");
+  assert.match(r.texto, /o máximo é 21 vezes/);
+  assert.match(r.texto, /21 parcelas de/);
+  assert.doesNotMatch(r.texto, /• 2x de/);
   /* perguntou a moto e o cliente não disse: o vendedor faz */
   assert.equal(d("tanto faz", { modelo: null as never, preco: null as never, ultimaDaLoja: PERGUNTA_QUAL_MOTO }).acao, "vendedor");
 });
 
-test("fluxo: bandeira sem parcelas → tabela completa; parcelas ditas antes também valem", () => {
-  const r = d("visa");
-  assert.equal(r.acao, "enviar");
-  assert.match(r.texto, /• 2x de/);
-  assert.match(r.texto, /• 21x de/);
+test("fluxo: bandeira sem parcelas → pergunta em quantas vezes, nunca a tabela inteira (Milton, 12/10/2026)", () => {
+  assert.deepEqual(d("visa"), { acao: "perguntar", texto: PERGUNTA_SO_PARCELAS });
+  /* já perguntou só isso e ele seguiu sem dizer: o vendedor combina */
+  assert.equal(decidirSimulacao({ ...BASE, textoCliente: "visa", ultimaDaLoja: PERGUNTA_SO_PARCELAS, jaPerguntou: (o) => jaPerguntouSoOQueFalta(PERGUNTA_SO_PARCELAS, o) }).acao, "vendedor");
+  /* "divide no cartão?" sem nada: avisa da taxa e pergunta só em quantas vezes */
+  assert.match(PERGUNTA_PARCELAS, /taxa da maquininha/);
+  assert.doesNotMatch(PERGUNTA_PARCELAS, /bandeira/);
+  /* respondeu "em quantas vezes?" com 10, 12 e 18: só essas três */
+  const tres = d("10, 12 e 18 no master", { ultimaDaLoja: PERGUNTA_PARCELAS });
+  assert.equal(tres.acao, "enviar");
+  assert.match(tres.texto, /• 10x de/);
+  assert.match(tres.texto, /• 18x de/);
+  assert.doesNotMatch(tres.texto, /• 11x de|• 21x de|• 2x de/);
+  /* depois da simulação no Visa, "e em 18?" usa a mesma bandeira */
+  const mais = d("e em 18?", { ultimaDaLoja: d("12x no visa").texto });
+  assert.match(mais.texto, /18 parcelas de/);
+  assert.equal(detectarMomento({ textoCliente: "e em 18?", ultimaDaLoja: d("12x no visa").texto, conheceModelo: true }), "pediu_simulacao");
   const antes = d("visa", { recentesCliente: "Lead: dá pra fazer em 10 vezes?" });
   assert.match(antes.texto, /10 parcelas de/);
 });
@@ -127,17 +141,19 @@ test("fluxo: débito com a bandeira", () => {
   assert.match(r.texto, /No débito Mastercard: \*R\$ 10\.150,00\*/);
 });
 
-test("fluxo: Amex acima de 12x → pergunta; 'sim' calcula; 'não' manda até 12x", () => {
+test("fluxo: Amex acima de 12x → pergunta; 'sim' calcula; 'não' pergunta até 12x", () => {
   const p = d("18x no amex");
   assert.deepEqual(p, { acao: "perguntar", texto: textoPerguntaAmex(18) });
   const sim = d("permite sim", { ultimaDaLoja: textoPerguntaAmex(18) });
   assert.equal(sim.acao, "enviar");
   assert.match(sim.texto, /18 parcelas de/);
   if (sim.acao === "enviar") assert.match(sim.registro, /cliente confirmou/);
+  /* não permite: pergunta em quantas vezes até 12x; a resposta calcula no Amex */
   const nao = d("não permite", { ultimaDaLoja: textoPerguntaAmex(18) });
-  assert.equal(nao.acao, "enviar");
-  assert.match(nao.texto, /• 12x de/);
-  assert.doesNotMatch(nao.texto, /• 13x de/);
+  assert.deepEqual(nao, { acao: "perguntar", texto: PERGUNTA_AMEX_ATE_12 });
+  const dez = d("10", { ultimaDaLoja: PERGUNTA_AMEX_ATE_12 });
+  assert.equal(dez.acao, "enviar");
+  assert.match(dez.texto, /No American Express, em 10 vezes/);
   /* a pergunta do Amex faz o "sim" seguinte voltar para a simulação */
   assert.equal(detectarMomento({ textoCliente: "sim", ultimaDaLoja: textoPerguntaAmex(18), conheceModelo: true }), "pediu_simulacao");
 });
