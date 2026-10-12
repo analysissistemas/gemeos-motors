@@ -676,12 +676,8 @@ async function entenderPrimeiro(resposta: string[], intencao: Intencao | null, c
   if (intencao === "assistencia" && !c?.recado) {
     const nomes = await nomesDoCatalogo();
     const ofereceu = resposta.some((b) => tirarOfertaDeProduto(b, nomes) !== b.trim());
-    if (!ofereceu) return resposta;
-    const r = resposta
-      .map((b) => tirarOfertaDeProduto(b, nomes))
-      .map((b) => (b.match(/[^.!?\n]+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/gu) ?? [b]).filter((f) => !/\?/.test(f)).join("").trim())
-      .filter((b) => /\p{L}/u.test(b));
-    return [...r, TEXTO_PEDE_RELATO];
+    /* a resposta dela inteira sai: o que sobrava ainda era venda ("Posso anotar seu interesse para avisar quando chegar.") */
+    return ofereceu ? [TEXTO_PEDE_RELATO] : resposta;
   }
   if (intencao || c?.recado) return resposta;
   const nomes = await nomesDoCatalogo();
