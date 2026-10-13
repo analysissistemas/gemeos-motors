@@ -93,3 +93,20 @@ test("Mayna Dornelas: áudio transcrito vale como texto; a IA entende o assunto 
   assert.equal(instrucaoDeAudio(audio), "");
   assert.equal(instrucaoDeAudio("quanto custa a DF17?"), "");
 });
+
+test("foto/áudio: depois do catálogo vai a lista do que está disponível, montada pelo estoque (12/10/2026)", async () => {
+  const { listaDisponiveis } = await import("../../lib/ia/foto-cliente.ts");
+  const itens = [
+    { nome: "DF17", tipo: "moto_eletrica", cores: ["Bege"], preco: 7190, autonomia: "40 a 50 km", destaque: null },
+    { nome: "AG08", tipo: "moto_eletrica", cores: ["Cinza", "Branca", "Preta"], preco: 8999.9, autonomia: "40 a 45 km", destaque: null },
+    { nome: "Patinete 530W", tipo: "patinete", cores: ["Preto"], preco: 3500, autonomia: "30 km", destaque: null },
+  ];
+  const t = listaDisponiveis(itens, "[imagem: tem essa?]")!;
+  assert.match(t, /^Tenho estas motos e patinetes elétricos disponíveis para pronta entrega:/u);
+  assert.match(t, /• \*AG08\* \(cinza, branca, preta\) – autonomia de 40 a 45 km – R\$ 8\.999,90/u);
+  assert.match(t, /• \*DF17\* \(bege\) – autonomia de 40 a 50 km – R\$ 7\.190/u);
+  /* falou de moto: patinete fica de fora */
+  assert.doesNotMatch(listaDisponiveis(itens, "[imagem: tem essa moto?]")!, /Patinete/u);
+  assert.ok(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, JSON.stringify(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).violacoes));
+  assert.equal(listaDisponiveis([], "oi"), null);
+});

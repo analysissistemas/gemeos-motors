@@ -44,7 +44,7 @@ import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRAN
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, TEXTO_DA_RESPOSTA } from "@/lib/ia/foto-cliente";
+import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia, TEXTO_DA_RESPOSTA, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -653,6 +653,31 @@ ${INSTRUCOES_MEMORIA}\n\n## FATOS\n${JSON.stringify(p.memoria.fatos)}\n\n## RESU
 const PERGUNTA_ECONOMIA = /gasolin|econom|vale a pena|compensa|gast[oa]r?\b|gasto/iu;
 
 /** Nomes das motos e acessórios do catálogo (para saber se o cliente já falou de produto). */
+/** Modelos elétricos com unidade Disponível (fora as de teste, menos na conversa simulada): cores, preço e autonomia. */
+async function itensDisponiveis(c: CtxWorkflow): Promise<ItemDisponivel[]> {
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const [modelos, unidades] = await Promise.all([
+    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor, valor: v.valorAnunciado }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
+  ]);
+  return modelos
+    .map((x) => {
+      const minhas = unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase()));
+      const valores = minhas.map((u) => (u.valor ? Number(u.valor) : null)).filter((n): n is number => !!n);
+      return {
+        nome: x.nome,
+        tipo: x.tipo,
+        unidades: minhas.length,
+        cores: Array.from(new Set(minhas.map((u) => u.cor?.trim()).filter((cor): cor is string => !!cor))),
+        preco: valores.length ? Math.min(...valores) : x.preco ? Number(x.preco) : null,
+        autonomia: (x.ficha as Record<string, string> | null)?.autonomia ?? null,
+        destaque: null,
+      };
+    })
+    .filter((x) => x.unidades > 0)
+    .sort((a, b) => (a.tipo === b.tipo ? (a.preco ?? 0) - (b.preco ?? 0) : a.tipo === "patinete" ? 1 : -1));
+}
 async function nomesDoCatalogo() {
   const linhas = await db.select({ nome: schema.modelos.nome }).from(schema.modelos).where(eq(schema.modelos.ativo, true));
   return linhas.map((l) => l.nome);
@@ -1122,7 +1147,11 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
        loja nem trabalha). Texto do sistema com o catálogo; escreveu o nome de um modelo, a IA atende sobre ele. */
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
     if (r.ctx.texto && paraMidia) {
-      const texto = TEXTO_DA_RESPOSTA[paraMidia];
+      /* catálogo + a lista do que tem disponível, montada pelo estoque (usuário, 12/10/2026) */
+      const lista = paraMidia === "catalogo_foto" || paraMidia === "catalogo_audio" ? listaDisponiveis(await itensDisponiveis(c), c.textoBuffer) : null;
+      const texto = lista ? `${TEXTO_DA_RESPOSTA[paraMidia]}
+
+${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, catalogo: paraMidia } };
     }

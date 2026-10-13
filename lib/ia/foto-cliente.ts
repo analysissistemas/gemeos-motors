@@ -91,3 +91,25 @@ export function instrucaoDeAudio(textoBuffer: string): string {
   if (!RX_AUDIO_NO_BUFFER.test(textoBuffer) || !audioOuvido(textoBuffer)) return "";
   return "# ÁUDIO DO CLIENTE\nO texto depois de [áudio] é a transcrição automática do áudio do cliente: pode ter palavra trocada. Use para ENTENDER o que ele quer (compra, dúvida, problema com o que comprou, recado) e responda a isso. Nunca sugira nem escolha um modelo que ele não falou; se o nome de modelo na transcrição não bater com o CATÁLOGO, pergunte qual modelo ele quis dizer. Não diga que ouviu ou transcreveu o áudio.\n\n";
 }
+
+export type ItemDisponivel = { nome: string; tipo: string; cores: string[]; preco: number | null; autonomia: string | null; destaque: string | null };
+const brl = (x: number) => `R$ ${x.toLocaleString("pt-BR", { minimumFractionDigits: Number.isInteger(x) ? 0 : 2, maximumFractionDigits: 2 })}`;
+/* falou de moto: patinete fica de fora; falou de patinete: só patinete (Guilherme, 07/10/2026) */
+const RX_FALOU_MOTO = /(?<![\p{L}])(?:motos?|mot(?:inha|oquinha)s?|scooters?|triciclos?)(?![\p{L}])/iu;
+const RX_FALOU_PATINETE = /(?<![\p{L}])patinetes?(?![\p{L}])/iu;
+/** Lista do que tem em estoque, montada pelo sistema (usuário, 12/10/2026: "quero que a IA mande a lista dos disponíveis"),
+ *  depois do catálogo, quando o cliente manda foto ou áudio. Só unidade Disponível, com as cores e o preço reais. */
+export function listaDisponiveis(itens: ItemDisponivel[], textoCliente: string): string | null {
+  const escrito = escritoPeloCliente(textoCliente);
+  const moto = RX_FALOU_MOTO.test(escrito);
+  const patinete = RX_FALOU_PATINETE.test(escrito);
+  const filtrados = itens.filter((i) => (moto && !patinete ? i.tipo !== "patinete" : patinete && !moto ? i.tipo === "patinete" : true)).filter((i) => i.preco);
+  if (!filtrados.length) return null;
+  const linhas = filtrados.slice(0, 9).map((i) => {
+    const cores = i.cores.length ? ` (${i.cores.map((c) => c.toLowerCase()).join(", ")})` : "";
+    const sobre = [i.destaque, i.autonomia ? `autonomia de ${i.autonomia}` : null].filter(Boolean).join(", ");
+    return `• *${i.nome}*${cores}${sobre ? ` – ${sobre}` : ""} – ${brl(i.preco!)}`;
+  });
+  const oque = moto && !patinete ? "motos elétricas" : patinete && !moto ? "patinetes elétricos" : "motos e patinetes elétricos";
+  return `Tenho estas ${oque} disponíveis para pronta entrega:\n${linhas.join("\n")}`;
+}
