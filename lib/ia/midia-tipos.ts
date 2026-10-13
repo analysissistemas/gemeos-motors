@@ -133,7 +133,9 @@ const RX_PROMETE = /(?:segue[mn]?|aqui\s+est[aã]o?|te\s+mand(?:o|ei)|vou\s+(?:t
 /* "Olha ela aí", "aqui está ela 👇": só faz sentido com a foto junto (usuário, 12/10/2026) */
 const RX_APONTA_FOTO = /^\s*(?:olha\s+(?:el[ae]|a\s+foto|s[óo])|aqui\s+est[áa]\s+(?:el[ae]|a\s+foto)|confere\s+a[ií])(?:\s+a[ií])?[!.\s]*(?:👇|👀|😍|😊|🙂)?\s*$/iu;
 export function tirarPromessaDeMidia(bloco: string): string {
-  const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
+  /* ponto colado em letra ou número ("gemeosmotors.com.br", "R$ 8.999") não encerra a frase (12/10/2026: a frase do site
+     era cortada no ponto e sobrava "com.br", barrado como link) */
+  const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=[\p{L}\p{N}]))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
   return frases.filter((f) => !RX_PROMETE.test(f) && !RX_APONTA_FOTO.test(f)).join("").trim();
 }
 

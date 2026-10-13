@@ -1476,7 +1476,9 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     const antesDoFiltro = resposta.length;
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
     let vao: string[] = [];
-    if (!midia?.itens.length) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
+    /* texto montado pelo sistema (catálogo da foto, lista dos disponíveis) não passa por esta limpeza: "com foto e preço" é do site */
+    const textoDoSistema = !!c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo;
+    if (!midia?.itens.length && !textoDoSistema) resposta = resposta.map(tirarPromessaDeMidia).filter((b) => /\p{L}/u.test(b));
     else {
       /* texto e foto batem: frase que promete foto de OUTRA moto (não a que vai) sai (Arine, 06/10/2026) */
       const todos = (await motosComMidia(c)).map((m) => m.nome);

@@ -96,3 +96,9 @@ test("'Olha ela aí' sem a foto junto sai do texto (usuário, 12/10/2026: pediu 
   assert.equal(tirarPromessaDeMidia("Olha ela aí! A M6 custa R$ 11.900."), "A M6 custa R$ 11.900.");
   assert.equal(tirarPromessaDeMidia("Olha, ela é ótima para a cidade."), "Olha, ela é ótima para a cidade.");
 });
+
+test("a frase do site não é cortada no ponto de 'gemeosmotors.com.br' (12/10/2026: sobrava 'com.br' e o validador barrava)", () => {
+  const t = tirarPromessaDeMidia("Pela foto eu não consigo confirmar o modelo, mas aqui estão todos os que a gente tem, com foto e preço: gemeosmotors.com.br. Me diz qual te chamou atenção.");
+  assert.doesNotMatch(t, /^com\.br/u);
+  assert.doesNotMatch(t, /(?<![\p{L}])com\.br/u);
+});
