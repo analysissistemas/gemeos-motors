@@ -109,4 +109,6 @@ test("foto/áudio: depois do catálogo vai a lista do que está disponível, mon
   assert.doesNotMatch(listaDisponiveis(itens, "[imagem: tem essa moto?]")!, /Patinete/u);
   assert.ok(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).aprovada, JSON.stringify(validarResposta(t, { promptSistema: "", fontesAutorizadas: [t] }).violacoes));
   assert.equal(listaDisponiveis([], "oi"), null);
+  /* ficha da T1 escrita "Até 70 km": no meio da frase, minúsculo (teste de 13/10/2026) */
+  assert.match(listaDisponiveis([{ nome: "T1", tipo: "moto_eletrica", cores: ["Branca"], preco: 12000, autonomia: "Até 70 km", destaque: null }], "[imagem]")!, /autonomia de até 70 km/u);
 });

@@ -1513,7 +1513,8 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
          do preço da M6, o cliente via uma pergunta antes da resposta) */
       if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) {
         if (soCumprimentou) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
-        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)} E com quem eu falo? 😊`];
+        /* depois de uma lista ("• *T1* ... R$ 12.000"), a pergunta vai numa linha própria (teste de 13/10/2026) */
+        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
       }
     } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */

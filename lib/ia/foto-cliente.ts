@@ -107,7 +107,8 @@ export function listaDisponiveis(itens: ItemDisponivel[], textoCliente: string):
   if (!filtrados.length) return null;
   const linhas = filtrados.slice(0, 9).map((i) => {
     const cores = i.cores.length ? ` (${i.cores.map((c) => c.toLowerCase()).join(", ")})` : "";
-    const sobre = [i.destaque, i.autonomia ? `autonomia de ${i.autonomia}` : null].filter(Boolean).join(", ");
+    /* "Até 70 km" na ficha da T1: no meio da frase vai minúsculo */
+    const sobre = [i.destaque, i.autonomia ? `autonomia de ${i.autonomia.charAt(0).toLowerCase()}${i.autonomia.slice(1)}` : null].filter(Boolean).join(", ");
     return `• *${i.nome}*${cores}${sobre ? ` – ${sobre}` : ""} – ${brl(i.preco!)}`;
   });
   const oque = moto && !patinete ? "motos elétricas" : patinete && !moto ? "patinetes elétricos" : "motos e patinetes elétricos";
