@@ -661,7 +661,12 @@ async function nomesDoCatalogo() {
 /** O que o cliente quer, pelo que ELE escreveu (esta mensagem, as anteriores e o interesse já anotado). */
 async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
   const texto = textoDoCliente(c);
-  const intencao = intencaoDoTexto([c.memoria.fatos.interesse ?? "", semAberturaDoSite(texto)].join("\n"), await nomesDoCatalogo());
+  const nomes = await nomesDoCatalogo();
+  /* o que ele pede AGORA manda: reclamou antes, mas agora fala de comprar ("tem algo parecido com esse?", "quero ver esse
+     triciclo") → compra (Pablo Júnior, 12/10/2026: a conversa ficou presa em assistência e a IA repetiu 4 vezes o pedido
+     de relato) */
+  if (intencaoDoTexto(semAberturaDoSite(c.textoBuffer), nomes) === "compra") return "compra";
+  const intencao = intencaoDoTexto([c.memoria.fatos.interesse ?? "", semAberturaDoSite(texto)].join("\n"), nomes);
   /* veio pelo botão do site e ainda não disse o quê: é quem quer comprar (o "consultor" é o Milton) */
   return intencao ?? (veioDoSite(texto) ? "compra" : null);
 }
@@ -676,8 +681,10 @@ async function entenderPrimeiro(resposta: string[], intencao: Intencao | null, c
   if (intencao === "assistencia" && !c?.recado) {
     const nomes = await nomesDoCatalogo();
     const ofereceu = resposta.some((b) => tirarOfertaDeProduto(b, nomes) !== b.trim());
+    /* o pedido de relato vai UMA vez (Pablo Júnior, 12/10/2026: saiu 4 vezes seguidas); já foi, fica a resposta da IA */
+    const jaPediu = (c?.memoria.historico ?? "").includes(TEXTO_PEDE_RELATO.slice(0, 50));
     /* a resposta dela inteira sai: o que sobrava ainda era venda ("Posso anotar seu interesse para avisar quando chegar.") */
-    return ofereceu ? [TEXTO_PEDE_RELATO] : resposta;
+    return ofereceu && !jaPediu ? [TEXTO_PEDE_RELATO] : resposta;
   }
   if (intencao || c?.recado) return resposta;
   const nomes = await nomesDoCatalogo();

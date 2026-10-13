@@ -19,11 +19,11 @@ const RX_ASSISTENCIA =
 const RX_ASSISTENCIA_TALVEZ = /(?<![\p{L}])(?:garantia|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|carregador)(?![\p{L}])/iu;
 /* "sem problema, pode ser terça", "tem problema se eu pagar no cartão?": não é defeito */
 const RX_SEM_PROBLEMA =
-  /(?<![\p{L}])(?:sem\s+problemas?|n[ãa]o\s+(?:tem|h[áa]|teria|vai\s+ter)\s+(?:nenhum\s+)?problemas?|nenhum\s+problema|problema\s+nenhum|tem\s+(?:algum\s+)?problema\s+(?:se|em|de|eu|pagar))(?![\p{L}])/giu;
+  /(?<![\p{L}])(?:sem\s+problemas?|n[ãa]o\s+(?:tem|h[áa]|teria|vai\s+ter)\s+(?:nenhum\s+)?problemas?|nenhum\s+problema|problema\s+nenhum|n[ãa]o\s+[ée]\s+(?:um\s+)?(?:problema|defeito)|tem\s+(?:algum\s+)?problema\s+(?:se|em|de|eu|pagar))(?![\p{L}])/giu;
 /* revisão de 06/10/2026: patinete, bicicleta, "motinha" e os apelidos ensinados pelo dono ("pneu largo", "Motoqueiro
    Fantasma" = X Gêmeos) também são compra; sem eles, a conversa caía em "recado" e a IA parava de vender */
 const RX_COMPRA =
-  /(?<![\p{L}])(?:motos?|mot(?:inha|oquinha|ozinha|oca)s?|scooters?|patinetes?|bicicletas?|bikes?|pneu\s+(?:largo|gordo)|pneuz[ãa]o|motoqueiro\s+fantasma|triciclo|comprar|compra|pre[çc]os?|valor(?:es)?|quanto\s+(?:custa|[ée]|sai|fica|t[áa])|modelos?|autonomia|cores?|pronta\s+entrega|estoque|dispon[íi]ve(?:l|is)|financ\p{L}*|parcel\p{L}*|cart[ãa]o|pix|[àa]\s+vista|test\s*drive|cat[áa]logo|or[çc]amento|proposta|el[ée]tricas?|cnh|ipva|emplac\p{L}*|acess[óo]rios?|capacete|ba[úu])(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:motos?|mot(?:inha|oquinha|ozinha|oca)s?|scooters?|patinetes?|bicicletas?|bikes?|pneu\s+(?:largo|gordo)|pneuz[ãa]o|motoqueiro\s+fantasma|triciclo|comprar|compra|pre[çc]os?|valor(?:es)?|quanto\s+(?:custa|[ée]|sai|fica|t[áa])|modelos?|autonomia|cores?|pronta\s+entrega|estoque|dispon[íi]ve(?:l|is)|financ\p{L}*|parcel\p{L}*|cart[ãa]o|pix|[àa]\s+vista|test\s*drive|cat[áa]logo|or[çc]amento|proposta|el[ée]tricas?|cnh|ipva|emplac\p{L}*|acess[óo]rios?|capacete|ba[úu]|(?:tem|teria|tem\s+a[ií])\s+(?:algo|alguma|algum|outr[oa])\s+(?:parecid\p{L}*|similar|igual)|(?:gostaria|quero|queria)\s+(?:de\s+)?ver\s+(?:ess[ae]s?|aquel[ae]s?))(?![\p{L}])/iu;
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

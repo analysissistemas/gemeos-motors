@@ -209,3 +209,10 @@ test("caso Mayna: assistência e a IA ofereceu moto → a oferta sai e ela pede 
   assert.doesNotMatch(tirarOfertaDeProduto(b, ["T1", "M6", "AG08"]), /T1|estoque|motos/u);
   assert.equal(validarResposta(TEXTO_PEDE_RELATO).aprovada, true);
 });
+
+test("Pablo Júnior: reclamou antes, mas agora pede moto — é compra (12/10/2026)", async () => {
+  const { intencaoDoTexto } = await import("../../lib/ia/intencao.ts");
+  for (const t of ["[imagem: Tem algo parecido com esse]", "Tem algo parecido com esse modelo da foto?", "Gostaria de ver esse triciclo da foto"]) assert.equal(intencaoDoTexto(t), "compra", t);
+  assert.notEqual(intencaoDoTexto("Não é problema não"), "assistencia");
+  assert.equal(intencaoDoTexto("Comprei uma com vocês e me arrependi"), "assistencia");
+});
