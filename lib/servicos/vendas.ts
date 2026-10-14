@@ -1,11 +1,11 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
-import { CHECKLIST_DOCUMENTACAO, CONDICOES, FORMAS_PAGAMENTO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
+import { CHECKLIST_DOCUMENTACAO, CONDICOES, ETAPAS_ABERTAS, FORMAS_PAGAMENTO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
 import { brl, formatarCpf, numeroDoc, soDigitos } from "@/lib/formato";
 import { esquemaPagamento } from "@/lib/validacao";
 import { conferirPagamentos } from "./negocios";
@@ -34,11 +34,28 @@ export const esquemaRascunho = z.object({
   pagamentos: z.array(esquemaPagamento.extend({ valor: z.coerce.number().min(0) })).default([]),
 });
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** O negócio aberto mais recente do cliente, sem venda ativa. Venda feita direto em Vendas (sem passar pelo funil) fica
+ *  ligada a ele: senão o funil não sabe da venda (dono, 14/10/2026: V-00005 do Leandro finalizada e o negócio parado em
+ *  "Visita / test drive"). */
+async function negocioAbertoDoCliente(tx: Tx, clienteId: number) {
+  const n = schema.negocios;
+  const [neg] = await tx
+    .select({ id: n.id })
+    .from(n)
+    .where(and(eq(n.clienteId, clienteId), inArray(n.etapa, ETAPAS_ABERTAS), sql`not exists (select 1 from vendas vd where vd.negocio_id = ${n.id} and vd.status <> 'cancelada')`))
+    .orderBy(desc(n.criadoEm))
+    .limit(1);
+  return neg?.id ?? null;
+}
+
 export async function criarVendaDireta(u: Quem, clienteId: number) {
   return db.transaction(async (tx) => {
     const [c] = await tx.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, clienteId)).limit(1);
     if (!c) throw new ErroRegra("Cliente não encontrado.");
-    const [v] = await tx.insert(schema.vendas).values({ clienteId, vendedorId: u.id, criadoPor: u.id, status: "rascunho" }).returning({ id: schema.vendas.id });
+    const negocioId = await negocioAbertoDoCliente(tx, clienteId);
+    const [v] = await tx.insert(schema.vendas).values({ clienteId, negocioId, vendedorId: u.id, criadoPor: u.id, status: "rascunho" }).returning({ id: schema.vendas.id });
+    if (negocioId) await tx.insert(schema.negocioEventos).values({ negocioId, tipo: "venda", descricao: `Venda ${numeroDoc("V", v.id)} iniciada em Vendas`, usuarioId: u.id });
     await registrarLog(u, { acao: "venda.criada", entidade: "venda", entidadeId: v.id, descricao: `Iniciou a venda ${numeroDoc("V", v.id)} para ${c.nome}` }, tx);
     return v.id;
   });
@@ -318,10 +335,14 @@ export async function finalizarVenda(u: Quem, vendaId: number) {
     const agora = new Date();
     await tx.update(schema.vendas).set({ status: "finalizada", finalizadaEm: agora, finalizadaPor: u.id, atualizadoEm: agora }).where(eq(schema.vendas.id, vendaId));
     await tx.update(schema.veiculos).set({ status: "vendido", vendidoEm: agora, atualizadoEm: agora }).where(eq(schema.veiculos.id, veic.id));
-    if (v.negocioId) {
-      await tx.update(schema.negocios).set({ etapa: "fechada", fechadoEm: agora, atualizadoEm: agora }).where(eq(schema.negocios.id, v.negocioId));
-      await tx.insert(schema.negocioEventos).values({ negocioId: v.negocioId, tipo: "venda", descricao: `Venda finalizada: ${brl(v.valorVendido)}`, usuarioId: u.id });
-      await anotarNegocioNaConversa(tx, v.negocioId, `Venda finalizada: ${brl(v.valorVendido)} (por ${u.nome})`);
+    /* venda sem negócio (feita direto em Vendas): fecha o negócio aberto do cliente, se houver */
+    const negocioId = v.negocioId ?? (await negocioAbertoDoCliente(tx, v.clienteId));
+    if (negocioId && !v.negocioId) await tx.update(schema.vendas).set({ negocioId }).where(eq(schema.vendas.id, vendaId));
+    if (negocioId) {
+      /* etapaDesde também: o funil mostra os encerrados pelos últimos 7/30/90 dias contados daqui */
+      await tx.update(schema.negocios).set({ etapa: "fechada", etapaDesde: agora, fechadoEm: agora, veiculoId: veic.id, atualizadoEm: agora }).where(eq(schema.negocios.id, negocioId));
+      await tx.insert(schema.negocioEventos).values({ negocioId, tipo: "venda", descricao: `Venda finalizada: ${brl(v.valorVendido)}`, usuarioId: u.id });
+      await anotarNegocioNaConversa(tx, negocioId, `Venda finalizada: ${brl(v.valorVendido)} (por ${u.nome})`);
     }
     await registrarLog(u, { acao: "venda.finalizada", entidade: "venda", entidadeId: vendaId, descricao: `Finalizou a venda ${numeroDoc("V", vendaId)}: ${veic.modelo} por ${brl(v.valorVendido)}` }, tx);
   });

@@ -55,7 +55,8 @@ export async function listarNegociosFunil(f: { responsavelId?: number; q?: strin
           : undefined,
       ),
     )
-    .orderBy(asc(n.etapaDesde))
+    /* mais recente primeiro (dono, 14/10/2026): a última mensagem, ou a última mudança de etapa */
+    .orderBy(sql`greatest(coalesce(${n.ultimaInteracaoEm}, ${n.criadoEm}), ${n.etapaDesde}) desc`)
     .limit(500);
 }
 export type CardNegocio = Awaited<ReturnType<typeof listarNegociosFunil>>[number];
