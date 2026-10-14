@@ -546,7 +546,23 @@ async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, ne
     !(conversaForaDaVenda(c.memoria.historico) && c.intencao !== "compra") &&
     !clienteEncerrou(c.textoBuffer);
   const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
-  return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo: c.intencao === "compra" && !clienteRecusouOModelo(c.textoBuffer) ? c.modeloDaConversa : null });
+  /* moto sem unidade Disponível não entra no follow-up (Simulador, 14/10/2026: "o que está faltando para concluirmos a sua
+     compra do Patinete 350W?" com o patinete em falta); vai a pergunta geral */
+  const modelo = c.intencao === "compra" && !clienteRecusouOModelo(c.textoBuffer) && c.modeloDaConversa && (await temUnidadeDisponivel(c.modeloDaConversa, !!c.conversa?.demo)) ? c.modeloDaConversa : null;
+  return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo });
+}
+
+/** O modelo tem unidade Disponível no estoque (veículo de teste só conta em conversa simulada)? */
+async function temUnidadeDisponivel(nome: string, demo: boolean) {
+  const v = schema.veiculos;
+  const m = schema.modelos;
+  const [modelo] = await db.select({ id: m.id }).from(m).where(sql`lower(${m.nome}) = ${nome.trim().toLowerCase()}`).limit(1);
+  const [u] = await db
+    .select({ id: v.id })
+    .from(v)
+    .where(and(eq(v.status, "disponivel"), demo ? undefined : eq(v.teste, false), modelo ? sql`(${v.modeloId} = ${modelo.id} or lower(${v.modelo}) = ${nome.trim().toLowerCase()})` : sql`lower(${v.modelo}) = ${nome.trim().toLowerCase()}`))
+    .limit(1);
+  return !!u;
 }
 
 /** Tarefa "Revisar atendimento da IA" em Follow-ups quando o cliente reclama (Arine, 06/10/2026). Uma pendente por conversa. */
