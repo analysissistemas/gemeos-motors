@@ -18,7 +18,10 @@ function instante(ano: number, mes: number, dia: number, hora: number, min: numb
 export const RX_QUER_VISITAR =
   /(?<![\p{L}])(test\s?drive|testar a moto|dar uma volta|andar nela|ver (ela |a moto |as motos )?pessoalmente|ver de perto|ir (ai|a[ií]|na loja|ate a loja|ate ai|ate a[ií])|passar (ai|a[ií]|na loja)|dar uma passad\p{L}*|dou uma passad\p{L}*|passo (ai|a[ií]|l[aá]|na loja)|dou um pulo|dar um pulo|visitar|conhecer a loja|vou (ai|a[ií]|na loja|passar ai|passar a[ií])|posso ir|quero ir|da pra ir|agendar (uma )?visita|marcar (uma )?visita)(?![\p{L}])/iu;
 /** A última mensagem da loja perguntou o dia e a hora da visita? */
-export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|test drive|passar)|que horas[^?]{0,40}(vir|passar|visita)|qual dia[^?]{0,40}(vir|passar|visita)|(me |nos )?(fala|diz|informa|manda)\s+(o|qual)\s+dia/iu;
+export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|test drive|passar)|que horas[^?]{0,40}(vir|passar|visita)|qual dia[^?]{0,40}(vir|passar|visita)|(me |nos )?(fala|diz|informa|manda)\s+(o|qual)\s+dia|que horas fica (melhor|bom)/iu;
+/** "Onde fica a loja?", "qual o endereço?", "manda a localização": quem pergunta onde fica quer vir (dono, 14/10/2026:
+ *  "quando o cliente pergunta aonde fica, a IA já pega o horário que ele vai e coloca como test drive"). */
+export const RX_PERGUNTA_ENDERECO = /(?<![\p{L}])(onde (fica|[ée]|voc[êe]s ficam|ficam|est[aã]o)|aonde (fica|[ée])|qual (o|[ée] o) endere[çc]o|endere[çc]o da loja|me (manda|passa|envia) (o endere[çc]o|a localiza[çc][ãa]o)|localiza[çc][ãa]o( da loja)?\??$)(?![\p{L}])/iu;
 
 const DIAS_SEMANA: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
 

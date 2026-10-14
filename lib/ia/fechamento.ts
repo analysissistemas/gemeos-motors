@@ -12,7 +12,7 @@
    - escolheu_entrega / escolheu_retirada: respondeu a pergunta "retirar ou entrega?"
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
-import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
+import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
 import { artigo } from "./estoque-tipos.ts";
 
 export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "negociar" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
@@ -105,6 +105,8 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
   if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
   if (RX_QUER_VISITAR.test(p.textoCliente)) return dh.temDia && dh.temHora ? "informou_visita" : "quer_visitar";
+  /* perguntou onde fica: responde o endereço e já pergunta o dia e o horário (dono, 14/10/2026) */
+  if (RX_PERGUNTA_ENDERECO.test(p.textoCliente)) return "quer_visitar";
   /* respondeu quantos km roda, depois do "me fala os km que eu faço a conta da economia" */
   if (/econom/.test(loja) && /km/.test(loja) && /(?<!\d)\d{1,4}\s*(km|quil)/.test(t)) return "informou_km";
   if (RX_PRECO_OBJ.test(t)) return "objecao_preco";
@@ -423,7 +425,7 @@ O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálog
 O cliente passou os dados da simulação. O sistema calcula e manda a simulação (ou pergunta o que falta): escreva só uma frase curta, sem valores.`;
     case "quer_visitar":
       return `# MOMENTO DA COMPRA
-O cliente quer vir à loja (visita ou test drive). Ótimo! Responda com entusiasmo e pergunte só qual dia e horário fica melhor para ele vir. Não diga que já agendou: o sistema agenda quando ele responder.`;
+O cliente quer vir à loja (visita ou test drive) ou perguntou onde ela fica. Ótimo! Se ele perguntou o endereço, dê o endereço da base de conhecimento. Responda com entusiasmo e pergunte só qual dia e horário fica melhor para ele vir. Não diga que já agendou: o sistema agenda quando ele responder.`;
     case "informou_visita":
       return `# MOMENTO DA COMPRA
 O cliente disse quando vem à loja. O sistema agenda e confirma: escreva só uma frase curta e calorosa, sem perguntas e sem dizer o horário.`;

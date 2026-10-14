@@ -84,6 +84,20 @@ test("o nome do patinete (350W) não é ficha: a frase de falta de estoque não 
   assert.doesNotMatch(soOQuePerguntou(["O *Patinete 530W* sai por R$ 3.500. Ele tem motor de 530W e anda a 30 km/h."], "quanto custa o patinete 530W?").join(" "), /30 km\/h/u);
 });
 
+test("perguntou onde fica: endereço e já pergunta o dia e o horário; dia e hora em mensagens separadas viram o test drive (dono, 14/10/2026)", async () => {
+  const { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA } = await import("../../lib/ia/agenda.ts");
+  for (const t of ["Onde fica a loja?", "aonde fica?", "qual o endereço?", "me manda a localização"]) assert.equal(momento(t, PRECO_X), "quer_visitar", t);
+  assert.notEqual(momento("vocês entregam onde?", PRECO_X), "quer_visitar");
+  /* a loja perguntou só a hora (texto do sistema) e o cliente respondeu a hora */
+  const perguntaHora = "Show! E que horas fica melhor pra você? Funcionamos de segunda a sábado, das 8h às 18h 😊";
+  assert.ok(RX_PEDIU_HORARIO_VISITA.test(perguntaHora));
+  assert.equal(momento("às 10h", perguntaHora), "informou_visita");
+  /* "quarta" numa mensagem e "às 10h" na outra: a mensagem de agora primeiro, depois as anteriores */
+  const AGORA = new Date("2026-10-14T12:00:00-03:00");
+  const dh = dataHoraDaVisita("às 10h\nCreio que quarta feira.", AGORA);
+  assert.ok(dh.temDia && dh.temHora && dh.quando);
+});
+
 test("Danilo Ferreira: 'essa não' tira o modelo do follow-up", () => {
   assert.equal(clienteRecusouOModelo("Não meu caro\n\nEssa não"), true);
   assert.equal(clienteRecusouOModelo("Essa aqui"), false);

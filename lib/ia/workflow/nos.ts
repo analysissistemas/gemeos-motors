@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
-import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { validarResposta } from "@/lib/ia/validador";
@@ -407,7 +407,14 @@ function horarioCurto(h: HorarioLoja) {
    de horário, histórico, conversa). Nunca diz que marcou sem ter marcado: falta dia ou hora, horário fora
    do funcionamento ou ocupado, ele pergunta de novo. */
 async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; nome: string | null; horario: HorarioLoja }): Promise<{ texto: string; quando: Date | null; erro?: string }> {
-  const dh = dataHoraDaVisita(c.textoBuffer);
+  let dh = dataHoraDaVisita(c.textoBuffer);
+  /* o dia numa mensagem e a hora na outra ("quarta" → "Que horas fica melhor?" → "às 10h"): junta com as 2 últimas
+     mensagens do cliente; a mensagem de agora vem primeiro e vale mais (dono, 14/10/2026) */
+  if (!dh.temDia || !dh.temHora) {
+    const recentes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((b) => b.startsWith("Lead:")).slice(-2).map((b) => b.replace(/^Lead:\s*/, "")).join("\n");
+    const junto = dataHoraDaVisita(`${c.textoBuffer}\n${recentes}`);
+    if (junto.temDia && junto.temHora) dh = junto;
+  }
   const funciona = horarioCurto(p.horario);
   if (!dh.temDia) return { texto: `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
   if (!dh.temHora || !dh.quando) return { texto: `Show! E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
@@ -1096,7 +1103,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const nomesCat = (await nomesDoCatalogo()).map((nome) => ({ nome }));
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
     const ultimaDaLoja = ultimaFalaDaLoja(c.memoria.historico);
-    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja);
+    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
     const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes) }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
