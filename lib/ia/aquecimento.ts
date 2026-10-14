@@ -167,7 +167,7 @@ export function lojaFicouDeVer(textoDaLoja: string): boolean {
  *  você", e 10 min depois saiu o follow-up). Fica só a última tentativa. */
 export function clienteVaiRetornar(textoDoCliente: string): boolean {
   const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-  return /(?<![a-z])(?:(?:vou|irei|deixa eu|deixe eu) (?:mostrar|passar|repassar|pensar|analisar|ver com|falar com|conversar com)|(?:te|lhe) (?:aviso|chamo|falo|retorno|procuro)|(?:qualquer coisa|se (?:ele|ela|eu) (?:tiver|gostar|quiser|decidir)|caso (?:ele |ela |eu )?(?:tenha|goste|queira|decida))[^.?!\n]{0,40}(?:chamo|falo|aviso|solicito|retorno|procuro|mando)|depois (?:eu )?(?:te )?(?:chamo|falo|volto|retorno|aviso)|(?:preciso|vou) pensar|mais tarde (?:eu )?(?:te )?(?:chamo|falo))(?![a-z])/.test(t);
+  return /(?<![a-z])(?:(?:vou|irei|deixa eu|deixe eu) (?:mostrar|passar|repassar|pensar|analisar|ver com|falar com|conversar com)|(?:te|lhe) (?:aviso|chamo|falo|retorno|procuro)|(?:qualquer coisa|se (?:ele|ela|eu) (?:tiver|gostar|quiser|decidir)|caso (?:ele |ela |eu )?(?:tenha|goste|queira|decida))[^.?!\n]{0,40}(?:chamo|falo|aviso|solicito|retorno|procuro|mando)|depois (?:eu )?(?:te )?(?:chamo|falo|volto|retorno|aviso)|(?:preciso|vou) pensar|mais tarde (?:eu )?(?:te )?(?:chamo|falo)|(?:depois|essa semana|semana que vem|amanha|qualquer dia) (?:eu )?(?:passo|dou uma passad\w*|vou) (?:ai|la|na loja|pessoalmente)|dou uma passad\w*)(?![a-z])/.test(t);
 }
 
 /** O cliente encerrou o assunto ("Já resolveu!", "obrigado, era só isso", "tudo certo", "valeu"): nada de follow-up
@@ -176,7 +176,14 @@ export function clienteVaiRetornar(textoDoCliente: string): boolean {
 export function clienteEncerrou(textoDoCliente: string): boolean {
   const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
   if (!t || /\?/.test(t) || t.split(/\s+/).length > 10) return false;
-  return /(?<![a-z])(?:ja\s+(?:resolv\w*|consegui|deu\s+certo|sei|vi|entendi)|(?:esta\s+|ta\s+)?resolvid[oa]|(?:era|e)\s+so\s+isso|so\s+isso\s+mesmo|tudo\s+(?:certo|ok|resolvido)|deu\s+certo|nao\s+precis[ao]\s+mais|ja\s+nao\s+precis[ao]|obrigad[oa]|obg|brigad[oa]|valeu|vlw|agradec\w*)(?![a-z])/.test(t);
+  return /(?<![a-z])(?:ja\s+(?:resolv\w*|consegui|deu\s+certo|sei|vi|entendi)|(?:esta\s+|ta\s+)?resolvid[oa]|(?:era|e)\s+so\s+isso|so\s+isso\s+mesmo|tudo\s+(?:certo|ok|resolvido)|deu\s+certo|nao\s+precis[ao]\s+mais|ja\s+nao\s+precis[ao]|obrigad[oa]|obgd?|brgd|brigad[oa]|valeu|vlw|agradec\w*|boas\s+vendas|ja\s+comprei|comprei\s+(?:em|na|no|com)\s+outr\w*|deixa\s+(?:quieto|pra\s+la|para\s+la)|esquece|desisti|desisto)(?![a-z])/.test(t);
+}
+
+/** O cliente disse que não quer o modelo que a loja ofereceu ("Não meu caro. Essa não", Danilo Ferreira, 09/10/2026, e o
+ *  follow-up 1 minuto depois perguntou da potência da X GÊMEOS): o follow-up não cita modelo. */
+export function clienteRecusouOModelo(textoDoCliente: string): boolean {
+  const t = textoDoCliente.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return /(?<![a-z])(?:ess[ae]\s+nao|nao\s+(?:e|eh)\s+ess[ae]|nao\s+quero\s+ess[ae]|nao\s+gostei\s+dess[ae])(?![a-z])/.test(t);
 }
 
 /** A conversa já virou recado ou assistência em algum momento (o histórico mostra o texto do sistema): follow-up de

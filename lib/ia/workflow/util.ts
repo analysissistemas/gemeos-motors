@@ -218,6 +218,15 @@ export function deveRepetirPerguntaDoNome(historico: string | null | undefined):
   /* o histórico não traz a mensagem que acabou de chegar: ela conta como +1 (teste de 07/10/2026) */
   return vezes > 0 && vezes < MAX_PERGUNTAS_NOME && depois + 1 >= 2;
 }
+/** A loja já chamou o cliente pelo nome do perfil do WhatsApp ("Entendo seu desejo por um desconto, Andressa"): perguntar
+ *  "com quem eu falo?" depois disso soa robô (Andressa Souto e Lucileide Maria, 08 e 10/10/2026). */
+export function jaChamouPeloNome(perfil: string | null | undefined, historico: string | null | undefined, resposta: string[]): boolean {
+  const nome = primeiroNome(nomeDoPerfil(perfil));
+  if (!nome) return false;
+  const rx = new RegExp(`(?<![\\p{L}])${nome}(?![\\p{L}])`, "iu");
+  const daLoja = (historico ?? "").split(/\n\s*\n/).filter((b) => /^(Agente IA|Vendedor):/.test(b.trim()));
+  return [...daLoja, ...resposta].some((b) => rx.test(b));
+}
 export const REPERGUNTAS_NOME = ["Ah, antes que eu esqueça: com quem eu falo? 😊", "E me diz, qual é o seu nome? 😊", "Só pra eu te atender melhor: como posso te chamar? 😊"];
 
 /** O cliente só respondeu o nome ("Guilherme", "é a Carla", "meu nome é Rui") logo depois de a loja perguntar.

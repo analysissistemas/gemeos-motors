@@ -6,7 +6,8 @@
    Momentos (o que a última mensagem do cliente mostra):
    - interesse: quer a moto (cita o modelo e fala em comprar, preço, condição), ainda avaliando
    - decidido: "vou querer", "fechado", "quero essa"
-   - objecao_preco: "achei caro", "tem desconto?"
+   - objecao_preco: "achei caro", "tem desconto?", "faz 1800 à vista?", "deixa quieto" logo depois do preço (1ª vez: persuasão)
+   - negociar: insistiu no desconto depois da persuasão, ou falou do preço de um anúncio (o vendedor assume)
    - objecao: "vou pensar", "não sei", "vou falar com minha esposa"
    - escolheu_entrega / escolheu_retirada: respondeu a pergunta "retirar ou entrega?"
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
@@ -14,7 +15,7 @@
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "./agenda.ts";
 import { artigo } from "./estoque-tipos.ts";
 
-export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
+export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "negociar" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
 /** Nestes momentos a IA não passa a conversa ao vendedor por conta própria: o fechamento segue até os dados
  *  chegarem (aí o sistema passa). Só passa antes se o cliente pedir uma pessoa. */
@@ -36,6 +37,26 @@ const RX_DECIDIDO =
 /* "cara" sozinho é gíria ("cara, quero essa"): só conta com "achei", "tá", "muito"... */
 const RX_PRECO_OBJ =
   /(?<![a-z])((achei|ta|esta|muito|meio|bem|bastante|um pouco|mt|mto|que) car[oa]|carissim[oa]|salgad[oa]|puxad[oa]|pesad[oa] (no bolso|pra mim)|(nao|n) (tenho|to com|estou com) (esse |todo esse )?(dinheiro|grana|valor)|sem (dinheiro|grana)|desconto|abaix(a|ar|ou) (o preco|o valor|pra|para|um pouco)|faz (por|mais barato)|ta alto|valor alto|fora do (meu )?orcamento|nao cabe no|muito dinheiro)(?![a-z])/;
+/* Pedido de desconto e contraproposta (Andressa Souto, 08/10/2026: "Vc faz 1800 a vista?", a IA disse "sem possibilidade
+   de desconto" e o vendedor topou negociar no dia seguinte). Dono, 13/10/2026: primeiro persuadir com os ganhos; se o
+   cliente insistir, passar para o vendedor. Texto sem acento. */
+export const RX_NEGOCIA =
+  /(?<![a-z])(faz (?:por |em |a |pra )?(?:r\$ ?)?(?:\d{3,}|\d{1,3}[.,]\d{3}|\d+ ?mil)(?![\dx])|deixa (?:por|em|a) (?:r\$ ?)?\d|(?:da|consegue|pode|tem como) (?:pra |para )?(?:fazer|deixar|fechar) (?:por|em|a) (?:r\$ ?)?\d|(?:da|consegue|pode|tem como) (?:pra |para )?(?:baixar|melhorar|abaixar) (?:o |um |esse )?(?:preco|valor|pouco|precinho)|(?:fazer|faz) mais barato|menor (?:valor|preco)|ultimo (?:valor|preco)|precinho|chorar)(?![a-z])/;
+/* preço visto num anúncio (Danilo, 10/10/2026: "e esse do anúncio? Neste preço do anúncio, não tem?" e a IA inventou
+   "igual ao do anúncio"): a IA não sabe o preço dos anúncios, então o vendedor confere */
+export const RX_ANUNCIO_PRECO = /(?:preco|valor)[^?\n]{0,30}(?:anuncio|anunciad|propaganda)|(?:anuncio|propaganda)[^?\n]{0,40}(?:preco|valor)|ess[ea] do anuncio/;
+/* desistiu logo depois do preço ("Então deixa quieto", Danilo, 10/10/2026) */
+const RX_DESISTIU = /(?<![a-z])(deixa (?:quieto|pra la|para la)|esquece|nao vou (?:mais )?(?:querer|levar)|vou deixar (?:pra la|quieto|para depois|pra depois)|fica pra (?:proxima|outra)|desisto|desisti)(?![a-z])/;
+/* só agradeceu logo depois do preço ("Brgd", Damarys, 07/10/2026): é o "achei caro" calado */
+const RX_SO_OBRIGADO = /^(?:ok|blz|beleza|ta|certo|ah)?[\s,.!]*(?:brgd|obg|obgd|obrigad[oa]|valeu|vlw|agradeco|grat[ao])[\s,.!]*$/;
+/** Pedido de desconto, contraproposta, preço de anúncio ou objeção de preço numa mensagem do cliente (sem o contexto). */
+export const falaDePreco = (texto: string) => {
+  const t = semAcento(texto);
+  return RX_PRECO_OBJ.test(t) || RX_NEGOCIA.test(t) || RX_ANUNCIO_PRECO.test(t) || RX_DESISTIU.test(t);
+};
+/** Quantas mensagens anteriores do cliente já foram objeção de preço ou pedido de desconto (a persuasão já foi). */
+export const objecoesDePrecoAntes = (leadAntes: string) => (leadAntes ?? "").split("\n").filter((l) => /^Lead:/.test(l) && falaDePreco(l)).length;
+
 const RX_DUVIDA =
   /(?<![a-z])(vou pensar|deixa eu (ver|pensar)|preciso pensar|vou ver|depois (eu )?(vejo|falo|volto|decido)|nao sei|to em duvida|estou em duvida|indecis\w*|medo|receio|sera que|(falar|conversar|ver) com (a |o )?(minha |meu )?(esposa|marido|mulher|namorad[oa]|pai|mae|familia)|nao tenho certeza|ainda nao)(?![a-z])/;
 const RX_OPCOES = /(?<![a-z])(quais (modelos|motos|opcoes|voces tem)|que (modelos|motos)|(mais|menor|o mais) (barat\w*|em conta|acessive\w*)|opcoes|catalogo|o que voces tem|tem o que|mostra (as|os) (motos|modelos)|estou pesquisando|to pesquisando|so pesquisando|comparar)(?![a-z])/;
@@ -43,7 +64,7 @@ const RX_QUER_COMPRAR = /(?<![a-z])(quero (comprar|uma moto|um patinete|adquirir
 const RX_INTERESSE = /(?<![a-z])(quero|queria|interess\w*|comprar|compra|preco|valor|quanto|condic\w*|pagamento|parcel\w*|a vista|pix|cartao|disponivel|tem (a|o|essa|esse))(?![a-z])/;
 
 /** Em que momento da compra o cliente está, pela mensagem dele e pela última mensagem da loja. */
-export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date }): Momento | null {
+export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
   /* respondendo a lista de dados */
@@ -74,6 +95,11 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (RX_SIMULACAO_ENVIADA.test(loja) && RX_PEDE_TOTAL.test(t) && !sim.parcelas) return "pediu_simulacao";
   /* não aceitou a simulação que o sistema mandou: o vendedor consulta a gerência (relatório do dono, 10/10/2026) */
   if (RX_SIMULACAO_ENVIADA.test(loja) && !sim.parcelas && !RX_VAI_DE_PIX.test(t) && (RX_RECUSA.test(t) || RX_PRECO_OBJ.test(t))) return "recusou_simulacao";
+  /* desconto, contraproposta, anúncio, "deixa quieto" ou só "obrigado" logo depois do preço: na 1ª vez a IA persuade com
+     os ganhos; insistiu (ou é preço de anúncio, que a IA não sabe), o vendedor assume (dono, 13/10/2026) */
+  const depoisDoPreco = /r\$\s*\d/.test(loja) && !RX_SIMULACAO_ENVIADA.test(loja);
+  const pedeCondicao = RX_NEGOCIA.test(t) || RX_ANUNCIO_PRECO.test(t) || RX_PRECO_OBJ.test(t) || (depoisDoPreco && (RX_DESISTIU.test(t) || RX_SO_OBRIGADO.test(t.trim())));
+  if (pedeCondicao) return RX_ANUNCIO_PRECO.test(t) || (p.objecoesAntes ?? 0) >= 1 ? "negociar" : "objecao_preco";
   if (RX_QUER_PARCELAR.test(t)) return "quer_parcelar";
   /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
@@ -382,7 +408,7 @@ O cliente tem interesse em ${m}. Responda SÓ o que ele perguntou, com os dados 
 O cliente decidiu comprar ${m}. Parabenize com entusiasmo e naturalidade (ótima aquisição: economia no dia a dia, sem gasolina, sem IPVA nem emplacamento, conforto) e pergunte só: "Você prefere retirar aqui na loja ou receber por entrega?".`;
     case "objecao_preco":
       return `# MOMENTO DA COMPRA
-O cliente achou caro. Não ofereça desconto (quem negocia é o vendedor). Mostre o valor: com a moto elétrica ele nunca mais gasta com gasolina e não paga IPVA nem emplacamento. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular a economia. Pode lembrar que dá para parcelar no cartão.`;
+O cliente achou caro, pediu desconto ou propôs um valor menor. NUNCA diga que não tem desconto, que o preço é fixo ou que não dá para baixar, e não prometa desconto: quem negocia é o vendedor, e o sistema passa para ele se o cliente insistir. Vire o jogo: em vez de falar do preço, mostre o que ele GANHA e o que deixa de gastar todo mês com ${m}: nunca mais gasolina, sem IPVA nem emplacamento, manutenção simples e barata, carrega na tomada de casa. Num patinete, o ganho é a passagem de ônibus, o mototáxi ou o aplicativo que ele deixa de pagar todo dia. Mostre que o valor se paga com essa economia. Se souber quanto ele roda, use a CONTA DO CLIENTE do catálogo; se não souber, pergunte quantos km ele roda por dia para calcular. Pode lembrar que no Pix sai o melhor valor e que dá para parcelar no cartão. Tom caloroso, sem discutir com o cliente.`;
     case "pesquisando":
       return `# MOMENTO DA COMPRA
 O cliente ainda não escolheu e quer conhecer as opções. NÃO sugira nem escolha modelos por ele (dono, 09/10/2026: a IA errava e só oferecia a mesma moto). Mande o catálogo para ele ver, em uma frase curta: "dá uma olhada no nosso catálogo com todos os modelos, fotos e preços: gemeosmotors.com.br" (escreva o endereço exatamente assim) e faça UMA pergunta: qual modelo chamou a atenção dele. Só fale de um modelo específico se o cliente perguntar por ele pelo nome.`;
@@ -417,6 +443,28 @@ O cliente mandou parte dos dados que você pediu. Agradeça e peça só o que ai
     default:
       return "";
   }
+}
+
+/** O cliente insistiu no desconto depois da persuasão, ou falou do preço de um anúncio: o vendedor assume (dono,
+ *  13/10/2026: "passar para o vendedor, mas primeiro tentar persuadir"). Sem prometer desconto e sem valor. */
+export function textoNegociacao(p: { nome: string | null; anuncio: boolean; lojaAberta: boolean }) {
+  const voc = p.nome ? `, ${p.nome}` : "";
+  const quando = p.lojaAberta ? "e ele te responde por aqui" : "e assim que a loja abrir ele te responde por aqui";
+  return p.anuncio
+    ? `Entendi${voc}! Vou pedir pro nosso vendedor conferir esse anúncio que você viu ${quando} 🙏`
+    : `Entendi${voc}! Vou passar o seu pedido agora pro nosso vendedor ver o que ele consegue fazer pra você ${quando} 🙏`;
+}
+
+/* Frase que a IA não pode dizer (conversas de 08 a 10/10/2026): fechar a porta da negociação ("sem possibilidade de
+   desconto", e o vendedor negociou no dia seguinte) e inventar sobre preço de anúncio ("igual ao do anúncio", "o preço
+   divulgado pode variar conforme promoções"). Sai só a frase; o resto da resposta fica. Texto sem acento no teste. */
+const RX_FRASE_PROIBIDA =
+  /(?:sem|n[ãa]o\s+(?:tem|temos|h[áa]|existe|trabalhamos\s+com))\s+(?:a\s+)?(?:possibilidade\s+de\s+|como\s+(?:dar|fazer)\s+)?desconto|n[ãa]o\s+(?:podemos|conseguimos|d[áa]\s+(?:pra|para)|[ée]\s+poss[íi]vel|tem\s+como)\s+(?:reduzir|baixar|diminuir|abaixar|dar\s+desconto|mexer|fazer\s+por)|pre[çc]o\s+(?:[ée]\s+)?(?:fixo|tabelado)|igual\s+ao\s+(?:do\s+|que\s+(?:voc[êe]\s+)?viu\s+no\s+)?an[úu]ncio|(?:pre[çc]o|valor)\s+(?:divulgado|anunciado|do\s+an[úu]ncio)\s+pode\s+variar|promo[çc](?:[ãa]o|[õo]es)\s+pontua/iu;
+export function tirarFraseProibida(resposta: string[]): string[] {
+  const FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu;
+  return resposta
+    .map((b) => (RX_FRASE_PROIBIDA.test(b) ? (b.match(FRASES) ?? [b]).filter((f) => !RX_FRASE_PROIBIDA.test(f)).join("").trim() : b))
+    .filter((b) => /\p{L}/u.test(b));
 }
 
 /* Frase que adia a venda ("O que acha de conversarmos melhor amanhã?", "A loja está fechada neste momento"):

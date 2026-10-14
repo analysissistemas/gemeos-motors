@@ -82,7 +82,9 @@ test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () =>
     assert.doesNotMatch(textoDadosRecebidos({ nome: "Ana", modelo: "T1", modo, lojaAberta: aberta }, s), /conclu[ií]d|reservad|separad[ao] (pra|para) voc/);
   assert.ok(pediuDadosDeRetirada(listaDeDados("retirada", {})));
   assert.ok(!pediuDadosDeRetirada(listaDeDados("entrega", {})));
-  assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /Não ofereça desconto/);
+  /* dono, 13/10/2026: não promete desconto, mas também não fecha a porta ("sem desconto"); se insistir, vai ao vendedor */
+  assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /não prometa desconto/);
+  assert.match(instrucaoDeFechamento("objecao_preco", "AG08"), /NUNCA diga que não tem desconto/);
   /* Milton (12/10/2026): a pergunta de fechamento sai da resposta e vira o 1º follow-up */
   assert.match(instrucaoDeFechamento("interesse", "AG08"), /NÃO pergunte "o que está faltando para concluirmos\?" agora/);
   assert.equal(instrucaoDeFechamento(null, null), "");

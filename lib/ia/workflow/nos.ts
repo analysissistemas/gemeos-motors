@@ -8,7 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
-import { clienteEncerrou, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
+import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -40,7 +40,7 @@ import {
 import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
-import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -55,7 +55,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corNoTexto, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 import { ETAPAS_ABERTAS, TIPOS_ELETRICOS } from "@/lib/dominio";
@@ -546,7 +546,7 @@ async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, ne
     !(conversaForaDaVenda(c.memoria.historico) && c.intencao !== "compra") &&
     !clienteEncerrou(c.textoBuffer);
   const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
-  return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo: c.intencao === "compra" ? c.modeloDaConversa : null });
+  return agendarAquecimento({ conversaId: c.conversaId, clienteId: clienteId ?? cv.clienteId, negocioId: negocioId ?? cv.negocioId, usuarioId: cv.responsavelId, qualifica, nome, modelo: c.intencao === "compra" && !clienteRecusouOModelo(c.textoBuffer) ? c.modeloDaConversa : null });
 }
 
 /** Tarefa "Revisar atendimento da IA" em Follow-ups quando o cliente reclama (Arine, 06/10/2026). Uma pendente por conversa. */
@@ -1081,7 +1081,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
     const ultimaDaLoja = ultimaFalaDaLoja(c.memoria.historico);
     const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja);
-    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa }) : null;
+    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes) }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -1229,6 +1229,18 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       await criarTarefaGerencia(c, modeloDaConversa, c.textoBuffer);
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, gerencia: true } };
+    }
+    /* insistiu no desconto depois da persuasão, ou falou do preço de um anúncio: o vendedor assume (dono, 13/10/2026:
+       "passar para o vendedor, mas primeiro tentar persuadir o cliente com os ganhos") */
+    if (momento === "negociar") {
+      const anuncio = RX_ANUNCIO_PRECO.test(c.textoBuffer.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase());
+      const relato = textoDoCliente(c).replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
+      const texto = textoNegociacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), anuncio, lojaAberta: aberta });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      const motivo = anuncio
+        ? `Preço de anúncio: o cliente viu um preço num anúncio${modeloDaConversa ? ` da ${modeloDaConversa}` : ""} e quer saber se vale. Conferir o anúncio e responder. O cliente escreveu: "${relato}"`
+        : `Negociação: o cliente insistiu no desconto${modeloDaConversa ? ` da ${modeloDaConversa}` : ""} depois de a IA mostrar a economia. Ver o que dá pra fazer e responder. O cliente escreveu: "${relato}"`;
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: texto, transferir: true } };
     }
     /* o cliente disse quando vem à loja: o sistema marca na agenda de test drive (mesma regra de conflito
        da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
@@ -1418,6 +1430,8 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     resposta = tirarPropostaAntiga(resposta);
     /* venda não se adia (05/10/2026: "a IA, mesmo com a loja fechada, tem que ir até o sim") */
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
+    /* nada de "sem desconto" nem de inventar sobre preço de anúncio (Andressa e Danilo, 08 e 10/10/2026) */
+    resposta = tirarFraseProibida(resposta);
     resposta = tirarTriciclo(resposta, await triciclosComEstoque(c));
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
     resposta = resposta.map((b) => b.replace(/\\n/g, "\n").trim()).filter((b) => /\p{L}/u.test(b));
@@ -1516,7 +1530,7 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
         /* depois de uma lista ("• *T1* ... R$ 12.000"), a pergunta vai numa linha própria (teste de 13/10/2026) */
         else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
       }
-    } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !resposta.some((b) => /\?/.test(b))) {
+    } else if (resposta.length && !vaiParaEquipe && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && !resposta.some((b) => /\?/.test(b))) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
       resposta = [...resposta, variar(PERGUNTAS_NOME)];
     }
@@ -1524,9 +1538,9 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
        meio de um passo importante (parcelas, entrega, dados, visita) — dono, 07/10/2026 */
     /* disse que ele volta a falar ("vou mostrar a ele") ou encerrou ("já resolveu"): não cobra o nome (12/10/2026) */
     const fechandoAConversa = clienteVaiRetornar(c.textoBuffer) || clienteEncerrou(c.textoBuffer);
-    if (!abertura && resposta.length && !vaiParaEquipe && !fechandoAConversa && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
+    if (!abertura && resposta.length && !vaiParaEquipe && !fechandoAConversa && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
       /* pela etapa da conversa, não por palavra solta ("pronta para entrega" bloqueava a pergunta, teste de 07/10/2026) */
-      const passoImportante = ["quer_parcelar", "pediu_simulacao", "recusou_simulacao", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
+      const passoImportante = ["quer_parcelar", "pediu_simulacao", "recusou_simulacao", "negociar", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
       if (!passoImportante && !resposta.some((b) => /\?/.test(b))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
     }
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
