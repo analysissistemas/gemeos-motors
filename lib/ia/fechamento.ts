@@ -499,7 +499,9 @@ const RX_FRASE_FICHA = /autonomia|bateria|motor|pot[êe]ncia|velocidade|recarga|
 export function soOQuePerguntou(resposta: string[], textoCliente: string): string[] {
   if (RX_PEDIU_FICHA.test(semAcento(textoCliente))) return resposta;
   const r = resposta
-    .map((b) => (/\n\s*[•\-]/.test(b) ? b : (b.match(RX_FRASES) ?? [b]).filter((f) => /R\$/.test(f) || !RX_FRASE_FICHA.test(f)).join("").trim()))
+    /* o nome do modelo não é ficha: "*Patinete 350W*" tem "350W" no nome (teste de 14/10/2026: "No momento não temos o
+       *Patinete 350W*" era cortada e sobrava só "Posso anotar seu interesse?") */
+    .map((b) => (/\n\s*[•\-]/.test(b) ? b : (b.match(RX_FRASES) ?? [b]).filter((f) => /R\$/.test(f) || !RX_FRASE_FICHA.test(f.replace(/\*[^*\n]+\*/g, "").replace(/patinetes?\s+\d+\s*w(?![\p{L}])/giu, ""))).join("").trim()))
     .filter((b) => /\p{L}/u.test(b));
   /* sobrou pouco texto: vai junto, numa mensagem */
   const junto = r.join(" ");

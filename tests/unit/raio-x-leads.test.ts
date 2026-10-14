@@ -76,6 +76,14 @@ test("Lucileide e Arine: 'dou uma passadinha' e 'depois passo aí' são visita (
   assert.equal(momento("Creio que quarta feira.", "Fico Muito feliz! me fala o dia e horário para eu deixar tudo certinho com a minha equipe!"), "informou_visita");
 });
 
+test("o nome do patinete (350W) não é ficha: a frase de falta de estoque não some (Simulador, 14/10/2026)", async () => {
+  const { soOQuePerguntou } = await import("../../lib/ia/fechamento.ts");
+  const r = soOQuePerguntou(["No momento não temos unidade disponível do *Patinete 350W* para pronta entrega. Posso anotar seu interesse e te avisar aqui assim que chegar?"], "Oi, quanto custa o patinete 350W?");
+  assert.match(r.join(" "), /não temos unidade disponível do \*Patinete 350W\*/u);
+  /* a ficha de verdade continua saindo no orçamento */
+  assert.doesNotMatch(soOQuePerguntou(["O *Patinete 530W* sai por R$ 3.500. Ele tem motor de 530W e anda a 30 km/h."], "quanto custa o patinete 530W?").join(" "), /30 km\/h/u);
+});
+
 test("Danilo Ferreira: 'essa não' tira o modelo do follow-up", () => {
   assert.equal(clienteRecusouOModelo("Não meu caro\n\nEssa não"), true);
   assert.equal(clienteRecusouOModelo("Essa aqui"), false);
