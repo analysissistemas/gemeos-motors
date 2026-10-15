@@ -107,7 +107,9 @@ export async function acaoSugestaoVenda(negocioId: number) {
   const [mem] = cv ? await db.select({ fatos: schema.iaMemorias.fatos }).from(schema.iaMemorias).where(eq(schema.iaMemorias.conversaId, cv.id)).limit(1) : [];
   const fatos = (mem?.fatos ?? {}) as { interesse?: string | null; pagamento?: string | null };
   const triagem = (cv?.triagem ?? {}) as { veiculo?: string | null; interesse?: string | null };
-  const interesse = [neg.veiculoInteresse, fatos.interesse, triagem.veiculo, triagem.interesse].filter(Boolean).join(" · ") || null;
+  /* sem repetir ("N2 preta · N2 preta · N2 preta" no Simulador, 15/10/2026) */
+  const ditos = [neg.veiculoInteresse, fatos.interesse, triagem.veiculo, triagem.interesse].map((x) => x?.trim()).filter((x): x is string => !!x);
+  const interesse = ditos.filter((x, i) => ditos.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).join(" · ") || null;
   const veiculo = neg.veiculoId ? (vendaveis.find((v) => v.id === neg.veiculoId) ?? null) : escolherVeiculo(vendaveis, interesse);
   const ditoPagamento = pagamentoDasObservacoes(neg.observacoes) ?? fatos.pagamento ?? null;
   const pagamento = pagamentoDoTexto(ditoPagamento);

@@ -526,3 +526,12 @@ export function textoRecusouSimulacao(p: { nome: string | null; modelo: string |
   const eletrico = artigo(p.modelo) === "o" ? "o patinete elétrico" : "a moto elétrica";
   return `Entendo${voc}! Vamos achar um jeito que caiba no seu bolso 😊\n${opcoes.join("\n")}\nE lembra: com ${eletrico} você esquece a gasolina, e essa economia já ajuda a pagar a parcela. Qual dessas fica melhor pra você?`;
 }
+
+/** O cliente já disse como quer receber ("quero a N2, vou buscar na loja"): a IA não pergunta "retirar ou entrega?"
+ *  de novo (Simulador, 15/10/2026) e manda direto a lista de dados. Null se não disse ou se citou os dois. */
+export function jaDisseComoReceber(texto: string): "entrega" | "retirada" | null {
+  const t = semAcento(texto);
+  const entrega = RX_ENTREGA.test(t);
+  const retirada = RX_RETIRADA.test(t);
+  return entrega === retirada ? null : entrega ? "entrega" : "retirada";
+}

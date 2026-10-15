@@ -218,3 +218,11 @@ test("Pablo Júnior: reclamou antes, mas agora pede moto — é compra (12/10/20
   assert.notEqual(intencaoDoTexto("Não é problema não"), "assistencia");
   assert.equal(intencaoDoTexto("Comprei uma com vocês e me arrependi"), "assistencia");
 });
+
+test("já disse como quer receber: não pergunta de novo (Simulador, 15/10/2026)", async () => {
+  const { jaDisseComoReceber } = await import("../../lib/ia/fechamento.ts");
+  assert.equal(jaDisseComoReceber("Quero comprar a N2 preta, vou pagar no pix. Vou buscar na loja"), "retirada");
+  assert.equal(jaDisseComoReceber("quero a T1, vocês entregam em Itambé?"), "entrega");
+  assert.equal(jaDisseComoReceber("Quero comprar a N2 preta"), null);
+  assert.equal(jaDisseComoReceber("posso buscar ou vocês entregam?"), null);
+});
