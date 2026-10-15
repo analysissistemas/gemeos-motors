@@ -481,6 +481,14 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
     if (d.numero) patch.numero = d.numero;
     if (d.bairro) patch.bairro = d.bairro;
     if (cidade) patch.cidade = cidade;
+  } else {
+    /* retirada: o endereço que ele mandou é o de casa e vai no documento da venda (dono, 15/10/2026: "antes da
+       documentação eu não inseri o CPF do cliente e onde ele mora"); só preenche o que o cadastro ainda não tem */
+    if (d.cep && !cli.cep) patch.cep = d.cep;
+    if (d.rua && !cli.endereco) patch.endereco = d.rua;
+    if (d.numero && !cli.numero) patch.numero = d.numero;
+    if (d.bairro && !cli.bairro) patch.bairro = d.bairro;
+    if (cidade && !cli.cidade) patch.cidade = cidade;
   }
   if (Object.keys(patch).length) await db.update(schema.clientes).set({ ...patch, atualizadoEm: new Date() }).where(eq(schema.clientes.id, clienteId));
 

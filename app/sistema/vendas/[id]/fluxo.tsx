@@ -15,7 +15,7 @@ import { AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/
 import { Dialogo } from "@/components/ui/dialogo";
 import { Passos } from "@/components/ui/passos";
 import { EditorPagamentos, type Pagamento } from "@/components/vendas/editor-pagamentos";
-import { FormularioCliente } from "@/components/clientes/formulario-cliente";
+import { ClienteNaTela } from "@/components/clientes/formulario-cliente";
 import { SeletorCliente } from "@/components/clientes/seletor-cliente";
 import {
   acaoAssinaturaPresencial,
@@ -62,6 +62,8 @@ export function FluxoVenda({
   const [editandoCliente, setEditandoCliente] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
+  /* o que o documento da venda precisa do cliente e ainda não tem */
+  const faltaNoCliente = [!soDigitos(d.cliente.cpf) && "CPF", !(d.cliente.endereco && d.cliente.cidade) && "endereço"].filter((x): x is string => !!x);
   const somaPag = Math.round(f.pagamentos.reduce((s, p) => s + (p.valor ?? 0), 0) * 100);
   const pagamentosOk = !!f.valorVendido && somaPag === Math.round(f.valorVendido * 100);
   const completos = [
@@ -171,6 +173,29 @@ export function FluxoVenda({
                 <SeletorCliente valor={f.cliente} aoMudar={(c) => c && setF((x) => ({ ...x, cliente: c }))} equipe={equipe} />
               </Campo>
             )}
+            {!somenteLeitura && (editandoCliente || faltaNoCliente.length > 0) ? (
+              <>
+                {faltaNoCliente.length > 0 && (
+                  <div className="mb-4 flex items-start gap-2 rounded-2xl border border-atencao/40 bg-atencao/10 px-4 py-3 text-[13px]">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                      Falta <b>{faltaNoCliente.join(" e ")}</b> para o documento da venda. Preencha aqui mesmo e clique em Salvar dados do cliente.
+                    </span>
+                  </div>
+                )}
+                <ClienteNaTela
+                  key={[d.cliente.id, d.cliente.cpf, d.cliente.endereco, d.cliente.atualizadoEm?.toString()].join("|")}
+                  inicial={d.cliente}
+                  equipe={equipe}
+                  aoSalvar={() => {
+                    setEditandoCliente(false);
+                    router.refresh();
+                  }}
+                  aoCancelar={faltaNoCliente.length ? undefined : () => setEditandoCliente(false)}
+                />
+              </>
+            ) : (
+            <>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
               <ItemInfo rotulo="Nome">{d.cliente.nome}</ItemInfo>
               <ItemInfo rotulo="CPF">{d.cliente.cpf ? formatarCpf(d.cliente.cpf) : <span className="text-critico">Não informado</span>}</ItemInfo>
@@ -182,8 +207,10 @@ export function FluxoVenda({
             </dl>
             {!somenteLeitura && (
               <Botao className="mt-4" tamanho="sm" onClick={() => setEditandoCliente(true)}>
-                <PenLine className="size-4" /> Editar cadastro do cliente
+                <PenLine className="size-4" /> Editar dados do cliente
               </Botao>
+            )}
+            </>
             )}
           </Etapa>
         )}
@@ -197,7 +224,15 @@ export function FluxoVenda({
                 onChange={(e) => {
                   const id = e.target.value ? Number(e.target.value) : null;
                   const x = veiculos.find((y) => y.id === id);
-                  setF((s) => ({ ...s, veiculoId: id, valorAnunciado: s.valorAnunciado ?? x?.valorAnunciado ?? null }));
+                  /* o anunciado é o preço da moto escolhida (dono, 15/10/2026: ficava travado em R$ 8.999,90, o valor do negócio,
+                     com a N2 de R$ 5.890); o vendido acompanha enquanto ninguém digitou outro */
+                  setF((s) => {
+                    const novo = x?.valorAnunciado ?? s.valorAnunciado;
+                    const vendidoAcompanha = !s.valorVendido || s.valorVendido === s.valorAnunciado;
+                    const valorVendido = vendidoAcompanha ? novo : s.valorVendido;
+                    const pagamentos = s.pagamentos.length === 1 && (!s.pagamentos[0].valor || s.pagamentos[0].valor === s.valorVendido) ? [{ ...s.pagamentos[0], valor: valorVendido }] : s.pagamentos;
+                    return { ...s, veiculoId: id, valorAnunciado: novo, valorVendido, pagamentos };
+                  });
                 }}
               >
                 <option value="">Escolha o veículo</option>
@@ -244,6 +279,26 @@ export function FluxoVenda({
                 <CampoDinheiro valor={f.valorVendido} disabled={somenteLeitura} aoMudar={(x) => setF((s) => ({ ...s, valorVendido: x }))} />
               </Campo>
             </div>
+            {!somenteLeitura && veicEscolhido?.valorAnunciado && f.valorAnunciado !== veicEscolhido.valorAnunciado && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-atencao/40 bg-atencao/10 px-4 py-3 text-[13px]">
+                <TriangleAlert className="size-4 shrink-0" />
+                <span className="flex-1">
+                  O preço da {veicEscolhido.rotulo} no estoque é <b>{brl(veicEscolhido.valorAnunciado)}</b>, diferente do valor anunciado.
+                </span>
+                <Botao
+                  tamanho="sm"
+                  onClick={() =>
+                    setF((s) => ({
+                      ...s,
+                      valorAnunciado: veicEscolhido.valorAnunciado,
+                      valorVendido: !s.valorVendido || s.valorVendido === s.valorAnunciado ? veicEscolhido.valorAnunciado : s.valorVendido,
+                    }))
+                  }
+                >
+                  Usar {brl(veicEscolhido.valorAnunciado)}
+                </Botao>
+              </div>
+            )}
             {f.valorAnunciado && f.valorVendido ? (
               <p className="num mt-4 text-[14px]">
                 {f.valorVendido < f.valorAnunciado ? (
@@ -476,7 +531,6 @@ export function FluxoVenda({
         <LinhaDoTempo itens={d.historico.map((h) => ({ id: h.id, titulo: h.descricao, quando: dataHora(h.criadoEm), quem: h.usuarioNome }))} />
       </Painel>
 
-      <FormularioCliente aberto={editandoCliente} aoMudar={setEditandoCliente} inicial={d.cliente} equipe={equipe} aoSalvar={() => router.refresh()} />
       <DialogoCancelar aberto={cancelando} aoMudar={setCancelando} vendaId={v.id} />
     </>
   );

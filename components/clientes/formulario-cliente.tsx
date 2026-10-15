@@ -82,12 +82,35 @@ export function FormularioCliente({
   );
 }
 
+/** O mesmo formulário, aberto direto na tela (passo Cliente da venda: dono, 15/10/2026, "a venda fica completa e não
+ *  precisa ir para outra aba para colocar CPF e endereço"). */
+export function ClienteNaTela({ inicial, equipe, aoSalvar, aoCancelar }: { inicial: ClienteForm; equipe: { id: number; nome: string }[]; aoSalvar: () => void; aoCancelar?: () => void }) {
+  const [pendente, setPendente] = useState(false);
+  return (
+    <div>
+      <CorpoCliente idForm="form-cliente-tela" inicial={inicial} equipe={equipe} aoPendente={setPendente} aoConcluir={() => aoSalvar()} />
+      <div className="mt-4 flex justify-end gap-2">
+        {aoCancelar && (
+          <Botao type="button" variante="fantasma" onClick={aoCancelar}>
+            Cancelar
+          </Botao>
+        )}
+        <Botao type="submit" form="form-cliente-tela" variante="primario" carregando={pendente}>
+          Salvar dados do cliente
+        </Botao>
+      </div>
+    </div>
+  );
+}
+
 function CorpoCliente({
+  idForm = "form-cliente",
   inicial,
   equipe,
   aoPendente,
   aoConcluir,
 }: {
+  idForm?: string;
   inicial?: ClienteForm;
   equipe: { id: number; nome: string }[];
   aoPendente: (v: boolean) => void;
@@ -148,7 +171,7 @@ function CorpoCliente({
   }
 
   return (
-      <form id="form-cliente" onSubmit={enviar} className="grid grid-cols-1 gap-4 sm:grid-cols-6" noValidate>
+      <form id={idForm} onSubmit={enviar} className="grid grid-cols-1 gap-4 sm:grid-cols-6" noValidate>
         <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3 sm:col-span-6">Dados pessoais</p>
         <Campo rotulo="Nome completo" obrigatorio erro={erros.nome} className="sm:col-span-4" htmlFor="c-nome">
           <Entrada id="c-nome" value={f.nome ?? ""} onChange={muda("nome")} invalido={!!erros.nome} autoFocus autoComplete="off" />
