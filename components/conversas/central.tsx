@@ -211,7 +211,7 @@ export function CentralConversas({
             const nome = c.clienteNome ?? c.contatoNome ?? formatarTelefone(c.contatoTelefone);
             toast.warning(`${nome} está esperando resposta`, { action: { label: "Abrir", onClick: () => abrir(c.id) } });
             if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification(`${nome} está esperando resposta`, { body: "Responda ou a IA assume a conversa.", tag: `espera-${c.id}` });
+              new Notification(`${nome} está esperando resposta`, { body: "Responda: a IA está travada nesta conversa (Humano).", tag: `espera-${c.id}` });
             }
           }
           if (c.id !== id && c.ultimaMensagemDirecao === "incoming" && novasMsgs > 0) {

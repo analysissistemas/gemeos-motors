@@ -41,7 +41,7 @@ import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia, TEXTO_DA_RESPOSTA, type ItemDisponivel } from "@/lib/ia/foto-cliente";
@@ -985,10 +985,11 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   verifica_modo: async (c) => {
     const controle = await lerControle();
     if (!controle.ligada) return { fim: "parou", detalhe: "A IA está desligada (aba Controle)", saida: { iaLigada: false } };
-    /* regra do dono (27/09/2026): fora do horário a IA SEMPRE responde, mesmo em conversa com humano */
+    /* regra do dono (15/10/2026, substitui a de 27/09): em HUMANO a IA fica travada, a qualquer hora, até o vendedor
+       voltar a chave para IA ("se ele não mudar, a IA fica travada"). Leandro: a IA assumiu sozinha depois de 15 min. */
     const aberta = lojaAberta(await lerHorario());
-    const humano = c.conversa!.modo === "humano" && aberta;
-    return { ramo: humano ? "humano" : "ia", saida: { status: humano ? "HUMANO" : "I.A", responsavel: c.conversa!.responsavelId, lojaAberta: aberta, ...(!aberta && c.conversa!.modo === "humano" ? { foraDoHorario: "IA responde até a loja abrir" } : {}) } };
+    const humano = c.conversa!.modo === "humano";
+    return { ramo: humano ? "humano" : "ia", saida: { status: humano ? "HUMANO" : "I.A", responsavel: c.conversa!.responsavelId, lojaAberta: aberta } };
   },
 
   ia_off: () => ({ fim: "parou", detalhe: "Atendimento HUMANO: a IA não responde. A mensagem fica na memória.", saida: { respondeu: false } }),
@@ -1071,7 +1072,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 
   reconfere_modo: async (c) => {
     const conversa = await carregarConversa(c.conversaId);
-    const humano = conversa.modo === "humano" && lojaAberta(await lerHorario());
+    const humano = conversa.modo === "humano";
     return { ramo: humano ? "humano" : "ia", ctx: { conversa }, saida: { status: humano ? "HUMANO" : "I.A" } };
   },
 
@@ -1210,7 +1211,11 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     const jaPerguntouAjuda = /como posso te ajudar|em que posso te ajudar|o que você precisa/iu.test(ultimaDaLoja);
     const falouAlgo = c.textoBuffer.replace(/[^\p{L}]+/gu, " ").trim().split(" ").length >= 4;
     const perguntaRobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|[ée]\s+humano|pessoa de verdade|intelig[êe]ncia artificial/iu.test(c.textoBuffer);
-    if (!intencao && !perguntaRobo && r.ctx.texto && (r.ctx.humano || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) || (jaPerguntouAjuda && falouAlgo))) {
+    const pedePessoa = RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer));
+    /* "compra" só por ter vindo do botão do site não segura quem pede o dono (Anderson, 15/10/2026: "Gostaria de falar
+       com o proprietário" recebeu a lista do estoque) */
+    const soPeloSite = intencao === "compra" && !intencaoDoTexto(semAberturaDoSite(textoDoCliente(c)), nomesCat.map((m) => m.nome));
+    if ((!intencao || (soPeloSite && pedePessoa)) && !perguntaRobo && r.ctx.texto && (r.ctx.humano || pedePessoa || (jaPerguntouAjuda && falouAlgo))) {
       const relato = textoDoCliente(c).replace(/^Lead:\s*/gm, "").replace(/\s+/g, " ").trim().slice(-300);
       const texto = textoRecado({
         nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome),
@@ -1458,6 +1463,8 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     /* nada de "sem desconto" nem de inventar sobre preço de anúncio (Andressa e Danilo, 08 e 10/10/2026) */
     resposta = tirarFraseProibida(resposta);
     resposta = tirarTriciclo(resposta, await triciclosComEstoque(c));
+    /* a lista do estoque só quando o cliente pede (dono, 15/10/2026: "bom dia" recebeu tudo que tinha em estoque) */
+    if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = tirarListaSemPedido(resposta, c.textoBuffer, await nomesDoCatalogo());
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
     resposta = resposta.map((b) => b.replace(/\\n/g, "\n").trim()).filter((b) => /\p{L}/u.test(b));
     /* conversa enxuta: no máximo 3 mensagens de texto por resposta (o resto se junta à última) */

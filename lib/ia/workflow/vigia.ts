@@ -15,8 +15,8 @@ import { decidirNovaTentativa, decidirVigia, deveCobrarTarefa, MAX_TENTATIVAS } 
    VIGIA DO ATENDENTE — roda a cada minuto (instrumentation.ts → /api/interno/vigia)
    Conversa com vendedor (modo HUMANO) em que o cliente está esperando:
    - loja aberta, espera ≥ avisoAtendenteMin: aviso no chat + prioridade alta (uma vez por espera);
-   - loja aberta, espera ≥ iaAssumeMin: a IA assume (modo IA) e responde;
-   - loja fechada: a IA responde (uma vez por mensagem), a conversa continua com o vendedor.
+   - a IA NUNCA assume nem responde: só o vendedor volta a chave para IA (dono, 15/10/2026; antes ela assumia
+     depois de iaAssumeMin e respondia com a loja fechada).
    Marcas nas mensagens de sistema (metadados) evitam repetir; nada de coluna nova.
    ============================================================ */
 const M = schema.mensagens;
@@ -145,7 +145,7 @@ export async function vigiarAtendimentos(agora = new Date()) {
 
       /* a IA devia ter respondido e nada saiu (servidor reiniciou no meio, falha da OpenAI...): tenta de novo.
          Só mensagem recente (até 6 h), para não responder conversa antiga esquecida. */
-      const iaDeveResponder = cv.modo !== "humano" || !aberta;
+      const iaDeveResponder = cv.modo !== "humano";
       if (iaDeveResponder && esperaUltimaMin <= 360) {
         const [t] = await db
           .select({ n: sql<number>`count(*)::int`, ultimaEm: sql<Date | null>`max(${M.criadoEm})` })
@@ -175,15 +175,16 @@ export async function vigiarAtendimentos(agora = new Date()) {
       const decisao = decidirVigia({
         esperaMin,
         lojaAberta: aberta,
-        iaPodeResponder,
+        /* em HUMANO a IA fica travada (dono, 15/10/2026): o vigia só avisa a equipe */
+        iaPodeResponder: false,
         avisoMin: config.avisoAtendenteMin,
-        assumeMin: config.iaAssumeMin,
+        assumeMin: 0,
         jaAvisado: aberta ? await temMarca(cv.id, "esperaAviso", primeira.id) : true,
         jaRespondidaFechada: aberta ? true : await temMarca(cv.id, "vigiaFechada", ultima.id),
       });
 
       if (decisao === "avisar") {
-        const resto = iaPodeResponder && config.iaAssumeMin > 0 ? ` Responda ou a IA assume em ${Math.max(1, config.iaAssumeMin - esperaMin)} min.` : " Responda assim que puder.";
+        const resto = " Responda assim que puder: a IA fica travada nesta conversa até alguém voltar a chave para IA.";
         await mensagemSistema(db, cv.id, `Cliente esperando resposta há ${esperaMin} min.${resto}`, { esperaAviso: true, mensagemId: primeira.id });
         await db.update(C).set({ prioridade: "alta", atualizadoEm: new Date() }).where(eq(C.id, cv.id));
         resultado.avisadas++;

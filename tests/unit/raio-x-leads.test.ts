@@ -131,3 +131,23 @@ test("'às 10h' sozinho não vira amanhã quando o dia veio antes; 'quarta' dita
   assert.equal(junto.diaDito, true);
   assert.match(quandoPorExtenso(junto.quando!), /quarta, 21\/10/u);
 });
+
+test("cumprimento depois da frase do site não vira lista; lista do estoque só quando o cliente pede (dono, 15/10/2026)", async () => {
+  const { instrucaoDoSite, tirarListaSemPedido, RX_RECADO, pediuOpcoes } = await import("../../lib/ia/intencao.ts");
+  const SITE = "Olá! Vim pelo site da Gêmeos Motors e quero falar com um consultor.";
+  assert.match(instrucaoDoSite(`${SITE}\nBom dia`), /pergunte o que ele procura/u);
+  assert.doesNotMatch(instrucaoDoSite(`${SITE}\nBom dia`), /liste as motos/u);
+  assert.match(instrucaoDoSite(`${SITE}\nBom dia, quanto custa?`), /quanto custa/u);
+  const nomes = ["AG08", "M6", "T1", "T3 RETRÔ", "DF17", "N2", "UFOFAST F01"];
+  const lista = ["Temos estas motos elétricas com pronta entrega:\n• *T1*: R$ 12.000\n• *M6*: R$ 11.900\n• *AG08*: R$ 8.999,90", "Qual desses modelos chamou mais sua atenção? 🙂"];
+  assert.deepEqual(tirarListaSemPedido(lista, `${SITE}\nBom dia`, nomes), ["Me conta o que você está procurando: moto elétrica, acessório ou assistência? 🙂"]);
+  assert.deepEqual(tirarListaSemPedido(lista, "Gostaria de falar com o proprietário", nomes).length, 1);
+  for (const t of ["Tem disponível?", "quais motos vocês têm?", "Valor", "quero ver as opções", "tem patinete?"]) {
+    assert.equal(pediuOpcoes(t), true, t);
+    assert.equal(tirarListaSemPedido(lista, t, nomes), lista, t);
+  }
+  assert.equal(pediuOpcoes(SITE), false);
+  /* Anderson: pedir o proprietário é recado para a equipe */
+  assert.ok(RX_RECADO.test("Gostaria de falar com o proprietário"));
+  assert.ok(RX_RECADO.test("quero falar com a dona"));
+});

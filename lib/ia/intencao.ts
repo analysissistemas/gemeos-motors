@@ -127,7 +127,8 @@ export const semAberturaDoSite = (texto: string) => texto.replace(RX_ABERTURA_SI
  *  "Valor", e a IA só perguntou "como posso te ajudar?" duas vezes. Perguntou algo além da frase pronta: responde. */
 export function instrucaoDoSite(texto: string): string {
   if (!veioDoSite(texto)) return "";
-  const resto = semAberturaDoSite(texto).replace(/^(?:ol[áa]|oi+|bom\s+dia|boa\s+tarde|boa\s+noite)[!.,\s]*/iu, "").trim();
+  /* "Olá! [frase do site] Bom dia": cumprimento não é pergunta, saem todos (dono, 15/10/2026: o "Bom dia" virou a lista do estoque) */
+  const resto = semAberturaDoSite(texto).replace(/^(?:(?:ol[áa]|oi+|opa|e\s+a[ií]|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+(?:bem|bom|certo|joia)|blz|beleza)[!.,?\s]*)+/iu, "").trim();
   const base = 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe.';
   if (!/\p{L}{2,}/u.test(resto)) return `${base} Atenda e pergunte o que ele procura.\n\n`;
   return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. Perguntou se tem disponível, valor ou preço sem dizer o modelo: liste as motos EM ESTOQUE com o preço de cada (do catálogo) e pergunte qual chamou mais a atenção. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
@@ -181,3 +182,19 @@ export function instrucaoIntermediario(textoDoCliente: string): string {
 
 /** Assistência sem relato ainda: a IA pede o que aconteceu para registrar (sem oferecer moto). */
 export const TEXTO_PEDE_RELATO = "Entendi! Me conta o que está acontecendo com o seu aparelho, qual é o modelo e quando você comprou, que eu já registro tudo pra nossa assistência técnica 🙏";
+
+/* A lista do estoque só vai quando o cliente pede (dono, 15/10/2026: "o cliente falou bom dia e a IA mandou tudo que
+   tinha em estoque... isso não pode mais acontecer"; e o Anderson pediu o proprietário e recebeu a lista). Pediu =
+   disponível, preço, valor, quanto, modelos, opções, catálogo, estoque, "quais tem", "o que tem", tipo de veículo. */
+const RX_PEDIU_OPCOES =
+  /(?<![\p{L}])(?:dispon[ií]ve(?:l|is)|pre[çc]os?|valor(?:es)?|quanto|modelos?|op[çc](?:ão|ao|ões|oes)|cat[áa]logo|estoque|tabela|lista|pronta\s+entrega|quais|o\s+que\s+(?:tem|voc[êe]s\s+t[êe]m)|tem\s+(?:moto|patinete|scooter)|motos?|patinetes?|scooters?|mais\s+barat[ao]|em\s+conta|mostra)(?![\p{L}])/iu;
+export const pediuOpcoes = (textoCliente: string) => RX_PEDIU_OPCOES.test(semAberturaDoSite(textoCliente));
+/** Rede de segurança: a resposta cita 3 ou mais modelos e o cliente não pediu opções → a lista sai, e a pergunta
+ *  "qual desses chamou atenção?" junto. Sobrou nada: pergunta o que ele procura. */
+export function tirarListaSemPedido(resposta: string[], textoCliente: string, nomesDeModelos: string[]): string[] {
+  if (pediuOpcoes(textoCliente)) return resposta;
+  const quantos = (b: string) => nomesDeModelos.filter((n) => citaModelo(b, [n])).length;
+  if (!resposta.some((b) => quantos(b) >= 3)) return resposta;
+  const r = resposta.filter((b) => quantos(b) < 3 && !/(?:qual|quais)\s+(?:desses|dessas|delas|deles)|chamou\s+(?:mais\s+)?(?:a\s+)?(?:sua\s+)?aten[çc][ãa]o/iu.test(b));
+  return r.length ? r : ["Me conta o que você está procurando: moto elétrica, acessório ou assistência? 🙂"];
+}
