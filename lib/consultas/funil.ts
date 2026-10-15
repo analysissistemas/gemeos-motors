@@ -45,6 +45,8 @@ export async function listarNegociosFunil(f: { responsavelId?: number; q?: strin
     .where(
       and(
         or(sql`${n.etapa} in (${sql.join(ETAPAS_ABERTAS.map((e) => sql`${e}`), sql`, `)})`, gt(n.etapaDesde, sql`now() - make_interval(days => ${dias})`)),
+        /* negócio do Simulador fica fora do funil: os testes ficam na aba Testes do Atendimento (dono, 15/10/2026) */
+        eq(n.demo, false),
         f.responsavelId ? eq(n.responsavelId, f.responsavelId) : undefined,
         termo
           ? or(
