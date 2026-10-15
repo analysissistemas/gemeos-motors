@@ -66,6 +66,7 @@ export type MotivoPipeline =
   | "validador"
   | "sem_permissao_envio"
   | "falha_envio"
+  | "nao_e_cliente"
   | "erro_etapa";
 
 export type ResultadoPipeline = {

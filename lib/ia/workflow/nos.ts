@@ -8,6 +8,7 @@ import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
+import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive } from "@/lib/servicos/test-drive";
@@ -134,6 +135,8 @@ export type CtxWorkflow = {
   ultimaDaLoja: string;
   /** assunto que não é compra nem assistência (recado, pedido de uma pessoa): a resposta é do sistema e vai para a equipe */
   recado?: boolean;
+  /** quem escreve não é cliente (oferta de serviço, robô) ou a conversa entrou em loop: a IA para e passa para a equipe */
+  naoCliente?: NaoCliente;
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -1092,6 +1095,27 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const pipe = pipeInicial(c.textoBuffer, await montarDeps(c, async () => ({ mensagem: null, consultaEstoque: null, transferir: false })));
     const r = await executarFluxo([limiteDaMensagem, deteccaoDeInjecao], pipe);
     if (r.fim) return { ramo: "bloqueada", ctx: { pipe: { ...r.ctx, texto: null }, motivoTransferencia: r.ctx.motivo === "mensagem_longa" ? "Mensagem longa demais" : "Suspeita de tentativa de manipular a IA" }, saida: { bloqueada: r.ctx.motivo } };
+    /* não é cliente (TIM oferecendo plano, robô de menu, loop): a IA não vende para quem vende para a loja (dono,
+       15/10/2026). Oferta recebe uma resposta só; robô e loop, nenhuma. Sempre para a equipe, mesmo de noite. */
+    const [anteriores, [{ n: daIa }]] = await Promise.all([
+      db
+        .select({ conteudo: schema.mensagens.conteudo })
+        .from(schema.mensagens)
+        .where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "incoming"), lt(schema.mensagens.id, c.primeiraDoBuffer ?? c.mensagemId!), gt(schema.mensagens.criadoEm, sql`now() - interval '3 hours'`))),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.mensagens)
+        .where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.autor, "ia"), gt(schema.mensagens.criadoEm, sql`now() - interval '1 hour'`))),
+    ]);
+    const naoCliente = naoEhCliente({ texto: c.textoBuffer, anterioresDoCliente: anteriores.map((m) => m.conteudo ?? ""), mensagensDaIaUltimaHora: daIa });
+    if (naoCliente) {
+      const texto = naoCliente === "oferta" ? TEXTO_OFERTA_SERVICO : null;
+      return {
+        ramo: "bloqueada",
+        ctx: { pipe: { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "nao_e_cliente" as const }, naoCliente, motivoTransferencia: MOTIVO_NAO_CLIENTE[naoCliente] },
+        saida: { bloqueada: "nao_e_cliente", naoCliente, mensagensDaIaUltimaHora: daIa, resposta: texto },
+      };
+    }
     return { saida: { tamanho: c.textoBuffer.length, aprovada: true } };
   },
 
@@ -1337,6 +1361,17 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
        saiu (Simulador, 15/10/2026: "Listou as motos elétricas disponíveis" num recado para o dono); fica o anterior */
     const textoDoSistema = !!pipe.texto && pipe.texto === pipe.textoCatalogo;
     const resumo = (textoDoSistema ? null : c.aprendido.resumo) ?? c.memoria.resumo ?? c.textoBuffer.slice(0, 200);
+    /* não é cliente: para a IA a qualquer hora (de noite seguir respondendo é justamente o loop), sem prioridade alta */
+    if (c.naoCliente) {
+      await db.update(schema.conversas).set({ modo: "humano", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
+      /* sem follow-up da IA para quem não é cliente (dono, 15/10/2026): o que já estava agendado sai da fila */
+      await db
+        .update(schema.followUps)
+        .set({ status: "cancelado", notas: sql`coalesce(${schema.followUps.notas}, '') || ' Não enviado: não é cliente.'` })
+        .where(and(eq(schema.followUps.conversaId, c.conversaId), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "aquecimento")));
+      await mensagemSistema(db, c.conversaId, `IA parada nesta conversa. ${MOTIVO_NAO_CLIENTE[c.naoCliente]}. Se for um cliente de verdade, volte a chave para IA. Última mensagem: "${c.textoBuffer.slice(0, 160)}"`, { triagem: true });
+      return { ctx: { pipe }, saida: { transferida: true, status: "HUMANO", motivo: c.motivoTransferencia, naoCliente: c.naoCliente, avisoAoCliente: pipe.texto } };
+    }
     /* regra do dono (27/09/2026): fora do horário NUNCA passa para humano. A IA continua atendendo,
        a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
     if (!lojaAberta(await lerHorario())) {
@@ -1372,6 +1407,8 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     const fatos = mesclarFatos(c.memoria.fatos, c.aprendido.fatos);
     const resumo = c.aprendido.resumo ?? c.memoria.resumo;
     await gravarMemoria(c.conversaId, { fatos, resumo });
+    /* operadora/robô não vira lead no funil nem recebe follow-up da IA */
+    if (c.naoCliente) return { saida: { fatos, resumo, naoCliente: c.naoCliente } };
     /* qualificação automática: nunca pode impedir a resposta ao cliente */
     let qualificacao: unknown = null;
     let funil: unknown = null;
