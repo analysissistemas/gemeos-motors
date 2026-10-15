@@ -120,3 +120,14 @@ test("'o 530' sem o W é o Patinete 530W; preço, parcela e km não viram modelo
   assert.equal(nome("quanto custa o 800?"), "Patinete 800W");
   for (const t of ["faço R$ 350 de entrada", "tenho 3.500", "350 reais", "ando 350 km", "350x não", "1.350,00"]) assert.equal(nome(t), null, t);
 });
+
+test("'às 10h' sozinho não vira amanhã quando o dia veio antes; 'quarta' dita na quarta à noite é a próxima (Simulador, 14/10/2026)", async () => {
+  const { dataHoraDaVisita, quandoPorExtenso } = await import("../../lib/ia/agenda.ts");
+  const NOITE_DE_QUARTA = new Date("2026-10-14T22:56:00-03:00");
+  const so = dataHoraDaVisita("às 10h", NOITE_DE_QUARTA);
+  assert.equal(so.temDia, true);
+  assert.equal(so.diaDito, false);
+  const junto = dataHoraDaVisita("às 10h\nPode ser quarta\nOi, gostei da X GÊMEOS. Onde fica a loja?", NOITE_DE_QUARTA);
+  assert.equal(junto.diaDito, true);
+  assert.match(quandoPorExtenso(junto.quando!), /quarta, 21\/10/u);
+});

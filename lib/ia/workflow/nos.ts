@@ -409,11 +409,12 @@ function horarioCurto(h: HorarioLoja) {
 async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; nome: string | null; horario: HorarioLoja }): Promise<{ texto: string; quando: Date | null; erro?: string }> {
   let dh = dataHoraDaVisita(c.textoBuffer);
   /* o dia numa mensagem e a hora na outra ("quarta" → "Que horas fica melhor?" → "às 10h"): junta com as 2 últimas
-     mensagens do cliente; a mensagem de agora vem primeiro e vale mais (dono, 14/10/2026) */
-  if (!dh.temDia || !dh.temHora) {
+     mensagens do cliente; a mensagem de agora vem primeiro e vale mais (dono, 14/10/2026). "às 10h" sozinho
+     não é amanhã quando ele já disse o dia antes (Simulador de 14/10/2026: "quarta" virou quinta) */
+  if (!dh.diaDito || !dh.temHora) {
     const recentes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((b) => b.startsWith("Lead:")).slice(-2).map((b) => b.replace(/^Lead:\s*/, "")).join("\n");
     const junto = dataHoraDaVisita(`${c.textoBuffer}\n${recentes}`);
-    if (junto.temDia && junto.temHora) dh = junto;
+    if (junto.temDia && junto.temHora && (junto.diaDito || !dh.temDia)) dh = junto;
   }
   const funciona = horarioCurto(p.horario);
   if (!dh.temDia) return { texto: `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
@@ -441,7 +442,8 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
     throw e;
   }
   const quem = p.nome ? `, ${p.nome}` : "";
-  const moto = p.modelo ? ` ${artigo(p.modelo).toUpperCase()} *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
+  /* só promete a moto esperando se tem unidade Disponível (Simulador de 14/10/2026: X GÊMEOS sem estoque) */
+  const moto = p.modelo && (await temUnidadeDisponivel(p.modelo, !!c.conversa?.demo)) ? ` ${artigo(p.modelo).toUpperCase()} *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
   return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}`, quando };
 }
 

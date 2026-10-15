@@ -25,7 +25,8 @@ export const RX_PERGUNTA_ENDERECO = /(?<![\p{L}])(onde (fica|[ée]|voc[êe]s fic
 
 const DIAS_SEMANA: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
 
-export type DataHoraVisita = { quando: Date | null; temDia: boolean; temHora: boolean };
+/** diaDito: o cliente escreveu o dia; sem ele, "às 10h" sozinho vira hoje ou amanhã (temDia) */
+export type DataHoraVisita = { quando: Date | null; temDia: boolean; temHora: boolean; diaDito: boolean };
 
 /** Dia e hora que o cliente escreveu ("sábado às 10h", "amanhã 15h", "dia 6 às 9", "06/10 14:30", "hoje às 4 da tarde"). */
 export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataHoraVisita {
@@ -73,11 +74,12 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
     if (n === 0 && hora !== null && (hora < hoje.hora || (hora === hoje.hora && min <= hoje.min))) n = 7;
     dia = mais(hoje, n);
   }
+  const diaDito = !!dia;
   /* só a hora ("às 15h"): hoje, se ainda dá; senão amanhã */
   if (!dia && hora !== null && /\b(hoje|agora|mais tarde)\b|^\D*\d{1,2}\s*(h|:)/.test(t)) dia = mais(hoje, hora > hoje.hora ? 0 : 1);
 
   const quando = dia && hora !== null ? instante(dia.ano, dia.mes, dia.dia, hora, min) : null;
-  return { quando, temDia: !!dia, temHora: hora !== null };
+  return { quando, temDia: !!dia, temHora: hora !== null, diaDito };
 }
 
 function mais(h: { ano: number; mes: number; dia: number }, n: number) {
