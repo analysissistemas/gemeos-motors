@@ -68,14 +68,21 @@ export function ListaConversas({
           />
         </label>
         <div className="rolagem-fina -mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 pb-0.5" role="tablist" aria-label="Filtros">
-          {(Object.keys(FILTROS_CONVERSA) as FiltroConversa[]).map((f) => (
+          {(Object.keys(FILTROS_CONVERSA) as FiltroConversa[]).filter((f) => f !== "testes" || (podeSimular ?? simulado)).map((f) => (
             <button
               key={f}
               role="tab"
               aria-selected={filtro === f}
               onClick={() => aoFiltrar(f)}
-              className={cn("shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] transition", filtro === f ? "border-ink bg-ink font-semibold text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte")}
+              title={f === "testes" ? "Conversas do Simulador: nada sai para o WhatsApp" : undefined}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[12.5px] transition",
+                f === "testes"
+                  ? filtro === f ? "border-atencao bg-atencao font-semibold text-black" : "border-atencao/60 text-atencao hover:border-atencao"
+                  : filtro === f ? "border-ink bg-ink font-semibold text-contra-ink" : "border-linha text-ink-2 hover:border-linha-forte",
+              )}
             >
+              {f === "testes" && <FlaskConical className="size-3.5" />}
               {FILTROS_CONVERSA[f]}
               {f === "nao_lidas" && naoLidas > 0 ? ` · ${naoLidas}` : ""}
             </button>
@@ -86,11 +93,15 @@ export function ListaConversas({
       <ul className={cn("rolagem-fina min-h-0 flex-1 overflow-y-auto", carregando && "opacity-60")} aria-busy={carregando}>
         {itens.length === 0 && !carregando ? (
           <li>
-            <EstadoVazio
-              icone={<MessagesSquare />}
-              titulo={busca || filtro !== "todas" ? "Nenhuma conversa com este filtro" : "Nenhuma conversa ainda"}
-              texto={busca || filtro !== "todas" ? "Tente outro filtro ou limpe a busca." : simulado ? "Use o simulador (ícone do frasco) ou carregue as conversas de demonstração em Configurações." : "As conversas aparecem aqui quando os clientes mandarem mensagem."}
-            />
+            {filtro === "testes" && !busca ? (
+              <EstadoVazio icone={<FlaskConical />} titulo="Nenhum teste aberto" texto="Toque no frasco para simular a mensagem de um cliente. Os testes ficam só aqui e nada sai para o WhatsApp." />
+            ) : (
+              <EstadoVazio
+                icone={<MessagesSquare />}
+                titulo={busca || filtro !== "todas" ? "Nenhuma conversa com este filtro" : "Nenhuma conversa ainda"}
+                texto={busca || filtro !== "todas" ? "Tente outro filtro ou limpe a busca." : simulado ? "Use o simulador (ícone do frasco) e veja os testes na aba Testes." : "As conversas aparecem aqui quando os clientes mandarem mensagem."}
+              />
+            )}
           </li>
         ) : (
           itens.map((c) => {

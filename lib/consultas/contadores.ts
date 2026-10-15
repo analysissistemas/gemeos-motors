@@ -11,7 +11,7 @@ export async function contarPendencias(u: UsuarioAtual) {
       ? db
           .select({ n: sql<number>`coalesce(sum(${schema.conversas.naoLidas}),0)::int` })
           .from(schema.conversas)
-          .where(ne(schema.conversas.status, "encerrada"))
+          .where(and(ne(schema.conversas.status, "encerrada"), eq(schema.conversas.demo, false)))
       : Promise.resolve([{ n: 0 }]),
     pode(u.papel, "conversas.ver")
       ? db

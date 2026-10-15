@@ -204,6 +204,8 @@ export function CentralConversas({
       if (j.conversas.length) {
         const antes = new Map(itensRef.current.map((x) => [x.id, x]));
         for (const c of j.conversas) {
+          /* teste do Simulador só avisa quem está na aba Testes (dono, 15/10/2026) */
+          if (c.demo && filtro !== "testes") continue;
           const velha = antes.get(c.id);
           const novasMsgs = c.naoLidas - (velha?.naoLidas ?? 0);
           /* vigia do atendente: a conversa virou prioridade alta com o cliente esperando */
@@ -226,7 +228,8 @@ export function CentralConversas({
           const mapa = new Map(xs.map((x) => [x.id, x]));
           for (const c of j.conversas) {
             if (mapa.has(c.id)) mapa.set(c.id, c.id === id ? { ...c, naoLidas: 0 } : c);
-            else if (filtro === "todas" && !busca) mapa.set(c.id, c);
+            /* conversa nova entra na aba dela: cliente real em Todas, simulado em Testes */
+            else if (!busca && (filtro === "todas" ? !c.demo : filtro === "testes" && c.demo)) mapa.set(c.id, c);
           }
           return ordenar(Array.from(mapa.values()));
         });
@@ -549,6 +552,8 @@ export function CentralConversas({
         aoMudar={setSimulador}
         conversaAtual={contexto ? { telefone: contexto.conversa.contatoTelefone, nome: contexto.conversa.contatoNome ?? "" } : null}
         aoSimulado={(id) => {
+          /* o teste aparece na aba Testes, longe dos clientes reais */
+          setFiltro("testes");
           sincronizar();
           if (id && id !== aberta) abrir(id);
           else if (id) setTimeout(sincronizar, 500);

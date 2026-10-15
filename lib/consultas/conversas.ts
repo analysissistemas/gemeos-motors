@@ -67,7 +67,9 @@ export async function listarConversas(f: { filtro?: FiltroConversa; q?: string; 
     case "fechada": filtros.push(eq(n.etapa, "fechada")); break;
     case "perdida": filtros.push(eq(n.etapa, "perdida")); break;
   }
-  if (!f.filtro || f.filtro === "todas") filtros.push(sql`${c.status} <> 'encerrada'`);
+  /* simulado só na aba Testes; as outras são só de clientes reais (dono, 15/10/2026) */
+  filtros.push(eq(c.demo, f.filtro === "testes"));
+  if (!f.filtro || f.filtro === "todas" || f.filtro === "testes") filtros.push(sql`${c.status} <> 'encerrada'`);
   if (termo)
     filtros.push(
       or(

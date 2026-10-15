@@ -100,8 +100,8 @@ export async function carregarPainel(inicio: Date, fim: Date, verLucro: boolean)
       select
         (select count(*) from follow_ups where status = 'pendente' and agendado_para < now())::int as "followAtrasados",
         (select count(*) from follow_ups where status = 'pendente' and agendado_para >= now() and agendado_para < (date_trunc('day', now() at time zone 'America/Recife') + interval '1 day') at time zone 'America/Recife')::int as "followHoje",
-        (select coalesce(sum(nao_lidas),0) from conversas where status <> 'encerrada')::int as "naoLidas",
-        (select count(*) from conversas where responsavel_id is null and status not in ('resolvida','encerrada'))::int as "semResponsavel",
+        (select coalesce(sum(nao_lidas),0) from conversas where status <> 'encerrada' and not demo)::int as "naoLidas",
+        (select count(*) from conversas where responsavel_id is null and status not in ('resolvida','encerrada') and not demo)::int as "semResponsavel",
         (select count(*) from negocios where demo = false and ((etapa = 'whatsapp' and etapa_desde < now() - interval '1 day') or (etapa = 'proposta' and etapa_desde < now() - interval '3 days') or (etapa = 'negociando' and etapa_desde < now() - interval '7 days')))::int as parados,
         (select count(*) from ordens_servico where status not in ('finalizada','entregue','cancelada') and previsao_entrega < current_date)::int as "osVencidas"
     `),
