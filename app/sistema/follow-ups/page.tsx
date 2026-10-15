@@ -56,7 +56,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
   const quem = verTodos ? null : u.id;
   const fechou = alias(schema.usuarios, "fechou_f");
   const F = schema.followUps;
-  const [pendentes, prontos, esquecidos, resultado, placar, encerrados] = await Promise.all([
+  const [pendentes, prontos, quentes, resultado, placar, encerrados] = await Promise.all([
     pendentesFollowUp(quem),
     prontosParaVendedor(quem),
     quentesSemRetorno(quem),
@@ -73,6 +73,8 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
       .limit(20),
   ]);
   const hoje = chaveHoje();
+  /* quem já está em "Prontos" não se repete em "Quentes sem retorno" */
+  const esquecidos = quentes.filter((e) => !prontos.some((p) => p.conversaId === e.conversaId));
   const ordemNivel: Record<NivelPrioridade, number> = { alta: 0, media: 1, baixa: 2 };
   const daEquipe = pendentes
     .filter((f) => f.tipo !== "aquecimento")
@@ -140,7 +142,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
                     </span>
                     <span className="mt-1 block text-[12.5px] text-ink-2">
                       Respondeu {relativo(p.respondeuEm)} ao follow-up {p.deQuem === "ia" ? `da IA${p.tentativa ? ` (${p.tentativa}ª tentativa)` : ""}` : "da equipe"}
-                      {p.resposta ? <>: <span className="text-ink">“{p.resposta.slice(0, 120)}”</span></> : null}
+                      {p.resposta && !/^Mensagem de um tipo/u.test(p.resposta) ? <>: <span className="text-ink">“{p.resposta.slice(0, 120)}”</span></> : " (mandou figurinha, foto ou áudio)"}
                     </span>
                   </span>
                   <Link href={`/sistema/conversas?c=${p.conversaId}`} className={classesBotao("primario", "sm")}>
@@ -218,7 +220,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
                             <b className="font-medium text-ink">Quer:</b> {f.interesse}
                           </span>
                         )}
-                        {f.ultimaDoCliente && (
+                        {f.ultimaDoCliente && !/^Mensagem de um tipo/u.test(f.ultimaDoCliente) && (
                           <span className="truncate text-ink-2">
                             <b className="font-medium text-ink">Disse por último</b> ({relativo(f.ultimaDoClienteEm)}): “{f.ultimaDoCliente.slice(0, 140)}”
                           </span>
