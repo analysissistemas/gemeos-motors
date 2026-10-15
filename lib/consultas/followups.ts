@@ -1,6 +1,8 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { mensagemAutomatica, ofertaDeServico } from "@/lib/ia/nao-cliente";
+import { sinalDeCompra } from "@/lib/followup-prioridade";
 
 /* Painel de Follow-ups (dono, 15/10/2026: "o vendedor/gestor tem que bater o olho e tomar a decisão"; "saber se dos
    follow-ups que eu fiz eu consegui converter algum em interesse pronto para fechar"). Tudo sem conversa simulada. */
@@ -76,34 +78,47 @@ export type ProntoParaVendedor = {
   resposta: string | null;
   deQuem: "ia" | "equipe";
   tentativa: number | null;
+  /** a última mensagem é do cliente: ninguém da loja respondeu ainda */
+  esperandoLoja: boolean;
+  /** por que está aqui: o sinal de compra no que ele escreveu, ou a etapa do funil */
+  porque: string;
 };
 
-/** Respondeu a um follow-up (da IA ou da equipe) nos últimos 7 dias e está quente ou avançou no funil, sem venda fechada
- *  nem perdida: é o cliente que o vendedor precisa pegar agora. */
-export async function prontosParaVendedor(usuarioId: number | null) {
-  return q<ProntoParaVendedor>(sql`
+/** Respondeu a um follow-up (da IA ou da equipe) nos últimos 7 dias COM SINAL DE COMPRA no que escreveu (pagamento,
+ *  preço, "quero", vir à loja, entrega, pergunta do produto), ou está em visita/proposta/negociação. Figurinha, "ok" e
+ *  recusa não contam; operadora/robô sai na página (naoClientes). Sem venda fechada nem perdida. */
+export async function prontosParaVendedor(usuarioId: number | null): Promise<ProntoParaVendedor[]> {
+  const linhas = await q<Omit<ProntoParaVendedor, "porque"> & { textos: string | null }>(sql`
     select distinct on (cv.id) cv.id as "conversaId", coalesce(cl.nome, cv.contato_nome) as cliente, cv.contato_telefone as telefone,
       n.etapa, coalesce(n.veiculo_interesse, cv.triagem_ia->>'veiculo', cv.triagem_ia->>'interesse') as interesse,
       cv.triagem_ia->>'intencaoCompra' as intencao,
-      r.criado_em as "respondeuEm", r.conteudo as resposta,
+      r.criado_em as "respondeuEm", r.conteudo as resposta, r.textos,
       case when f.tipo = 'aquecimento' then 'ia' else 'equipe' end as "deQuem",
-      (f.contexto->>'etapa')::int as tentativa
+      (f.contexto->>'etapa')::int as tentativa,
+      coalesce(cv.ultima_mensagem_direcao = 'incoming', false) as "esperandoLoja"
     from follow_ups f
     join conversas cv on cv.id = f.conversa_id
     left join clientes cl on cl.id = cv.cliente_id
     left join negocios n on n.id = cv.negocio_id
     join lateral (
-      select m.criado_em, m.conteudo from mensagens m
+      select max(m.criado_em) as criado_em,
+        (array_agg(m.conteudo order by m.id desc) filter (where m.tipo = 'texto' and m.conteudo not like 'Mensagem de um tipo%'))[1] as conteudo,
+        string_agg(m.conteudo, ' | ' order by m.id) filter (where m.tipo = 'texto' and m.conteudo not like 'Mensagem de um tipo%') as textos
+      from mensagens m
       where m.conversa_id = cv.id and m.direcao = 'incoming' and m.criado_em > f.concluido_em
-      order by m.id desc limit 1
+      having count(*) > 0
     ) r on true
     where f.status = 'concluido' and f.concluido_em > now() - interval '7 days'
       and (f.tipo <> 'aquecimento' or f.notas like 'Aquecimento % enviado pela IA%')
       and ${real} ${usuarioId ? sql`and (cv.responsavel_id = ${usuarioId} or cv.responsavel_id is null)` : sql``}
       and coalesce(n.etapa, '') not in ('fechada', 'perdida')
-      and (cv.triagem_ia->>'intencaoCompra' = 'alta' or n.etapa in ('visita', 'equipe', 'proposta', 'negociando'))
-    order by cv.id, r.criado_em desc
+    order by cv.id, f.concluido_em desc
   `);
+  const ETAPA_QUENTE: Record<string, string> = { visita: "Marcou visita / test drive", proposta: "Proposta enviada", negociando: "Negociando" };
+  return linhas
+    .map(({ textos, ...l }) => ({ ...l, porque: sinalDeCompra(textos) ?? (l.etapa ? ETAPA_QUENTE[l.etapa] : undefined) ?? "" }))
+    .filter((l) => l.porque)
+    .sort((a, b) => Number(b.esperandoLoja) - Number(a.esperandoLoja) || new Date(b.respondeuEm).getTime() - new Date(a.respondeuEm).getTime());
 }
 
 export type Esquecido = { conversaId: number; cliente: string | null; telefone: string | null; etapa: string | null; interesse: string | null; intencao: string | null; ultimaEm: Date | null; responsavel: string | null };
@@ -188,4 +203,23 @@ export async function placarVendedores() {
     group by u.id, u.nome
     order by atrasados desc, pendentes desc
   `);
+}
+
+/** Conversas que não são de cliente (operadora oferecendo serviço, robô de menu: dono, 15/10/2026, o "Luis" da TIM
+ *  apareceu em Prontos para o vendedor). Vale a marca da IA ("IA parada nesta conversa") ou o próprio texto recebido. */
+export async function naoClientes(ids: number[]): Promise<Set<number>> {
+  const unicos = [...new Set(ids)];
+  if (!unicos.length) return new Set();
+  const lista = sql.join(unicos.map((id) => sql`${id}`), sql`, `);
+  const linhas = await q<{ conversaId: number; autor: string; conteudo: string | null }>(sql`
+    select m.conversa_id as "conversaId", m.autor, m.conteudo from mensagens m
+    where m.conversa_id in (${lista}) and m.criado_em > now() - interval '60 days'
+      and (m.direcao = 'incoming' or (m.autor = 'sistema' and m.conteudo like 'IA parada nesta conversa.%'))
+  `);
+  const fora = new Set<number>();
+  for (const l of linhas) {
+    const t = l.conteudo ?? "";
+    if (l.autor === "sistema" || ofertaDeServico(t) || mensagemAutomatica(t)) fora.add(l.conversaId);
+  }
+  return fora;
 }

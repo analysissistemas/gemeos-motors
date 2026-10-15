@@ -16,3 +16,14 @@ test("quente, negociando e esperando a loja vem primeiro; novo contato parado h�
 test("morno interessado fica no meio", () => {
   assert.equal(prioridadeDoFollowUp({ etapa: "interessado", intencao: "media", tipo: null, clienteEsperando: false, horasDesdeCliente: 20 }).nivel, "media");
 });
+
+test("pronto para o vendedor: só com sinal de compra no que o cliente escreveu", async () => {
+  const { sinalDeCompra } = await import("../../lib/followup-prioridade.ts");
+  // respostas reais de 15/10/2026
+  assert.equal(sinalDeCompra("Quantos anos de garantia?"), "Perguntou do produto");
+  assert.equal(sinalDeCompra("18 vezes no elo"), "Falou de pagamento");
+  assert.equal(sinalDeCompra("Seria no cartão"), "Falou de pagamento");
+  assert.equal(sinalDeCompra("Onde fica?"), "Quer vir à loja");
+  // não é sinal
+  for (const t of [null, "", "ok", "Obrigado", "👍", "Bom dia", "Não quero mais, obrigado", "Já comprei em outra loja"]) assert.equal(sinalDeCompra(t), null, String(t));
+});

@@ -75,3 +75,23 @@ export const TENTATIVAS_IA = [
 
 /** Horas desde uma data (null se não houver). */
 export const horasDesde = (d: Date | string | null) => (d ? (Date.now() - new Date(d).getTime()) / 3_600_000 : null);
+
+/* "Pronto para o vendedor" (dono, 15/10/2026: o "Luis" da TIM mandou uma figurinha e apareceu como pronto; "com base em
+   que você mede isso?"). Agora mede pelo que o cliente ESCREVEU depois do follow-up: só entra quem deu sinal de compra.
+   Figurinha, "ok", "obrigado" e recusa não contam. Cada sinal tem nome, para a tela mostrar o porquê. */
+const SINAIS: [RegExp, string][] = [
+  [/(?<![\p{L}])(?:\d{1,2}\s*(?:x|vezes)|parcel\w*|cart[ãa]o|cr[ée]dito|d[ée]bito|pix|[àa] vista|boleto|financ\w*|entrada)(?![\p{L}])/iu, "Falou de pagamento"],
+  [/(?<![\p{L}])(?:pre[çc]o|valor|quanto\s+(?:custa|fica|sai|[ée])|desconto|faz\s+por|menor\s+pre[çc]o)(?![\p{L}])/iu, "Perguntou o preço"],
+  [/(?<![\p{L}])(?:quero|vou\s+(?:levar|comprar|querer|fechar|ficar)|fechar|fechado|reserv\w*|separa\w*|pode\s+mandar\s+os\s+dados)(?![\p{L}])/iu, "Disse que quer"],
+  [/(?<![\p{L}])(?:onde\s+fica|endere[çc]o|localiza[çc][ãa]o|test\s*-?\s*drive|visita\w*|passar\s+a[íi]|ir\s+a[íi]|vou\s+a[íi]|amanh[ãa]\s+eu\s+(?:passo|vou))(?![\p{L}])/iu, "Quer vir à loja"],
+  [/(?<![\p{L}])(?:entrega\w*|frete|retirar|buscar)(?![\p{L}])/iu, "Perguntou da entrega"],
+  [/(?<![\p{L}])(?:garantia|autonomia|bateria|dispon[íi]vel|tem\s+(?:na|em)\s+(?:cor|estoque)|qual\s+cor|cores)(?![\p{L}])/iu, "Perguntou do produto"],
+];
+const RX_RECUSA = /(?<![\p{L}])(?:n[ãa]o\s+(?:quero|tenho\s+interesse|preciso|vou\s+(?:comprar|querer))|sem\s+interesse|desisti|j[áa]\s+comprei|comprei\s+em\s+outr|pare\s+de|n[ãa]o\s+me\s+mande)(?![\p{L}])/iu;
+
+/** O sinal de compra no que o cliente escreveu (null: não deu sinal, ou recusou). */
+export function sinalDeCompra(texto: string | null): string | null {
+  const t = (texto ?? "").trim();
+  if (!t || RX_RECUSA.test(t)) return null;
+  return SINAIS.find(([rx]) => rx.test(t))?.[1] ?? null;
+}

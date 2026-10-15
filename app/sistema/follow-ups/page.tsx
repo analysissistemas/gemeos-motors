@@ -9,7 +9,7 @@ import { chaveDia, chaveHoje, dataCurta, dataHora, diaPorExtenso, formatarTelefo
 import { rotuloEtapa } from "@/lib/dominio";
 import { cn } from "@/lib/cn";
 import { horasDesde, prioridadeDoFollowUp, TENTATIVAS_IA, type Motivo, type NivelPrioridade } from "@/lib/followup-prioridade";
-import { pendentesFollowUp, placarVendedores, prontosParaVendedor, quentesSemRetorno, resultadoFollowUps, type PendenteFollowUp, type Resultado } from "@/lib/consultas/followups";
+import { naoClientes, pendentesFollowUp, placarVendedores, prontosParaVendedor, quentesSemRetorno, resultadoFollowUps, type PendenteFollowUp, type Resultado } from "@/lib/consultas/followups";
 import { Pagina } from "@/components/ui/pagina";
 import { CabecalhoPagina, EstadoVazio, Painel } from "@/components/ui/basicos";
 import { classesBotao } from "@/components/ui/botao";
@@ -56,7 +56,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
   const quem = verTodos ? null : u.id;
   const fechou = alias(schema.usuarios, "fechou_f");
   const F = schema.followUps;
-  const [pendentes, prontos, quentes, resultado, placar, encerrados] = await Promise.all([
+  const [pendentesTodos, prontosTodos, quentesTodos, resultado, placar, encerrados] = await Promise.all([
     pendentesFollowUp(quem),
     prontosParaVendedor(quem),
     quentesSemRetorno(quem),
@@ -72,6 +72,11 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
       .orderBy(desc(F.concluidoEm))
       .limit(20),
   ]);
+  /* operadora oferecendo serviço e robô não são cliente: fora do painel (dono, 15/10/2026: "é só perda de tempo") */
+  const fora = await naoClientes([...pendentesTodos, ...prontosTodos, ...quentesTodos].map((x) => x.conversaId).filter((id): id is number => id !== null));
+  const pendentes = pendentesTodos.filter((x) => !x.conversaId || !fora.has(x.conversaId));
+  const prontos = prontosTodos.filter((x) => !fora.has(x.conversaId));
+  const quentes = quentesTodos.filter((x) => !fora.has(x.conversaId));
   const hoje = chaveHoje();
   /* quem já está em "Prontos" não se repete em "Quentes sem retorno" */
   const esquecidos = quentes.filter((e) => !prontos.some((p) => p.conversaId === e.conversaId));
@@ -128,7 +133,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
 
       {/* 2. prontos */}
       {prontos.length > 0 && (
-        <Secao id="prontos" icone={<Flame className="size-4.5 text-critico" />} titulo="Prontos para o vendedor" ajuda="Responderam a um follow-up e estão quentes ou avançaram no funil. Pegue agora.">
+        <Secao id="prontos" icone={<Flame className="size-4.5 text-critico" />} titulo="Prontos para o vendedor" ajuda="Responderam a um follow-up com sinal de compra (pagamento, preço, “quero”, vir à loja, entrega, pergunta sobre a moto) ou estão em visita, proposta ou negociação. Figurinha, “ok” e recusa não entram. Pegue agora.">
           <Painel className="overflow-hidden border-critico/40">
             <ul>
               {prontos.map((p) => (
@@ -136,13 +141,14 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="font-semibold">{nomeDe(p.cliente, p.telefone)}</span>
-                      {p.intencao === "alta" && <Chip tom="quente">Lead quente</Chip>}
+                      <Chip tom="quente">{p.porque}</Chip>
+                      {p.esperandoLoja && <Chip tom="quente">Esperando a loja</Chip>}
                       {p.etapa && <Chip tom="bom">{rotuloEtapa(p.etapa)}</Chip>}
                       {p.interesse && <Chip>{p.interesse}</Chip>}
                     </span>
                     <span className="mt-1 block text-[12.5px] text-ink-2">
                       Respondeu {relativo(p.respondeuEm)} ao follow-up {p.deQuem === "ia" ? `da IA${p.tentativa ? ` (${p.tentativa}ª tentativa)` : ""}` : "da equipe"}
-                      {p.resposta && !/^Mensagem de um tipo/u.test(p.resposta) ? <>: <span className="text-ink">“{p.resposta.slice(0, 120)}”</span></> : " (mandou figurinha, foto ou áudio)"}
+                      {p.resposta ? <>: <span className="text-ink">“{p.resposta.slice(0, 120)}”</span></> : null}
                     </span>
                   </span>
                   <Link href={`/sistema/conversas?c=${p.conversaId}`} className={classesBotao("primario", "sm")}>
