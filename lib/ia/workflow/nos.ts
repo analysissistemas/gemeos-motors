@@ -1333,7 +1333,10 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     const controle = await lerControle();
     const pipe = c.pipe!;
     const pedidoDaIa = pipe.motivo === "modelo_pediu_transferencia";
-    const resumo = c.aprendido.resumo ?? c.memoria.resumo ?? c.textoBuffer.slice(0, 200);
+    /* resposta trocada pelo texto do sistema (recado, negociação...): o resumo novo da IA fala do rascunho dela, que não
+       saiu (Simulador, 15/10/2026: "Listou as motos elétricas disponíveis" num recado para o dono); fica o anterior */
+    const textoDoSistema = !!pipe.texto && pipe.texto === pipe.textoCatalogo;
+    const resumo = (textoDoSistema ? null : c.aprendido.resumo) ?? c.memoria.resumo ?? c.textoBuffer.slice(0, 200);
     /* regra do dono (27/09/2026): fora do horário NUNCA passa para humano. A IA continua atendendo,
        a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
     if (!lojaAberta(await lerHorario())) {
