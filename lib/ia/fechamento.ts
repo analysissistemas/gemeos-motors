@@ -331,7 +331,8 @@ export function semPerguntaDeFechamento(resposta: string[]) {
 /** Os dados que o Milton pede (lista do dono, P8/P11), sem o que o cliente já informou. */
 export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string | null; pagamento?: string | null }) {
   if (modo === "retirada") {
-    return `Combinado! Para registrar sua compra e a equipe separar a moto pra você, me manda por aqui:\n• Nome completo\n• CPF\n• Que dia e horário você pretende vir?`;
+    /* o endereço vai no documento da venda (dono, 15/10/2026); sem CEP, que é da entrega */
+    return `Combinado! Para registrar sua compra e a equipe separar a moto pra você, me manda por aqui:\n• Nome completo\n• CPF\n• Endereço (rua, número, bairro e cidade)\n• Que dia e horário você pretende vir?`;
   }
   /* os mesmos campos da lista do Milton, agrupados para caber numa mensagem (o validador limita a 12 linhas) */
   const campos = [

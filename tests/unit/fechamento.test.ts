@@ -57,7 +57,7 @@ test("mandou os dados: com CPF passa ao vendedor; sem CPF, pede o que falta", ()
   assert.equal(m("Carlos Silva\nRua das Flores 120\nCentro", lista), "dados_parciais");
 });
 
-test("lista de dados: a do Milton, sem o que o cliente já disse; retirada sem endereço", () => {
+test("lista de dados: a do Milton, sem o que o cliente já disse; retirada com endereço e sem CEP", () => {
   const entrega = listaDeDados("entrega", { cidade: "Goiana", pagamento: "pix" });
   assert.match(entrega, /• Nome completo[\s\S]*• CPF[\s\S]*• Data de nascimento[\s\S]*• Ponto de referência/);
   assert.doesNotMatch(entrega, /• Cidade|• Forma de pagamento/);
@@ -65,8 +65,8 @@ test("lista de dados: a do Milton, sem o que o cliente já disse; retirada sem e
   assert.equal(notaDeEntrega("Itambé"), "Sobre a entrega em Itambé, a nossa equipe confirma se atende aí e te fala certinho 😊");
   assert.equal(notaDeEntrega("Goiana"), null);
   const retirada = listaDeDados("retirada", {});
-  assert.match(retirada, /• CPF/);
-  assert.doesNotMatch(retirada, /CEP|Rua|Bairro/);
+  assert.match(retirada, /• CPF[\s\S]*• Endereço \(rua, número, bairro e cidade\)/);
+  assert.doesNotMatch(retirada, /CEP|Data de nascimento/);
 });
 
 test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () => {

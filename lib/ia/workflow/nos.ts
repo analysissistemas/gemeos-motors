@@ -475,21 +475,13 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
   if (d.telefone && !cli.telefone) patch.telefone = d.telefone;
   if (d.nascimento && !cli.nascimento) patch.nascimento = d.nascimento;
   /* endereço de entrega: o que o cliente acabou de mandar vale */
-  if (modo === "entrega") {
-    if (d.cep) patch.cep = d.cep;
-    if (d.rua) patch.endereco = d.rua;
-    if (d.numero) patch.numero = d.numero;
-    if (d.bairro) patch.bairro = d.bairro;
-    if (cidade) patch.cidade = cidade;
-  } else {
-    /* retirada: o endereço que ele mandou é o de casa e vai no documento da venda (dono, 15/10/2026: "antes da
-       documentação eu não inseri o CPF do cliente e onde ele mora"); só preenche o que o cadastro ainda não tem */
-    if (d.cep && !cli.cep) patch.cep = d.cep;
-    if (d.rua && !cli.endereco) patch.endereco = d.rua;
-    if (d.numero && !cli.numero) patch.numero = d.numero;
-    if (d.bairro && !cli.bairro) patch.bairro = d.bairro;
-    if (cidade && !cli.cidade) patch.cidade = cidade;
-  }
+  /* na retirada também: a lista pede o endereço, que vai no documento da venda (dono, 15/10/2026: "antes da
+     documentação eu não inseri o CPF do cliente e onde ele mora") */
+  if (d.cep) patch.cep = d.cep;
+  if (d.rua) patch.endereco = d.rua;
+  if (d.numero) patch.numero = d.numero;
+  if (d.bairro) patch.bairro = d.bairro;
+  if (cidade) patch.cidade = cidade;
   if (Object.keys(patch).length) await db.update(schema.clientes).set({ ...patch, atualizadoEm: new Date() }).where(eq(schema.clientes.id, clienteId));
 
   const faltam = camposFaltando(d, modo, { cidade, pagamento: fatos.pagamento });
@@ -497,7 +489,7 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
     `Pedido pelo WhatsApp (IA): ${c.modeloDaConversa ?? "moto"}`,
     modo === "entrega"
       ? `Entrega: ${enderecoDe(d, cidade) || "endereço a confirmar"}${d.referencia ? ` (referência: ${d.referencia})` : ""}${d.horario ? ` · receber até: ${d.horario}` : ""}`
-      : `Retirada na loja: ${d.horario ?? "dia e horário a confirmar"}`,
+      : `Retirada na loja: ${d.horario ?? "dia e horário a confirmar"} · endereço do cliente: ${enderecoDe(d, cidade) || "a confirmar"}`,
     `Pagamento: ${d.pagamento ?? fatos.pagamento ?? "a confirmar"}`,
     d.telefone ? "Outro telefone de contato no cadastro" : null,
     patch.cpf || patch.nascimento ? "CPF e data de nascimento salvos no cadastro" : null,

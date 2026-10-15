@@ -40,11 +40,13 @@ test("com rótulo, como a lista do Milton", () => {
   assert.equal(d.horario, "17h");
 });
 
-test("retirada: nome, CPF e horário", () => {
+test("retirada: nome, CPF, endereço e horário", () => {
   const d = lerDadosDoCliente("José Carlos Lima, 111.444.777-35, sábado às 10h");
   /* tudo numa linha sem rótulo: o CPF e o horário saem; o nome fica para a equipe conferir se não der */
   assert.equal(d.cpf, "11144477735");
-  assert.deepEqual(camposFaltando({ nomeCompleto: "José Lima", cpf: "11144477735", horario: "sábado 10h" }, "retirada"), ["forma de pagamento"]);
+  /* desde 15/10/2026 a retirada pede o endereço também (vai no documento da venda) */
+  assert.deepEqual(camposFaltando({ nomeCompleto: "José Lima", cpf: "11144477735", horario: "sábado 10h" }, "retirada"), ["endereço", "forma de pagamento"]);
+  assert.deepEqual(camposFaltando({ nomeCompleto: "José Lima", cpf: "11144477735", rua: "Rua A", horario: "sábado 10h" }, "retirada"), ["forma de pagamento"]);
 });
 
 test("CPF inválido não vai para o cadastro; telefone de 11 dígitos não vira CPF", () => {
@@ -52,4 +54,18 @@ test("CPF inválido não vai para o cadastro; telefone de 11 dígitos não vira 
   const d = lerDadosDoCliente("81988887777");
   assert.equal(d.cpf, undefined);
   assert.equal(d.telefone, "81988887777");
+});
+
+test("retirada: endereço numa linha só vira rua, número, bairro e cidade (15/10/2026)", () => {
+  const d = lerDadosDoCliente("Nome: Maria José da Silva\nCPF: 529.982.247-25\nEndereço: Rua das Flores, 12, Centro, Goiana\nAmanhã às 10h");
+  assert.equal(d.rua, "Rua das Flores");
+  assert.equal(d.numero, "12");
+  assert.equal(d.bairro, "Centro");
+  assert.equal(d.cidade, "Goiana");
+  assert.ok(!camposFaltando(d, "retirada").includes("endereço"));
+  const s = lerDadosDoCliente("Endereço: Av. Brasil nº 300 - Boa Vista - Recife/PE");
+  assert.equal(s.rua, "Av. Brasil nº 300");
+  assert.equal(s.bairro, "Boa Vista");
+  assert.equal(s.cidade, "Recife");
+  assert.ok(camposFaltando({ nomeCompleto: "Maria", cpf: "52998224725", horario: "10h" }, "retirada").includes("endereço"));
 });

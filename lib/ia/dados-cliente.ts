@@ -106,6 +106,22 @@ function aplicar(d: DadosCliente, campo: keyof DadosCliente, valorBruto: string)
     case "pagamento":
       d.pagamento = pagamentoDe(v) ?? v.slice(0, 60);
       return;
+    case "rua": {
+      /* "Endereço: Rua das Flores, 12, Centro, Goiana" numa linha só: rua, número, bairro e cidade (retirada, 15/10/2026) */
+      const partes = v.split(/\s*,\s*|\s+-\s+/).map(limpar).filter(Boolean);
+      if (partes.length < 2) return void (d.rua = v.slice(0, 160));
+      d.rua = partes.shift()!.slice(0, 160);
+      const n = partes[0] && /^(?:n[º°o]?\.?\s*)?(\d+[a-z]?|s\/?n)$/iu.exec(partes[0]);
+      if (n) {
+        d.numero ??= n[1];
+        partes.shift();
+      }
+      if (partes.length >= 2) {
+        d.bairro ??= partes[0].slice(0, 80);
+        d.cidade ??= partes[1].replace(/\s*\/\s*[a-z]{2}$/iu, "").slice(0, 80);
+      } else if (partes.length === 1) d.bairro ??= partes[0].slice(0, 80);
+      return;
+    }
     default:
       d[campo] = v.slice(0, 160);
   }
@@ -185,7 +201,7 @@ export function lerDadosDoCliente(texto: string): DadosCliente {
 export function camposFaltando(d: DadosCliente, modo: "entrega" | "retirada", ja: { cidade?: string | null; pagamento?: string | null } = {}) {
   const obrigatorios: [keyof DadosCliente, string][] =
     modo === "retirada"
-      ? [["nomeCompleto", "nome completo"], ["cpf", "CPF"], ["horario", "dia e horário da retirada"]]
+      ? [["nomeCompleto", "nome completo"], ["cpf", "CPF"], ["rua", "endereço"], ["horario", "dia e horário da retirada"]]
       : [
           ["nomeCompleto", "nome completo"],
           ["cpf", "CPF"],

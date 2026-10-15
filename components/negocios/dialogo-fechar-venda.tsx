@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CircleDollarSign } from "lucide-react";
+import { CircleDollarSign, Sparkles, TriangleAlert } from "lucide-react";
 import { brl } from "@/lib/formato";
+import { FORMAS_PAGAMENTO } from "@/lib/dominio";
 import { Botao, classesBotao } from "@/components/ui/botao";
 import { Campo, CampoDinheiro, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { EditorPagamentos, type Pagamento } from "@/components/vendas/editor-pagamentos";
-import { acaoFecharVenda, acaoVeiculosVendaveis } from "@/app/sistema/funil/acoes";
+import { acaoFecharVenda, acaoSugestaoVenda, acaoVeiculosVendaveis, type SugestaoVenda } from "@/app/sistema/funil/acoes";
 
 type Veic = { id: number; rotulo: string; valorAnunciado: number | null; status: string };
 type Alvo = { id: number; cliente: string; veiculoId: number | null; valorAnunciado: number | null; valorProposta: number | null };
@@ -49,10 +50,34 @@ function CorpoFechar({ negocio, aoRegistrar, aoFechar, aoCancelar }: { negocio: 
   const [erros, setErros] = useState<Record<string, string>>({});
   const [vendaId, setVendaId] = useState<number | null>(null);
   const [pendente, iniciar] = useTransition();
+  const [sugestao, setSugestao] = useState<SugestaoVenda | null>(null);
 
   useEffect(() => {
     acaoVeiculosVendaveis().then(setVeiculos);
-  }, []);
+    /* o que o cliente disse no WhatsApp já entra: a moto, o preço dela e o pagamento (dono, 15/10/2026) */
+    acaoSugestaoVenda(negocio.id).then((sg) => {
+      if (!sg) return;
+      setSugestao(sg);
+      if (sg.veiculoId) setVeiculoId(String(sg.veiculoId));
+      if (sg.valorAnunciado) setAnunciado(sg.valorAnunciado);
+      const valor = sg.valorVendido ?? sg.valorAnunciado ?? negocio.valorProposta ?? negocio.valorAnunciado;
+      if (valor) setVendido(valor);
+      setPags([{ forma: sg.pagamento?.forma ?? "pix", valor, entrada: false, observacao: sg.pagamento?.observacao ?? null }]);
+    });
+  }, [negocio.id, negocio.valorAnunciado, negocio.valorProposta]);
+
+  /* o preço é o da moto escolhida; o vendido e o pagamento único acompanham enquanto ninguém digitou outro */
+  function escolher(id: string) {
+    setVeiculoId(id);
+    const v = veiculos?.find((x) => x.id === Number(id));
+    if (!v?.valorAnunciado) return;
+    const novo = v.valorAnunciado;
+    if (!vendido || vendido === anunciado) {
+      setVendido(novo);
+      if (pags.length === 1 && (!pags[0].valor || pags[0].valor === vendido)) setPags([{ ...pags[0], valor: novo }]);
+    }
+    setAnunciado(novo);
+  }
 
   if (vendaId)
     return (
@@ -78,6 +103,31 @@ function CorpoFechar({ negocio, aoRegistrar, aoFechar, aoCancelar }: { negocio: 
 
   return (
     <>
+      {sugestao && (sugestao.veiculoId || sugestao.pagamento) && (
+        <div className="mb-4 flex items-start gap-2 rounded-2xl border border-linha bg-trilho/50 px-4 py-3 text-[13px]">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-ink-2" />
+          <span>
+            Preenchido com o que o cliente disse no WhatsApp. Confira antes de registrar.
+            {sugestao.veiculoId && sugestao.interesse && (
+              <span className="block text-ink-2">Moto: pediu “{sugestao.interesse}”.</span>
+            )}
+            {sugestao.pagamento && (
+              <span className="block text-ink-2">
+                Pagamento: {FORMAS_PAGAMENTO[sugestao.pagamento.forma]}
+                {sugestao.pagamento.observacao ? ` (${sugestao.pagamento.observacao})` : ""}, ele disse “{sugestao.ditoPagamento}”.
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+      {sugestao && sugestao.faltaCliente.length > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-2xl border border-atencao/40 bg-atencao/10 px-4 py-3 text-[13px]">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>
+            Falta <b>{sugestao.faltaCliente.join(" e ")}</b> do cliente para o documento. Depois de registrar, você preenche na própria tela da venda.
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo rotulo="Veículo vendido" obrigatorio erro={erros.veiculoId} className="sm:col-span-2">
           {veiculos === null ? (
@@ -94,11 +144,7 @@ function CorpoFechar({ negocio, aoRegistrar, aoFechar, aoCancelar }: { negocio: 
             <Selecao
               value={veiculoId}
               invalido={!!erros.veiculoId}
-              onChange={(e) => {
-                setVeiculoId(e.target.value);
-                const v = veiculos.find((x) => x.id === Number(e.target.value));
-                if (v?.valorAnunciado && anunciado == null) setAnunciado(v.valorAnunciado);
-              }}
+              onChange={(e) => escolher(e.target.value)}
             >
               <option value="">Escolha o veículo</option>
               {veiculos.map((v) => (
