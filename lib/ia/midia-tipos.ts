@@ -39,16 +39,22 @@ function nomesDe(nome: string) {
   /* a 1ª palavra também vale ("tank" → TANK AG11, teste de 05/10/2026), se tiver 3+ letras e não for genérica */
   const primeira = norm(palavras[0] ?? "");
   const extra = palavras.length > 1 && primeira.length >= 3 && !/\d/.test(primeira) && !GENERICOS.has(primeira) ? [primeira] : [];
-  return Array.from(new Set([nome, ...pedacos, ...extra].map(norm)));
+  /* a potência sem o W ("no anúncio o 530 tava mais barato" → Patinete 530W, Simulador de 14/10/2026) */
+  const potencias = pedacos.filter((p) => /^\d{3,4}w$/i.test(p)).map((p) => p.slice(0, -1));
+  return Array.from(new Set([nome, ...pedacos, ...extra, ...potencias].map(norm)));
 }
+/* número solto só vale como potência: não é preço ("R$ 530", "3.500"), parcela ("10x"), km nem ano */
+const regexDoNome = (n: string) =>
+  /^\d+$/.test(n)
+    ? new RegExp(`(?<![\\p{L}\\p{N}.,$])(?<!r\\$\\s)${escapar(n)}(?![\\p{L}\\p{N}]|[.,]\\d|\\s*(?:km|reais|mil|x|vezes)(?![\\p{L}]))`, "gu")
+    : new RegExp(`(?<![\\p{L}\\p{N}])${escapar(n)}(?![\\p{L}\\p{N}])`, "gu");
 /** A moto citada por último no texto (posição da última menção). */
 export function ultimaCitada<T extends { nome: string }>(modelos: T[], texto: string): T | null {
   const t = norm(texto);
   let melhor: { m: T; pos: number; tam: number } | null = null;
   for (const m of modelos)
     for (const n of nomesDe(m.nome)) {
-      const rx = new RegExp(`(?<![\\p{L}\\p{N}])${escapar(n)}(?![\\p{L}\\p{N}])`, "gu");
-      for (const x of t.matchAll(rx)) {
+      for (const x of t.matchAll(regexDoNome(n))) {
         const pos = x.index ?? -1;
         if (!melhor || pos > melhor.pos || (pos === melhor.pos && n.length > melhor.tam)) melhor = { m, pos, tam: n.length };
       }

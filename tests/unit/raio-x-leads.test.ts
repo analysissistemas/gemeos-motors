@@ -111,3 +111,12 @@ test("Andressa e Lucileide: chamou pelo nome do perfil, não pergunta 'com quem 
   assert.equal(jaChamouPeloNome("Andressa Souto", "Agente IA: Boa noite! Tudo certinho?", []), false);
   assert.equal(jaChamouPeloNome(null, hist, []), false);
 });
+
+test("'o 530' sem o W é o Patinete 530W; preço, parcela e km não viram modelo (Simulador, 14/10/2026)", async () => {
+  const { ultimaCitada } = await import("../../lib/ia/midia-tipos.ts");
+  const cat = ["Patinete 350W", "Patinete 530W", "Patinete 800W", "X GÊMEOS", "T3 RETRÔ"].map((nome) => ({ nome }));
+  const nome = (t: string) => ultimaCitada(cat, t)?.nome ?? null;
+  assert.equal(nome("Patinete 800W?\nMas no anúncio o 530 tava mais barato. Nesse preço do anúncio não tem?"), "Patinete 530W");
+  assert.equal(nome("quanto custa o 800?"), "Patinete 800W");
+  for (const t of ["faço R$ 350 de entrada", "tenho 3.500", "350 reais", "ando 350 km", "350x não", "1.350,00"]) assert.equal(nome(t), null, t);
+});
