@@ -25,6 +25,7 @@ export const metadata: Metadata = { title: "Follow-ups" };
 
 const TIPOS: Record<string, string> = {
   retorno_cliente: "Responder cliente",
+  retirada: "Retirada na loja",
   simulacao: "Simulação",
   entrega: "Entrega",
   revisar_ia: "Revisar IA",
@@ -68,7 +69,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
       .leftJoin(schema.clientes, eq(schema.clientes.id, F.clienteId))
       .leftJoin(schema.conversas, eq(schema.conversas.id, F.conversaId))
       .leftJoin(fechou, eq(fechou.id, F.concluidoPor))
-      .where(and(sql`${F.status} <> 'pendente'`, sql`coalesce(${F.tipo}, '') <> 'aquecimento'`, sql`coalesce(${schema.conversas.demo}, false) = false`, verTodos ? undefined : or(eq(F.usuarioId, u.id), isNull(F.usuarioId))))
+      .where(and(sql`${F.status} <> 'pendente'`, sql`coalesce(${F.tipo}, '') not in ('aquecimento', 'lembrete_retirada')`, sql`coalesce(${schema.conversas.demo}, false) = false`, verTodos ? undefined : or(eq(F.usuarioId, u.id), isNull(F.usuarioId))))
       .orderBy(desc(F.concluidoEm))
       .limit(20),
   ]);
@@ -82,7 +83,8 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
   const esquecidos = quentes.filter((e) => !prontos.some((p) => p.conversaId === e.conversaId));
   const ordemNivel: Record<NivelPrioridade, number> = { alta: 0, media: 1, baixa: 2 };
   const daEquipe = pendentes
-    .filter((f) => f.tipo !== "aquecimento")
+    /* o lembrete da retirada a IA manda sozinha: aparece dentro da tarefa "Retirada na loja" */
+    .filter((f) => f.tipo !== "aquecimento" && f.tipo !== "lembrete_retirada")
     .map((f) => ({
       ...f,
       prio: prioridadeDoFollowUp({

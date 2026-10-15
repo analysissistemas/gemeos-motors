@@ -22,7 +22,7 @@ export async function contarPendencias(u: UsuarioAtual) {
               eq(schema.followUps.status, "pendente"),
               lte(schema.followUps.agendadoPara, fimDoDia),
               /* o aquecimento a IA envia sozinha: não é tarefa da equipe */
-              sql`coalesce(${schema.followUps.tipo}, '') <> 'aquecimento'`,
+              sql`coalesce(${schema.followUps.tipo}, '') not in ('aquecimento', 'lembrete_retirada')`,
               /* teste do Simulador não conta (dono, 15/10/2026) */
               sql`not exists (select 1 from conversas cv where cv.id = ${schema.followUps.conversaId} and cv.demo)`,
               u.papel === "admin" ? undefined : or(eq(schema.followUps.usuarioId, u.id), isNull(schema.followUps.usuarioId)),

@@ -109,7 +109,7 @@ export async function prontosParaVendedor(usuarioId: number | null): Promise<Pro
       having count(*) > 0
     ) r on true
     where f.status = 'concluido' and f.concluido_em > now() - interval '7 days'
-      and (f.tipo <> 'aquecimento' or f.notas like 'Aquecimento % enviado pela IA%')
+      and (f.tipo <> 'aquecimento' or f.notas like 'Aquecimento % enviado pela IA%') and coalesce(f.tipo, '') <> 'lembrete_retirada'
       and ${real} ${usuarioId ? sql`and (cv.responsavel_id = ${usuarioId} or cv.responsavel_id is null)` : sql``}
       and coalesce(n.etapa, '') not in ('fechada', 'perdida')
     order by cv.id, f.concluido_em desc
@@ -159,7 +159,7 @@ export async function resultadoFollowUps(usuarioId: number | null) {
         join conversas cv on cv.id = f.conversa_id
         left join clientes cl on cl.id = cv.cliente_id
         where f.status = 'concluido' and f.concluido_em > now() - interval '30 days'
-          and (f.tipo <> 'aquecimento' or f.notas like 'Aquecimento % enviado pela IA%')
+          and (f.tipo <> 'aquecimento' or f.notas like 'Aquecimento % enviado pela IA%') and coalesce(f.tipo, '') <> 'lembrete_retirada'
           and ${real} ${usuarioId ? sql`and (f.usuario_id = ${usuarioId} or (f.tipo = 'aquecimento' and cv.responsavel_id = ${usuarioId}))` : sql``}
         order by f.conversa_id, quem, f.concluido_em asc
       )
@@ -197,7 +197,7 @@ export async function placarVendedores() {
       count(f.*) filter (where f.status = 'concluido' and f.concluido_em > now() - interval '7 days'
         and exists (select 1 from mensagens m where m.conversa_id = f.conversa_id and m.direcao = 'incoming' and m.criado_em > f.concluido_em and m.criado_em < f.concluido_em + interval '48 hours'))::int as "responderam7d"
     from usuarios u
-    left join follow_ups f on f.usuario_id = u.id and coalesce(f.tipo, '') <> 'aquecimento'
+    left join follow_ups f on f.usuario_id = u.id and coalesce(f.tipo, '') not in ('aquecimento', 'lembrete_retirada')
       and not exists (select 1 from conversas cv where cv.id = f.conversa_id and cv.demo)
     where u.ativo and u.papel in ('admin', 'vendedor')
     group by u.id, u.nome

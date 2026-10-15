@@ -15,7 +15,7 @@ import { criarTestDrive } from "@/lib/servicos/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
-import { formatarTelefone } from "@/lib/formato";
+import { formatarTelefone, hora } from "@/lib/formato";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
 import { agoraNaLoja, corrigirCumprimento, lojaAberta, saudacaoDoHorario, textoHorario, type HorarioLoja } from "@/lib/ia/horario";
@@ -49,6 +49,7 @@ import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia,
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
+import { planoRetirada, quandoRetirar, textoLembreteRetirada, textoRetiradaMarcada, trechoDeQuando } from "@/lib/ia/retirada";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
 import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead, triagemDosFatos } from "@/lib/ia/qualificacao";
@@ -455,6 +456,38 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
    cadastro dele; o resumo do pedido (sem CPF nem data de nascimento) vai para o negócio e para a conversa;
    o que faltou fica escrito para a equipe conferir. Entrega fora de Goiana: a IA não sabe se atende nem a
    taxa, então cria a tarefa para a equipe confirmar. Nada aqui manda mensagem ao cliente. */
+/* Retirada com dia e hora: tarefa da equipe para separar a moto (3 h antes) e o lembrete do cliente no dia (2 h antes,
+   não antes das 8 h, dentro da janela de 24 h do WhatsApp). Sem data que dê para marcar: tarefa agora para combinar. */
+async function agendarRetirada(c: CtxWorkflow, clienteId: number, negocioId: number | null, horarioDito: string | undefined, nome: string | null, pagamento: string | null) {
+  const F = schema.followUps;
+  const agora = new Date();
+  const ret = quandoRetirar(trechoDeQuando(horarioDito, c.textoBuffer), await lerHorario(), agora);
+  const cv = await carregarConversa(c.conversaId);
+  const moto = c.modeloDaConversa ?? "moto";
+  const quem = nome ?? "o cliente";
+  /* mandou os dados de novo: vale o último dia e hora */
+  await db.update(F).set({ status: "cancelado", concluidoEm: agora }).where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), inArray(F.tipo, ["retirada", "lembrete_retirada"])));
+  const base = { conversaId: c.conversaId, clienteId, negocioId, usuarioId: cv.responsavelId, origem: "ia" as const };
+  if (!ret.quando) {
+    const porque = { sem_dia: "não disse o dia", sem_hora: "não disse a hora", passou: "o horário já passou", fechada: "a loja está fechada no horário que ele disse" }[ret.problema ?? "sem_dia"];
+    await db.insert(F).values({ ...base, agendadoPara: agora, tipo: "retirada", motivo: "Combinar a retirada", notas: `${quem} vai retirar a ${moto} na loja, mas ${porque}${horarioDito ? ` ("${horarioDito}")` : ""}. Combine o dia e a hora com ele.`, contexto: { detectadoPor: "ia", modelo: moto } });
+    return { quando: null, aviso: `Dia e hora da retirada: ${porque}. Ficou a tarefa para a equipe combinar.` };
+  }
+  const plano = planoRetirada(ret.quando, agora, agora);
+  const lembrete = plano.lembreteEm ? textoLembreteRetirada({ nome, modelo: c.modeloDaConversa, quando: ret.quando }) : null;
+  await db.insert(F).values({
+    ...base,
+    agendadoPara: plano.equipeEm,
+    tipo: "retirada",
+    motivo: "Separar a moto da retirada",
+    notas: `Separar a ${moto} para ${quem}: vem retirar ${quandoPorExtenso(ret.quando)}.${pagamento ? ` Pagamento: ${pagamento}.` : ""}${plano.lembreteEm ? ` A IA lembra o cliente às ${hora(plano.lembreteEm)}.` : plano.foraDaJanela ? " Lembre o cliente no dia (passa das 24 h do WhatsApp, a IA não pode mandar)." : ""}`,
+    contexto: { detectadoPor: "ia", modelo: moto, retiradaEm: ret.quando.toISOString() },
+  });
+  if (plano.lembreteEm && lembrete)
+    await db.insert(F).values({ ...base, agendadoPara: plano.lembreteEm, tipo: "lembrete_retirada", motivo: "Lembrete da retirada", notas: `Lembrete automático da retirada para ${quem}. Cancele se não quiser que saia.`, contexto: { texto: lembrete, retiradaEm: ret.quando.toISOString() } });
+  return { quando: ret.quando, aviso: `Separar a moto: tarefa em Follow-ups às ${hora(plano.equipeEm)}.${plano.lembreteEm ? ` Lembrete ao cliente às ${hora(plano.lembreteEm)}.` : ""}` };
+}
+
 async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
   if (!clienteId || (c.momento !== "mandou_dados" && c.momento !== "dados_parciais")) return null;
   const d = lerDadosDoCliente(c.textoBuffer);
@@ -485,11 +518,13 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
   if (Object.keys(patch).length) await db.update(schema.clientes).set({ ...patch, atualizadoEm: new Date() }).where(eq(schema.clientes.id, clienteId));
 
   const faltam = camposFaltando(d, modo, { cidade, pagamento: fatos.pagamento });
+  const retirada = modo === "retirada" ? await agendarRetirada(c, clienteId, negocioId, d.horario, primeiroNome(d.nomeCompleto ?? fatos.nome ?? null), fatos.pagamento ?? d.pagamento ?? null).catch(() => null) : null;
   const linhas = [
     `Pedido pelo WhatsApp (IA): ${c.modeloDaConversa ?? "moto"}`,
     modo === "entrega"
       ? `Entrega: ${enderecoDe(d, cidade) || "endereço a confirmar"}${d.referencia ? ` (referência: ${d.referencia})` : ""}${d.horario ? ` · receber até: ${d.horario}` : ""}`
-      : `Retirada na loja: ${d.horario ?? "dia e horário a confirmar"} · endereço do cliente: ${enderecoDe(d, cidade) || "a confirmar"}`,
+      : `Retirada na loja: ${retirada?.quando ? quandoPorExtenso(retirada.quando) : d.horario ? `${d.horario} (dia e horário a confirmar com o cliente)` : "dia e horário a confirmar"} · endereço do cliente: ${enderecoDe(d, cidade) || "a confirmar"}`,
+    retirada?.aviso ?? null,
     `Pagamento: ${d.pagamento ?? fatos.pagamento ?? "a confirmar"}`,
     d.telefone ? "Outro telefone de contato no cadastro" : null,
     patch.cpf || patch.nascimento ? "CPF e data de nascimento salvos no cadastro" : null,
@@ -1314,7 +1349,11 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     if (momento === "mandou_dados") {
       const modo = pediuDadosDeRetirada(ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
-      const pipe = { ...r.ctx, texto: textoDadosRecebidos({ nome, modelo: modeloDaConversa, modo, lojaAberta: aberta }), humano: true, motivo: "modelo_pediu_transferencia" as const };
+      /* retirada com dia e hora ("amanhã às 10h"): confirma a data certa e promete o lembrete só se ele vai sair (dono, 15/10/2026) */
+      const ret = modo === "retirada" ? quandoRetirar(trechoDeQuando(lerDadosDoCliente(c.textoBuffer).horario, c.textoBuffer), horario) : null;
+      const marcada = ret?.quando ? textoRetiradaMarcada({ nome, modelo: modeloDaConversa, quandoExtenso: quandoPorExtenso(ret.quando), lembrete: !!planoRetirada(ret.quando, new Date(), new Date()).lembreteEm }) : null;
+      const texto = marcada ?? textoDadosRecebidos({ nome, modelo: modeloDaConversa, modo, lojaAberta: aberta });
+      const pipe = { ...r.ctx, texto, textoCatalogo: marcada ?? r.ctx.textoCatalogo, humano: true, motivo: "modelo_pediu_transferencia" as const };
       const motivo = `Fechamento: o cliente mandou os dados para ${modo === "retirada" ? "retirar na loja" : "entrega"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir os dados e combinar com ele ${modo === "retirada" ? "a separação e o horário da retirada" : "o melhor horário da entrega"}.`;
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, resposta: pipe.texto, transferir: true } };
     }
