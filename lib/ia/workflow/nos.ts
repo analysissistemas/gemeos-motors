@@ -1434,6 +1434,12 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
   },
 
   blocos: async (c) => {
+    /* não é cliente: só o texto do sistema (oferta) ou nada (robô/loop), sem cumprimento, apresentação nem pergunta
+       (Simulador, 15/10/2026: a TIM recebeu "Me chamo Milton... vou te ajudar por aqui!") */
+    if (c.naoCliente) {
+      const blocos = c.pipe?.texto ? [c.pipe.texto] : [];
+      return blocos.length ? { ctx: { blocos, indice: 0, citar: -1, midia: null }, saida: { blocos, naoCliente: c.naoCliente } } : { ramo: "vazio", ctx: { midia: null }, saida: { blocos: [], naoCliente: c.naoCliente } };
+    }
     /* regra do dono (27/09/2026): cumprimentar e se apresentar SÓ no começo da conversa. Se a loja
        (IA ou vendedor) já falou nas últimas 6 h, nada de saudação nem apresentação de novo. */
     const [ultimaDaLoja] = await db
