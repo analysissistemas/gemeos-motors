@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { sinalDeCompra } from "@/lib/followup-prioridade";
 import { quandoPorExtenso } from "@/lib/ia/agenda";
@@ -101,19 +101,19 @@ export async function avisosAgendados(agora = new Date()) {
   if ((marca?.valor as { dia?: string } | null)?.dia === hoje) return;
   await db.insert(schema.configuracoes).values({ chave: "avisos.resumo", valor: { dia: hoje } }).onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor: { dia: hoje }, atualizadoEm: new Date() } });
 
-  const inicio = new Date(`${hoje}T00:00:00-03:00`);
-  const fim = new Date(inicio.getTime() + 24 * 3_600_000);
-  const real = sql`not exists (select 1 from conversas cv where cv.id = ${F.conversaId} and cv.demo)`;
-  const conta = async (q: Promise<{ n: number }[]>) => (await q)[0]?.n ?? 0;
-  const [retiradas, testDrives, followUps, esperando] = await Promise.all([
-    conta(db.select({ n: sql<number>`count(*)::int` }).from(F).where(and(eq(F.status, "pendente"), eq(F.tipo, "retirada"), sql`(${F.contexto}->>'retiradaEm')::timestamptz >= ${inicio} and (${F.contexto}->>'retiradaEm')::timestamptz < ${fim}`, real))),
-    conta(db.select({ n: sql<number>`count(*)::int` }).from(schema.testDrives).where(and(inArray(schema.testDrives.status, ["agendado", "confirmado"]), gte(schema.testDrives.agendadoPara, inicio), lte(schema.testDrives.agendadoPara, fim)))),
-    conta(db.select({ n: sql<number>`count(*)::int` }).from(F).where(and(eq(F.status, "pendente"), lte(F.agendadoPara, fim), sql`coalesce(${F.tipo}, '') not in ('aquecimento', 'lembrete_retirada', 'lembrete_visita', 'retirada')`, real))),
-    conta(db.select({ n: sql<number>`count(*)::int` }).from(schema.conversas).where(and(eq(schema.conversas.demo, false), eq(schema.conversas.modo, "humano"), eq(schema.conversas.ultimaMensagemDirecao, "incoming"), sql`${schema.conversas.status} not in ('resolvida', 'encerrada')`, gte(schema.conversas.ultimaMensagemEm, sql`now() - interval '3 days'`)))),
-  ]);
-  const { prontosParaVendedor, naoClientes } = await import("@/lib/consultas/followups");
-  const todos = await prontosParaVendedor(null);
-  const fora = await naoClientes(todos.map((x) => x.conversaId));
-  const a = avisoResumoDoDia({ retiradas, testDrives, followUps, prontos: todos.filter((x) => !fora.has(x.conversaId)).length, esperando });
-  if (a) await enviarAviso(a);
+  const { relatorioDaManha } = await import("@/lib/consultas/relatorio-manha");
+  const r = await relatorioDaManha(agora);
+  await enviarAviso(
+    avisoResumoDoDia({
+      conversasOntem: r.atendimento.conversas,
+      vendasOntem: r.vendas.ontem.n,
+      prontos: r.vendas.prontos.length,
+      esperando: r.atendimento.esperando.length,
+      retiradas: r.hojeNaLoja.retiradas.length,
+      testDrives: r.hojeNaLoja.testDrives.length,
+      atrasados: r.hojeNaLoja.followUpsAtrasados,
+      semEstoque: r.estoque.procuradosSemEstoque.length,
+      sugestoes: r.ia.sugestoes.length,
+    }),
+  );
 }

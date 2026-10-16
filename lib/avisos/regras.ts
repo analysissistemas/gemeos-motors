@@ -84,15 +84,19 @@ export function avisoLembreteNaoSaiu(p: { conversaId: number; nome: string; doQu
   return { titulo: `⚠️ O lembrete ${p.doQue} de ${p.nome} não saiu`, corpo: "Avise o cliente pela conversa (o texto está em Follow-ups).", tag: `lembrete-${p.conversaId}`, urgente: false, url: conversa(p.conversaId) };
 }
 
-/** Resumo das 8h. Sem nada no dia: null (não manda aviso vazio). */
-export function avisoResumoDoDia(n: { retiradas: number; testDrives: number; followUps: number; prontos: number; esperando: number }): Aviso | null {
-  const partes = [
-    n.prontos && `${n.prontos} ${n.prontos === 1 ? "cliente pronto" : "clientes prontos"} para fechar`,
-    n.retiradas && `${n.retiradas} ${n.retiradas === 1 ? "retirada" : "retiradas"}`,
-    n.testDrives && `${n.testDrives} ${n.testDrives === 1 ? "test drive/visita" : "test drives/visitas"}`,
-    n.followUps && `${n.followUps} follow-up${n.followUps === 1 ? "" : "s"} da equipe`,
-    n.esperando && `${n.esperando} ${n.esperando === 1 ? "cliente esperando" : "clientes esperando"} resposta`,
+/** Relatório da manhã às 8h, todo dia (dono, 15/10/2026): uma linha de ontem, uma de hoje e as sugestões da IA. Abre o
+ *  relatório completo, separado por área. */
+export function avisoResumoDoDia(n: { conversasOntem: number; vendasOntem: number; prontos: number; esperando: number; retiradas: number; testDrives: number; atrasados: number; semEstoque: number; sugestoes: number }): Aviso {
+  const pl = (x: number, um: string, varios: string) => `${x} ${x === 1 ? um : varios}`;
+  const ontem = `Ontem: ${pl(n.conversasOntem, "conversa", "conversas")}, ${pl(n.vendasOntem, "venda", "vendas")}.`;
+  const hoje = [
+    n.prontos && pl(n.prontos, "cliente pronto para fechar", "clientes prontos para fechar"),
+    n.esperando && pl(n.esperando, "cliente esperando resposta", "clientes esperando resposta"),
+    n.retiradas && pl(n.retiradas, "retirada", "retiradas"),
+    n.testDrives && pl(n.testDrives, "test drive/visita", "test drives/visitas"),
+    n.atrasados && pl(n.atrasados, "follow-up atrasado", "follow-ups atrasados"),
+    n.semEstoque && pl(n.semEstoque, "modelo procurado sem estoque", "modelos procurados sem estoque"),
   ].filter(Boolean);
-  if (!partes.length) return null;
-  return { titulo: "☀️ Bom dia! O dia na Gêmeos Motors", corpo: `Hoje: ${partes.join(", ")}.`, tag: "resumo-do-dia", urgente: true, url: "/sistema/follow-ups" };
+  const ia = n.sugestoes ? ` A IA sugere ${pl(n.sugestoes, "melhoria", "melhorias")}.` : "";
+  return { titulo: "☀️ Bom dia! Relatório da manhã", corpo: `${ontem} Hoje: ${hoje.length ? hoje.join(", ") : "nada pendente"}.${ia}`, tag: "resumo-do-dia", urgente: true, url: "/sistema/relatorio" };
 }

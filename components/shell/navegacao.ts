@@ -13,6 +13,7 @@ export const SECOES_MENU: { titulo: string; itens: ItemMenu[] }[] = [
     titulo: "Operação",
     itens: [
       { href: "/sistema", rotulo: "Visão geral", icone: "painel", permissao: "painel.ver" },
+      { href: "/sistema/relatorio", rotulo: "Relatório da manhã", icone: "relatorio", permissao: "conversas.ver" },
       { href: "/sistema/conversas", rotulo: "Atendimento", icone: "conversas", permissao: "conversas.ver", contador: "conversas" },
       { href: "/sistema/funil", rotulo: "Funil de vendas", icone: "funil", permissao: "funil.ver" },
       { href: "/sistema/ligacoes", rotulo: "Ligações", icone: "ligacoes", permissao: "conversas.ver", contador: "ligacoes" },

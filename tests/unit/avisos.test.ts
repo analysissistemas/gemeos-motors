@@ -33,6 +33,9 @@ test("esperando em Humano e anotações comuns", () => {
 test("visita marcada e resumo do dia", () => {
   assert.equal(avisoVisitaMarcada({ conversaId: 5, nome: "Ana", descricao: "Gêmeos M6", quandoExtenso: "sexta, 16/10, às 15h30" }).titulo, "📅 Ana marcou test drive da Gêmeos M6");
   assert.equal(avisoVisitaMarcada({ conversaId: 5, nome: "Ana", descricao: "Visita à loja", quandoExtenso: "sexta, 16/10, às 15h30" }).corpo, "Sexta, 16/10, às 15h30. Marcado pela IA no WhatsApp.");
-  assert.equal(avisoResumoDoDia({ retiradas: 2, testDrives: 1, followUps: 4, prontos: 3, esperando: 0 })?.corpo, "Hoje: 3 clientes prontos para fechar, 2 retiradas, 1 test drive/visita, 4 follow-ups da equipe.");
-  assert.equal(avisoResumoDoDia({ retiradas: 0, testDrives: 0, followUps: 0, prontos: 0, esperando: 0 }), null);
+  const r = avisoResumoDoDia({ conversasOntem: 12, vendasOntem: 1, prontos: 3, esperando: 0, retiradas: 2, testDrives: 1, atrasados: 4, semEstoque: 1, sugestoes: 3 });
+  assert.equal(r.corpo, "Ontem: 12 conversas, 1 venda. Hoje: 3 clientes prontos para fechar, 2 retiradas, 1 test drive/visita, 4 follow-ups atrasados, 1 modelo procurado sem estoque. A IA sugere 3 melhorias.");
+  assert.equal(r.url, "/sistema/relatorio");
+  /* todo dia, mesmo sem nada pendente */
+  assert.equal(avisoResumoDoDia({ conversasOntem: 0, vendasOntem: 0, prontos: 0, esperando: 0, retiradas: 0, testDrives: 0, atrasados: 0, semEstoque: 0, sugestoes: 0 }).corpo, "Ontem: 0 conversas, 0 vendas. Hoje: nada pendente.");
 });
