@@ -85,7 +85,9 @@ Como preencher:
 - perguntasSemResposta: pergunta do cliente que ninguém respondeu, ou que a IA disse que não sabia, ou respondeu de forma vaga.
 - errosIa: respondeu errado, ofereceu antes de entender o que o cliente queria, mandou a tabela de parcelas inteira, fez mais de uma pergunta na mesma mensagem, repetiu o que já tinha dito, insistiu depois de uma recusa, deixou de passar para a equipe quando devia.
 - errosEquipe: demorou a responder (use os NÚMEROS DO ATENDIMENTO), não assumiu a conversa que a IA passou, prometeu retorno e não voltou, não pediu o fechamento.
-- acertos: o que funcionou e vale repetir.
+- CONFIRA O QUE FICOU REGISTRADO. As mensagens SISTEMA mostram o que o sistema gravou (test drive agendado, etapa do funil, follow-up). Compare data, dia da semana, horário, modelo e valor com o que o CLIENTE pediu. Se não batem (ex.: cliente disse "quarta à tarde" e o sistema agendou sexta), é erro grave da IA: registre em errosIa citando a mensagem SISTEMA, e NUNCA conte como acerto.
+- Só aponte um erro se ele estiver nas mensagens. Ex.: "fez duas perguntas na mesma mensagem" só vale se as duas perguntas estão no MESMO número (#).
+- acertos: o que funcionou e vale repetir. Só conte como acerto o que deu certo de verdade até o fim.
 - nota: de 0 a 10 para o atendimento da loja (IA e equipe juntas) NESTE dia, pensando em: entendeu o que o cliente queria, respondeu o que ele perguntou, respondeu rápido, conduziu ao próximo passo da compra sem insistir demais. "notaMotivo" em uma frase.
 - sugestoes: no máximo 3, concretas e que nasçam desta conversa (ex.: "incluir na base da IA a resposta sobre habilitação"). Área: ia, estoque, preco_pagamento, equipe, sistema ou marketing.
 - ondeTravou: em que ponto a compra parou e por quê, citando o número (#) da mensagem; null se não travou.`;
