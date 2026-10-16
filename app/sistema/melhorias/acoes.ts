@@ -7,7 +7,7 @@ import { autorizar } from "@/lib/auth/dal";
 import { autorizarConfig } from "@/lib/auth/desbloqueio";
 import { executar, ErroRegra } from "@/lib/acao";
 import { IaIndisponivel } from "@/lib/ia/cliente";
-import { aprovarChamado, concluirPlano, desfazerChamado, diasComFichas, gerarChamados, listarChamados, recusarChamado, relatorioDoDia } from "@/lib/ia/chamados";
+import { aprovarChamado, refazerChamados, concluirPlano, desfazerChamado, diasComFichas, gerarChamados, listarChamados, recusarChamado, relatorioDoDia } from "@/lib/ia/chamados";
 import { aplicaSozinho, type TipoChamado } from "@/lib/ia/chamados-regras";
 
 /* Tela Melhorias (só administrador). O que muda a IA (aprovar ou desfazer resposta e regra) pede a mesma senha da
@@ -58,12 +58,12 @@ export async function acaoConcluirPlano(id: number, observacao?: string) {
   }, "Marcado como feito");
 }
 
-/** Gera os chamados de um dia agora, sem esperar as 18:45; `refazer` troca os que ninguém decidiu ainda. */
+/** Gera os chamados de um dia agora, sem esperar as 18:45; `refazer` troca todos os não decididos (últimos 7 dias). */
 export async function acaoGerarChamados(dia: string, refazer = false) {
   return executar(async () => {
     await autorizar("config.gerenciar");
     const d = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(dia);
-    const r = await gerarChamados(d, refazer).catch((e) => {
+    const r = await (refazer ? refazerChamados() : gerarChamados(d)).catch((e) => {
       if (e instanceof IaIndisponivel) throw new ErroRegra(e.message);
       throw e;
     });

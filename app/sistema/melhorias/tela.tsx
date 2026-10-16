@@ -41,7 +41,7 @@ export function TelaMelhorias({
   const [aba, setAba] = useState<Aba>(novos.length ? "chamados" : "relatorio");
   const [gerando, iniciarGerar] = useTransition();
   /* já tem chamado do dia esperando: o botão refaz (troca os não decididos) em vez de só somar */
-  const refazer = novos.some((c) => c.evidencias.every((e) => e.dia === rel.dia));
+  const refazer = novos.length > 0;
   /* ação que pede a senha da IA: guarda para refazer depois de destrancar */
   const [senhaPara, setSenhaPara] = useState<(() => Promise<void>) | null>(null);
 
@@ -79,7 +79,7 @@ export function TelaMelhorias({
         subtitulo="O que o Analista achou nas conversas, os chamados para você aprovar e o plano de ação."
         acoes={
           <Botao tamanho="sm" carregando={gerando} onClick={gerar}>
-            <ScanSearch className="size-4" /> {refazer ? "Refazer" : "Gerar"} chamados de {nomeDia(rel.dia)}
+            <ScanSearch className="size-4" /> {refazer ? "Refazer chamados não decididos (7 dias)" : `Gerar chamados de ${nomeDia(rel.dia)}`}
           </Botao>
         }
       />

@@ -124,9 +124,24 @@ Tipos:
 Campos que não são do tipo: null.`;
 
 /** Gera (ou reforça) os chamados a partir das fichas do dia. Devolve quantos criou e reforçou. */
-export async function gerarChamados(dia: string, refazer = false) {
-  /* refazer: tira os chamados do dia que ninguém decidiu ainda (só provas deste dia) e gera de novo */
-  if (refazer) await db.delete(C).where(and(eq(C.status, "novo"), sql`not exists (select 1 from jsonb_array_elements(${C.evidencias}) e where e->>'dia' <> ${dia})`));
+/** Refaz do zero os chamados que ninguém decidiu ainda: apaga os "novo" e gera de novo, dia a dia, com as fichas dos
+    últimos 7 dias (aprovados, recusados e o plano de ação ficam como estão). Serve para quando a regra do Analista
+    melhora (dono, 16/10/2026: os chamados das 18:45 saíram pela versão antiga). */
+export async function refazerChamados(agora = new Date()) {
+  const desde = diaDaLoja(new Date(+agora - 6 * 86_400_000));
+  const dias = (await diasComFichas(7)).filter((d) => d >= desde).sort();
+  await db.delete(C).where(eq(C.status, "novo"));
+  let novos = 0;
+  let reforcados = 0;
+  for (const dia of dias) {
+    const r = await gerarChamados(dia);
+    novos += r.novos;
+    reforcados += r.reforcados;
+  }
+  return { novos, reforcados, dias: dias.length };
+}
+
+export async function gerarChamados(dia: string) {
   const achados = await achadosDoDia(dia);
   if (!achados.length) return { novos: 0, reforcados: 0 };
   const [abertos, base, regrasPub] = await Promise.all([
