@@ -80,6 +80,9 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
     let n = (DIAS_SEMANA[semana[1]] - hoje.semana + 7) % 7;
     /* "sábado" dito no próprio sábado: hoje, se a hora ainda não passou; senão o próximo */
     if (n === 0 && hora !== null && (hora < hoje.hora || (hora === hoje.hora && min <= hoje.min))) n = 7;
+    /* "quinta que vem" dito numa quinta, ou "quinta" sem hora dito numa quinta já no fim do dia: a próxima
+       (Simulador de 15/10/2026, quinta às 22h: "na verdade vou na quinta feira" virou hoje, que já tinha passado) */
+    if (n === 0 && (/\b(que vem|proxim[ao])\b/.test(t) || (hora === null && hoje.hora >= 17))) n = 7;
     dia = mais(hoje, n);
   }
   const diaDito = !!dia;

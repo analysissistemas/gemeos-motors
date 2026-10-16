@@ -74,3 +74,12 @@ test("depois do agendado, outro dia ou hora é remarcação; pergunta não é", 
   assert.equal(detectarMomento({ textoCliente: "vocês abrem sábado?", ultimaDaLoja: loja, conheceModelo: false, agora: ELTON, jaAgendou: true }), null);
   assert.equal(detectarMomento({ textoCliente: "Quarta feira que vem", ultimaDaLoja: "Qual modelo te interessou?", conheceModelo: false, agora: ELTON }), null);
 });
+
+test("Simulador 15/10 (quinta, 22:42): \"na verdade vou na quinta feira\" depois do agendado remarca para a próxima quinta", () => {
+  const quinta22h = new Date("2026-10-16T01:42:00Z");
+  const quarta14h = new Date("2026-10-21T17:00:00Z");
+  assert.equal(quandoPorExtenso(remarcarPara(dataHoraDaVisita("Na verdade vou na quinta feira", quinta22h), quarta14h)!), "quinta, 22/10, às 14h");
+  assert.equal(diaPorExtenso(dataHoraDaVisita("quinta que vem", new Date("2026-10-15T12:00:00Z")).dia!), "quinta, 22/10");
+  // quinta de manhã, "quinta" sem hora ainda é hoje
+  assert.equal(diaPorExtenso(dataHoraDaVisita("passo aí quinta", new Date("2026-10-15T12:00:00Z")).dia!), "quinta, 15/10");
+});

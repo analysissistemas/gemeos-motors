@@ -453,12 +453,12 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
     const novo = remarcarPara(dataHoraDaVisita(c.textoBuffer), marcada.agendadoPara);
     if (!novo || novo.getTime() === marcada.agendadoPara.getTime())
       return { texto: `Está agendado ✅ Te esperamos ${quandoPorExtenso(marcada.agendadoPara)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: null };
-    if (novo.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou 😅 Qual outro dia e horário fica bom pra você?", quando: null };
-    if (!lojaFunciona(novo)) return { texto: `Nesse horário a loja está fechada 😕 Funcionamos ${funciona}. Qual outro horário fica bom pra você?`, quando: null };
+    if (novo.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou. Qual outro dia e horário fica bom pra você? 😊", quando: null };
+    if (!lojaFunciona(novo)) return { texto: `Nesse horário a loja está fechada. Funcionamos ${funciona}. Qual outro horário fica bom pra você? 😊`, quando: null };
     try {
       await reagendarTestDrive(null, marcada.id, novo);
     } catch (e) {
-      if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado 😕 Pode ser um pouco antes ou depois?", quando: null, erro: e.message };
+      if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado. Pode ser um pouco antes ou depois? 🙏", quando: null, erro: e.message };
       throw e;
     }
     return { texto: `Remarcado ✅ Te esperamos ${quandoPorExtenso(novo)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: novo };
@@ -483,9 +483,9 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
   /* dia sem hora: repete o dia com a data, que fica escrita para a próxima mensagem */
   if (!dh.temHora || !dh.quando) return { texto: `Show! ${dh.dia ? `${maiuscula(diaPorExtenso(dh.dia))}. ` : ""}E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
   const quando = dh.quando;
-  if (quando.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou 😅 Qual outro dia e horário fica bom pra você?", quando: null };
+  if (quando.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou. Qual outro dia e horário fica bom pra você? 😊", quando: null };
   if (!lojaFunciona(quando))
-    return { texto: `Nesse horário a loja está fechada 😕 Funcionamos ${funciona}. Qual outro horário fica bom pra você?`, quando: null };
+    return { texto: `Nesse horário a loja está fechada. Funcionamos ${funciona}. Qual outro horário fica bom pra você? 😊`, quando: null };
   let modeloId: number | null = null;
   if (p.modelo) {
     const [m] = await db.select({ id: schema.modelos.id }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${p.modelo.toLowerCase()}`).limit(1);
@@ -500,7 +500,7 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
       observacoes: "Marcado pela IA no WhatsApp.",
     });
   } catch (e) {
-    if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado 😕 Pode ser um pouco antes ou depois?", quando: null, erro: e.message };
+    if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado. Pode ser um pouco antes ou depois? 🙏", quando: null, erro: e.message };
     throw e;
   }
   /* só promete a moto esperando se tem unidade Disponível (Simulador de 14/10/2026: X GÊMEOS sem estoque) */

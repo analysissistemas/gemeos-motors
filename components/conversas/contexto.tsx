@@ -189,7 +189,8 @@ export function ContextoCliente({
       )}
 
       {/* Analista: ficha do atendimento, só administrador */}
-      {permissoes.analista && <FichaAnalista key={c.id} conversaId={c.id} />}
+      {/* key própria: TestDrivesDaConversa usa key={c.id}, e key igual entre irmãos deixava cópias velhas na tela */}
+      {permissoes.analista && <FichaAnalista key={`analista-${c.id}`} conversaId={c.id} />}
 
       {/* negócio */}
       <Bloco
