@@ -78,7 +78,7 @@ export function avisarLembreteNaoSaiu(conversaId: number, doQue: string) {
 
 const diaLocal = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
 
-/** Chamado pelo vigia a cada minuto: tarefa da retirada que chegou na hora e o resumo das 7h30. */
+/** Chamado pelo vigia a cada minuto: tarefa da retirada que chegou na hora e o resumo das 8h. */
 export async function avisosAgendados(agora = new Date()) {
   /* tarefa da retirada (separar a moto) na hora dela, uma vez */
   const vencidas = await db
@@ -92,10 +92,10 @@ export async function avisosAgendados(agora = new Date()) {
     await enviarAviso(avisoTarefa({ followUpId: t.id, notas: t.notas ?? "Retirada na loja hoje.", conversaId: t.conversaId }));
   }
 
-  /* resumo das 7h30 (hora de Recife), uma vez por dia */
+  /* resumo das 8h (hora de Recife), uma vez por dia (dono, 15/10/2026: "toda manhã às 8") */
   const local = new Date(agora.getTime() - 3 * 3_600_000);
   const minutos = local.getUTCHours() * 60 + local.getUTCMinutes();
-  if (minutos < 7 * 60 + 30 || minutos > 12 * 60) return;
+  if (minutos < 8 * 60 || minutos > 12 * 60) return;
   const hoje = diaLocal(agora);
   const [marca] = await db.select({ valor: schema.configuracoes.valor }).from(schema.configuracoes).where(eq(schema.configuracoes.chave, "avisos.resumo")).limit(1);
   if ((marca?.valor as { dia?: string } | null)?.dia === hoje) return;

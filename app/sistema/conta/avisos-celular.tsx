@@ -80,7 +80,7 @@ export function AvisosNoCelular() {
         <BellRing className="size-4.5" /> Avisos no celular
       </h2>
       <p className="mt-1 text-[13px] text-ink-2">
-        Chega no celular, mesmo com o sistema fechado: cliente pronto para fechar, cliente que mandou os dados, quem pediu uma pessoa ou está esperando, visita marcada pela IA, a hora de separar a moto da retirada e o resumo do dia às 7h30. Fora do horário da loja, só o urgente.
+        Chega no celular, mesmo com o sistema fechado: cliente pronto para fechar, cliente que mandou os dados, quem pediu uma pessoa ou está esperando, visita marcada pela IA, a hora de separar a moto da retirada e o resumo do dia às 8h. Fora do horário da loja, só o urgente.
       </p>
 
       {estado === "iphone_sem_icone" && (

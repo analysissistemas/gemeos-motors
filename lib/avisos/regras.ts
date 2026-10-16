@@ -1,6 +1,6 @@
 /* Avisos no celular do Milton (dono, 15/10/2026): o que vira aviso e com que texto. Escolhidos pelo dono: os 5 da hora
    (cliente pronto, mandou os dados, pediu uma pessoa/reclamou/foi para Humano, esperando em Humano, visita marcada), o
-   resumo das 7h30 e as tarefas do dia. Toda mensagem de cliente NÃO vira aviso (vira barulho). Puro, sem banco. */
+   resumo das 8h e as tarefas do dia. Toda mensagem de cliente NÃO vira aviso (vira barulho). Puro, sem banco. */
 
 export type Aviso = {
   titulo: string;
@@ -84,7 +84,7 @@ export function avisoLembreteNaoSaiu(p: { conversaId: number; nome: string; doQu
   return { titulo: `⚠️ O lembrete ${p.doQue} de ${p.nome} não saiu`, corpo: "Avise o cliente pela conversa (o texto está em Follow-ups).", tag: `lembrete-${p.conversaId}`, urgente: false, url: conversa(p.conversaId) };
 }
 
-/** Resumo das 7h30. Sem nada no dia: null (não manda aviso vazio). */
+/** Resumo das 8h. Sem nada no dia: null (não manda aviso vazio). */
 export function avisoResumoDoDia(n: { retiradas: number; testDrives: number; followUps: number; prontos: number; esperando: number }): Aviso | null {
   const partes = [
     n.prontos && `${n.prontos} ${n.prontos === 1 ? "cliente pronto" : "clientes prontos"} para fechar`,
