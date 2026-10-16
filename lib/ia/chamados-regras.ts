@@ -151,3 +151,11 @@ export function montarRelatorio(fichas: FichaDoDia[]): RelatorioDia {
     sugestoesPorArea: contar(venda.flatMap((f) => f.ficha.sugestoes.map((s) => s.area)), AREAS_SUGESTAO),
   };
 }
+
+/** Números da resposta proposta que não aparecem no que foi dito na conversa (preço, parcela, prazo inventados).
+    "21x" e "R$ 5.890" contam; o número precisa estar no contexto do mesmo jeito (só dígitos). */
+export function numerosSemProva(resposta: string, contexto: string): string[] {
+  const nums = (t: string) => (t.match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
+  const vistos = new Set(nums(contexto));
+  return [...new Set(nums(resposta))].filter((n) => !vistos.has(n));
+}

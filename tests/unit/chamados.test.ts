@@ -87,3 +87,10 @@ test("dia sem fichas: tudo vazio, nada de número inventado", () => {
   assert.equal(r.primeiraRespostaMediaMin, null);
   assert.equal(r.maiorEsperaMin, null);
 });
+
+test("número da resposta que não está na conversa é apontado", async () => {
+  const { numerosSemProva } = await import("../../lib/ia/chamados-regras.ts");
+  const contexto = "CLIENTE: no cartão fica o mesmo valor? | EQUIPE: no cartão de crédito tem a taxa da maquininha, à vista sai R$ 5.890";
+  assert.deepEqual(numerosSemProva("À vista sai R$ 5.890; no cartão tem a taxa da maquininha.", contexto), []);
+  assert.deepEqual(numerosSemProva("Pode parcelar em até 21 vezes, à vista R$ 5.890.", contexto), ["21"]);
+});

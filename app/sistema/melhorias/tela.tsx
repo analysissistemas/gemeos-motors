@@ -40,12 +40,14 @@ export function TelaMelhorias({
   const historico = chamados.filter((c) => !["novo", "plano"].includes(c.status));
   const [aba, setAba] = useState<Aba>(novos.length ? "chamados" : "relatorio");
   const [gerando, iniciarGerar] = useTransition();
+  /* já tem chamado do dia esperando: o botão refaz (troca os não decididos) em vez de só somar */
+  const refazer = novos.some((c) => c.evidencias.every((e) => e.dia === rel.dia));
   /* ação que pede a senha da IA: guarda para refazer depois de destrancar */
   const [senhaPara, setSenhaPara] = useState<(() => Promise<void>) | null>(null);
 
   const gerar = () =>
     iniciarGerar(async () => {
-      const r = await acaoGerarChamados(rel.dia);
+      const r = await acaoGerarChamados(rel.dia, refazer);
       if (!r.ok) return void toast.error(r.erro);
       toast.success(r.dados.r.novos || r.dados.r.reforcados ? `${r.dados.r.novos} chamado(s) novo(s), ${r.dados.r.reforcados} reforçado(s)` : "Nada novo para virar chamado neste dia");
       router.refresh();
@@ -77,7 +79,7 @@ export function TelaMelhorias({
         subtitulo="O que o Analista achou nas conversas, os chamados para você aprovar e o plano de ação."
         acoes={
           <Botao tamanho="sm" carregando={gerando} onClick={gerar}>
-            <ScanSearch className="size-4" /> Gerar chamados de {nomeDia(rel.dia)}
+            <ScanSearch className="size-4" /> {refazer ? "Refazer" : "Gerar"} chamados de {nomeDia(rel.dia)}
           </Botao>
         }
       />

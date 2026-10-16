@@ -58,12 +58,12 @@ export async function acaoConcluirPlano(id: number, observacao?: string) {
   }, "Marcado como feito");
 }
 
-/** Gera os chamados de um dia agora, sem esperar as 18:45. */
-export async function acaoGerarChamados(dia: string) {
+/** Gera os chamados de um dia agora, sem esperar as 18:45; `refazer` troca os que ninguém decidiu ainda. */
+export async function acaoGerarChamados(dia: string, refazer = false) {
   return executar(async () => {
     await autorizar("config.gerenciar");
     const d = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(dia);
-    const r = await gerarChamados(d).catch((e) => {
+    const r = await gerarChamados(d, refazer).catch((e) => {
       if (e instanceof IaIndisponivel) throw new ErroRegra(e.message);
       throw e;
     });

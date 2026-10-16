@@ -6,7 +6,7 @@ import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { gerarObjeto } from "./cliente";
 import { proximaVersao } from "./prompt";
-import { secaoPorChave } from "./secoes";
+import { SECOES_PROMPT, secaoPorChave } from "./secoes";
 import { AREAS_SUGESTAO, anonimizar, diaDaLoja, type FichaConversa, type MetricasConversa } from "./analista-regras";
 import {
   aplicaSozinho,
@@ -14,6 +14,7 @@ import {
   faltaParaAprovar,
   juntarEvidencias,
   montarRelatorio,
+  numerosSemProva,
   semRegra,
   TIPOS_CHAMADO,
   type EvidenciaChamado,
@@ -59,6 +60,19 @@ async function achadosDoDia(dia: string): Promise<Achado[]> {
     for (const p of f.ficha.perguntasSemResposta) add({ tipo: "pergunta", area: "ia", texto: p.pergunta, ev: ev(p.mensagemId, p.pergunta) });
     for (const e of f.ficha.errosIa) add({ tipo: "erro_ia", area: "ia", texto: e.descricao, ev: ev(e.mensagemId, e.descricao) });
   }
+  /* a prova é o que foi dito de verdade (cliente, IA ou equipe), não a frase do Analista (dono, 15/10/2026) */
+  const ids = [...new Set(achados.map((a) => a.ev.mensagemId).filter((x): x is number => x != null))];
+  if (ids.length) {
+    const ditas = await db.select({ id: schema.mensagens.id, autor: schema.mensagens.autor, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo }).from(schema.mensagens).where(inArray(schema.mensagens.id, ids));
+    const porId = new Map(ditas.map((m) => [m.id, m]));
+    for (const a of achados) {
+      const m = a.ev.mensagemId != null ? porId.get(a.ev.mensagemId) : null;
+      if (!m) continue;
+      const quem = m.autor === "cliente" ? "Cliente" : m.autor === "ia" ? "IA" : m.autor === "sistema" ? "Sistema" : "Equipe";
+      const texto = m.tipo === "texto" || m.tipo === "sistema" ? anonimizar(m.conteudo ?? "") : `[${m.tipo}]`;
+      a.ev.trecho = `${quem}: "${texto.replace(/\s+/g, " ").trim().slice(0, 220)}"`;
+    }
+  }
   /* pergunta sem resposta: as 4 mensagens seguintes mostram se alguém da equipe respondeu (é de onde sai a
      resposta certa para a base de conhecimento, sem o modelo inventar) */
   const M = schema.mensagens;
@@ -99,7 +113,8 @@ Recebe ACHADOS numerados (sugestões, perguntas que ficaram sem resposta e erros
 Regras obrigatórias:
 - Junte achados parecidos num chamado só. Cada chamado lista em "achados" os números que o provam. Não invente achado.
 - Se o achado já é coberto por um CHAMADO ABERTO, coloque em "reforcos" com o id dele, em vez de criar outro.
-- Não crie chamado para o que a BASE DE CONHECIMENTO ou as REGRAS ATUAIS já cobrem, a não ser que o achado mostre que a IA não seguiu (aí é regra_ia mais clara).
+- Não crie chamado para o que a BASE DE CONHECIMENTO ou as INSTRUÇÕES ATUAIS DA IA já cobrem. Se a instrução já existe e a IA não seguiu, NÃO crie regra_ia repetida: é plano_acao, área sistema, dizendo que a IA não está seguindo a instrução tal.
+- FLUXOS AUTOMÁTICOS: o texto destas partes é feito pelo sistema, não pelas instruções da IA, então regra_ia NÃO muda nada nelas: follow-ups e lembretes (mensagens de retomada quando o cliente some), agendamento de visita e test drive, simulação de parcelas no cartão, passagem para a equipe (transferência, "vou passar para a equipe"), aviso de cliente esperando, reconhecimento de quem não é cliente. Problema nelas é plano_acao, área sistema.
 - Português do Brasil simples, para um dono leigo. Título curto (até 8 palavras). "problema": 1 ou 2 frases dizendo o que acontece e o efeito na venda.
 
 Tipos:
@@ -109,15 +124,17 @@ Tipos:
 Campos que não são do tipo: null.`;
 
 /** Gera (ou reforça) os chamados a partir das fichas do dia. Devolve quantos criou e reforçou. */
-export async function gerarChamados(dia: string) {
+export async function gerarChamados(dia: string, refazer = false) {
+  /* refazer: tira os chamados do dia que ninguém decidiu ainda (só provas deste dia) e gera de novo */
+  if (refazer) await db.delete(C).where(and(eq(C.status, "novo"), sql`not exists (select 1 from jsonb_array_elements(${C.evidencias}) e where e->>'dia' <> ${dia})`));
   const achados = await achadosDoDia(dia);
   if (!achados.length) return { novos: 0, reforcados: 0 };
   const [abertos, base, regrasPub] = await Promise.all([
     db.select({ id: C.id, tipo: C.tipo, titulo: C.titulo, evidencias: C.evidencias }).from(C).where(inArray(C.status, ["novo", "plano"])),
     db.select({ categoria: schema.iaConhecimento.categoria, titulo: schema.iaConhecimento.titulo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
-    db.select({ conteudo: schema.iaPromptVersoes.conteudo }).from(schema.iaPromptVersoes).where(and(eq(schema.iaPromptVersoes.secao, SECAO_REGRAS), eq(schema.iaPromptVersoes.status, "publicada"))).limit(1),
+    db.select({ secao: schema.iaPromptVersoes.secao, conteudo: schema.iaPromptVersoes.conteudo }).from(schema.iaPromptVersoes).where(eq(schema.iaPromptVersoes.status, "publicada")),
   ]);
-  const regrasAtuais = regrasPub[0]?.conteudo ?? secaoPorChave(SECAO_REGRAS)!.padrao;
+  const instrucoes = SECOES_PROMPT.map((sec) => `## ${sec.titulo}\n${regrasPub.find((p) => p.secao === sec.chave)?.conteudo ?? sec.padrao}`).join("\n\n");
 
   const prompt = `ACHADOS DO DIA ${dia.split("-").reverse().join("/")}
 ${achados.map((a) => `${a.n}. [${a.tipo === "pergunta" ? "pergunta sem resposta" : a.tipo === "erro_ia" ? "erro da IA" : `sugestão · ${a.area}`}] ${a.texto}${a.contexto ? `\n   contexto: ${a.contexto}` : ""}`).join("\n")}
@@ -128,8 +145,8 @@ ${abertos.map((c) => `#${c.id} [${c.tipo}] ${c.titulo}`).join("\n") || "nenhum"}
 BASE DE CONHECIMENTO (títulos)
 ${base.map((b) => `${b.categoria} — ${b.titulo}`).join("\n") || "vazia"}
 
-REGRAS ATUAIS DA IA
-${regrasAtuais}`;
+INSTRUÇÕES ATUAIS DA IA (por setor)
+${instrucoes}`;
 
   const r = await gerarObjeto({ schema: esquemaAgrupamento, sistema: SISTEMA, prompt, maxTokens: 3500 });
   const porN = new Map(achados.map((a) => [a.n, a]));
@@ -159,6 +176,12 @@ ${regrasAtuais}`;
           ? { regra: n.regra ?? "" }
           : { acao: n.acao ?? n.problema };
     if (n.tipo === "regra_ia" && !proposta.regra?.trim()) continue;
+    /* número da resposta que ninguém disse na conversa (parcela, prazo, preço): o dono confere antes de aprovar */
+    if (n.tipo === "base_conhecimento") {
+      const contexto = n.achados.map((x) => porN.get(x)).map((a) => `${a?.contexto ?? ""} ${a?.ev.trecho ?? ""}`).join(" ");
+      const soltos = numerosSemProva(proposta.conteudo ?? "", contexto);
+      if (soltos.length) proposta.conteudo = `${proposta.conteudo}\n[PREENCHER: confira ${soltos.join(", ")}: este número não apareceu na conversa]`;
+    }
     const j = juntarEvidencias([], ev);
     await db.insert(C).values({ tipo: n.tipo, area: n.tipo === "plano_acao" ? n.area : "ia", titulo: n.titulo.slice(0, 120), problema: n.problema, proposta, evidencias: j.evidencias, clientes: j.clientes });
     novos++;
