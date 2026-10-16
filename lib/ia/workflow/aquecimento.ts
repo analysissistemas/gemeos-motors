@@ -243,6 +243,7 @@ export async function enviarLembretesRetirada(agora = new Date()) {
         await mensagemSistema(db, f.conversaId, `Lembrete ${doQue} enviado ao cliente.`, { triagem: true });
         r.enviados++;
       } else {
+        void import("@/lib/avisos/gatilhos").then((g) => g.avisarLembreteNaoSaiu(f.conversaId!, doQue)).catch(() => null);
         await db.update(F).set({ status: "pendente", tipo: "retorno_cliente", concluidoEm: null, notas: `O lembrete automático ${doQue} não saiu (${env.explicacao ?? env.motivo}). Lembre o cliente: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
         r.erros++;
       }

@@ -43,6 +43,8 @@ const nextConfig: NextConfig = {
         has: [{ type: "query", key: "v" }],
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      /* avisos no celular: o celular sempre pega a versão nova do service worker */
+      { source: "/sw-avisos.js", headers: [{ key: "Content-Type", value: "application/javascript; charset=utf-8" }, { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
     ];
   },
 };

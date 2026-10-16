@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "Sistema de gestão da Gêmeos Motors: atendimento, funil, vendas, estoque e assistência.",
   icons: { icon: [{ url: "/favicon.ico?v=2", sizes: "16x16 32x32 48x48" }, { url: "/social/icone-32.png?v=2", type: "image/png", sizes: "32x32" }], apple: "/social/icone-180.png" },
   robots: { index: false, follow: false },
+  /* iPhone: o sistema na Tela de Início abre como aplicativo e pode receber avisos (iOS 16.4+) */
+  appleWebApp: { capable: true, title: "Gêmeos", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = {

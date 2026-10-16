@@ -139,6 +139,9 @@ export async function receberMensagem(m: MensagemEntrante) {
     if (conversa.negocioId) await tx.update(schema.negocios).set({ ultimaInteracaoEm: new Date() }).where(eq(schema.negocios.id, conversa.negocioId));
     return { conversaId: conversa.id, mensagemId: inserida.id, duplicada: false, nova, modo: reabrir ? "ia" : conversa.modo };
   });
+  /* respondeu a um follow-up com sinal de compra: aviso no celular do Milton (cliente pronto para fechar) */
+  if (!resultado.duplicada && resultado.conversaId && !m.demo && m.tipo === "texto")
+    void import("@/lib/avisos/gatilhos").then((g) => g.avisarRespostaDoCliente(resultado.conversaId!, m.conteudo ?? null)).catch(() => null);
   return resultado;
 }
 

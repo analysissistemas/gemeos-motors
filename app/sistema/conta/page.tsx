@@ -5,6 +5,7 @@ import { Pagina } from "@/components/ui/pagina";
 import { CabecalhoPagina, ItemInfo, Painel } from "@/components/ui/basicos";
 import { TrocarSenha } from "./trocar-senha";
 import { MinhaFoto } from "./minha-foto";
+import { AvisosNoCelular } from "./avisos-celular";
 
 export const metadata: Metadata = { title: "Minha conta" };
 
@@ -25,6 +26,7 @@ export default async function PaginaConta() {
           <ItemInfo rotulo="E-mail">{u.email}</ItemInfo>
         </dl>
       </Painel>
+      <AvisosNoCelular />
       <TrocarSenha />
     </Pagina>
   );

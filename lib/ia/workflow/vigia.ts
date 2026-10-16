@@ -9,6 +9,7 @@ import { lojaAberta } from "@/lib/ia/horario";
 import { lerConfigWorkflow } from "./config";
 import { rodarWorkflowAtendimento } from "./executar";
 import { enviarAquecimentos, enviarLembretesRetirada } from "./aquecimento";
+import { avisosAgendados } from "@/lib/avisos/gatilhos";
 import { decidirNovaTentativa, decidirVigia, deveCobrarTarefa, MAX_TENTATIVAS } from "./vigia-regra";
 
 /* ============================================================
@@ -121,6 +122,8 @@ export async function vigiarAtendimentos(agora = new Date()) {
   });
   /* lembrete da retirada na loja, no dia e na hora combinados (dono, 15/10/2026) */
   await enviarLembretesRetirada(agora).catch((e) => console.error("[vigia] lembrete retirada", e));
+  /* avisos no celular do Milton: tarefa da retirada na hora e o resumo das 7h30 (dono, 15/10/2026) */
+  await avisosAgendados(agora).catch((e) => console.error("[vigia] avisos", e));
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
   const tarefasCobradas = await cobrarTarefasDaLoja(agora, aberta).catch((e) => {

@@ -202,6 +202,8 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
     return { id: td.id, conversaId: d.conversaId, quando: d.agendadoPara };
   });
   await agendarLembreteTestDrive(criado.id).catch((e) => console.error("[lembrete test drive]", e));
+  /* marcado pela IA: aviso no celular do Milton (o que a equipe marca, ela já sabe) */
+  if (!u) void import("@/lib/avisos/gatilhos").then((g) => g.avisarVisitaMarcada({ conversaId: d.conversaId ?? null, nome: nomeContato ?? null, descricao, quando: d.agendadoPara })).catch(() => null);
   return criado;
 }
 
