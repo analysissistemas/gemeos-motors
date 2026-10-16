@@ -71,10 +71,10 @@ export async function relatorioDaManha(agora = new Date()) {
       .limit(8),
     /* hoje */
     db
-      .select({ conversaId: F.conversaId, notas: F.notas, quando: sql<string | null>`${F.contexto}->>'retiradaEm'` })
+      .select({ conversaId: F.conversaId, notas: F.notas, quando: sql<string | null>`coalesce(${F.contexto}->>'retiradaEm', ${F.contexto}->>'entregaEm')` })
       .from(F)
       .leftJoin(C, eq(C.id, F.conversaId))
-      .where(and(eq(F.status, "pendente"), eq(F.tipo, "retirada"), sql`coalesce(${C.demo}, false) = false`, sql`(${F.contexto}->>'retiradaEm')::timestamptz >= ${iniHoje} and (${F.contexto}->>'retiradaEm')::timestamptz < ${fimHoje}`)),
+      .where(and(eq(F.status, "pendente"), sql`${F.tipo} in ('retirada', 'entrega')`, sql`coalesce(${C.demo}, false) = false`, sql`coalesce(${F.contexto}->>'retiradaEm', ${F.contexto}->>'entregaEm')::timestamptz >= ${iniHoje} and coalesce(${F.contexto}->>'retiradaEm', ${F.contexto}->>'entregaEm')::timestamptz < ${fimHoje}`)),
     db
       .select({ nome: sql<string>`coalesce(${schema.clientes.nome}, ${schema.testDrives.nomeContato})`, descricao: schema.testDrives.veiculoDescricao, quando: schema.testDrives.agendadoPara, conversaId: schema.testDrives.conversaId })
       .from(schema.testDrives)

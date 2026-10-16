@@ -222,7 +222,7 @@ export async function enviarLembretesRetirada(agora = new Date()) {
     const [meu] = await db.update(F).set({ status: "concluido", concluidoEm: agora }).where(and(eq(F.id, f.id), eq(F.status, "pendente"))).returning({ id: F.id });
     if (!meu || !f.conversaId) continue;
     try {
-      const ctx = (f.contexto ?? {}) as { texto?: string; testDriveId?: number; quando?: string };
+      const ctx = (f.contexto ?? {}) as { texto?: string; testDriveId?: number; quando?: string; doQue?: string };
       /* test drive cancelado, realizado ou remarcado depois de agendar o lembrete: não sai (o remarcado tem o dele) */
       if (ctx.testDriveId) {
         const [td] = await db.select({ status: schema.testDrives.status, agendadoPara: schema.testDrives.agendadoPara }).from(schema.testDrives).where(eq(schema.testDrives.id, ctx.testDriveId)).limit(1);
@@ -231,7 +231,7 @@ export async function enviarLembretesRetirada(agora = new Date()) {
           continue;
         }
       }
-      const doQue = ctx.testDriveId ? "do test drive" : "da retirada";
+      const doQue = ctx.doQue ?? (ctx.testDriveId ? "do test drive" : "da retirada");
       const [cv] = await db.select({ telefone: C.contatoTelefone, demo: C.demo, status: C.status }).from(C).where(eq(C.id, f.conversaId)).limit(1);
       if (!cv || cv.status === "encerrada" || !ctx.texto) {
         await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: conversa encerrada.`.slice(0, 1000) }).where(eq(F.id, f.id));

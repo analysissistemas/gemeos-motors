@@ -50,7 +50,7 @@ import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia,
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
-import { planoRetirada, quandoRetirar, textoLembreteRetirada, textoRetiradaMarcada, trechoDeQuando } from "@/lib/ia/retirada";
+import { planoRetirada, quandoRetirar, textoEntregaMarcada, textoLembreteEntrega, textoLembreteRetirada, textoRetiradaMarcada, trechoDeQuando } from "@/lib/ia/retirada";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
 import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead, triagemDosFatos } from "@/lib/ia/qualificacao";
@@ -515,36 +515,53 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
    cadastro dele; o resumo do pedido (sem CPF nem data de nascimento) vai para o negócio e para a conversa;
    o que faltou fica escrito para a equipe conferir. Entrega fora de Goiana: a IA não sabe se atende nem a
    taxa, então cria a tarefa para a equipe confirmar. Nada aqui manda mensagem ao cliente. */
-/* Retirada com dia e hora: tarefa da equipe para separar a moto (3 h antes) e o lembrete do cliente no dia (2 h antes,
-   não antes das 8 h, dentro da janela de 24 h do WhatsApp). Sem data que dê para marcar: tarefa agora para combinar. */
-async function agendarRetirada(c: CtxWorkflow, clienteId: number, negocioId: number | null, horarioDito: string | undefined, nome: string | null, pagamento: string | null) {
+/* Retirada ou entrega com dia e hora: tarefa da equipe 3 h antes (separar a moto / preparar a entrega) e o lembrete do
+   cliente no dia (2 h antes, não antes das 8 h, dentro da janela de 24 h do WhatsApp). Entrega fora de Goiana: a equipe
+   ainda confirma se atende, então só a tarefa (sem lembrete). Sem data que dê para marcar: tarefa agora para combinar. */
+async function agendarCombinado(c: CtxWorkflow, p: { clienteId: number; negocioId: number | null; modo: "retirada" | "entrega"; horarioDito: string | undefined; nome: string | null; pagamento: string | null; cidade: string | null; endereco: string | null }) {
   const F = schema.followUps;
   const agora = new Date();
-  const ret = quandoRetirar(trechoDeQuando(horarioDito, c.textoBuffer), await lerHorario(), agora);
+  const ret = quandoRetirar(trechoDeQuando(p.horarioDito, c.textoBuffer), await lerHorario(), agora);
   const cv = await carregarConversa(c.conversaId);
   const moto = c.modeloDaConversa ?? "moto";
-  const quem = nome ?? "o cliente";
+  const quem = p.nome ?? "o cliente";
+  const entrega = p.modo === "entrega";
+  const foraDeGoiana = entrega && !!notaDeEntrega(p.cidade);
+  const chaveData = entrega ? "entregaEm" : "retiradaEm";
+  const doQue = entrega ? "da entrega" : "da retirada";
   /* mandou os dados de novo: vale o último dia e hora */
-  await db.update(F).set({ status: "cancelado", concluidoEm: agora }).where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), inArray(F.tipo, ["retirada", "lembrete_retirada"])));
-  const base = { conversaId: c.conversaId, clienteId, negocioId, usuarioId: cv.responsavelId, origem: "ia" as const };
+  await db
+    .update(F)
+    .set({ status: "cancelado", concluidoEm: agora })
+    .where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), sql`(${F.tipo} = 'lembrete_retirada' or (${F.tipo} in ('retirada', 'entrega') and (${F.contexto} ? 'retiradaEm' or ${F.contexto} ? 'entregaEm' or ${F.contexto}->>'combinar' = 'true')))`));
+  const base = { conversaId: c.conversaId, clienteId: p.clienteId, negocioId: p.negocioId, usuarioId: cv.responsavelId, origem: "ia" as const };
   if (!ret.quando) {
     const porque = { sem_dia: "não disse o dia", sem_hora: "não disse a hora", passou: "o horário já passou", fechada: "a loja está fechada no horário que ele disse" }[ret.problema ?? "sem_dia"];
-    await db.insert(F).values({ ...base, agendadoPara: agora, tipo: "retirada", motivo: "Combinar a retirada", notas: `${quem} vai retirar a ${moto} na loja, mas ${porque}${horarioDito ? ` ("${horarioDito}")` : ""}. Combine o dia e a hora com ele.`, contexto: { detectadoPor: "ia", modelo: moto } });
-    return { quando: null, aviso: `Dia e hora da retirada: ${porque}. Ficou a tarefa para a equipe combinar.` };
+    const oQue = entrega ? `quer receber a ${moto}${p.endereco ? ` em ${p.endereco}` : ""}` : `vai retirar a ${moto} na loja`;
+    await db.insert(F).values({ ...base, agendadoPara: agora, tipo: p.modo, motivo: entrega ? "Combinar a entrega" : "Combinar a retirada", notas: `${quem} ${oQue}, mas ${porque}${p.horarioDito ? ` ("${p.horarioDito}")` : ""}. Combine o dia e a hora com ele.`, contexto: { detectadoPor: "ia", modelo: moto, combinar: true } });
+    return { quando: null, aviso: `Dia e hora ${doQue}: ${porque}. Ficou a tarefa para a equipe combinar.` };
   }
   const plano = planoRetirada(ret.quando, agora, agora);
-  const lembrete = plano.lembreteEm ? textoLembreteRetirada({ nome, modelo: c.modeloDaConversa, quando: ret.quando }) : null;
+  const lembreteEm = foraDeGoiana ? null : plano.lembreteEm;
+  const lembrete = lembreteEm ? (entrega ? textoLembreteEntrega({ nome: p.nome, modelo: c.modeloDaConversa, quando: ret.quando }) : textoLembreteRetirada({ nome: p.nome, modelo: c.modeloDaConversa, quando: ret.quando })) : null;
+  const avisoLembrete = lembreteEm ? ` A IA lembra o cliente às ${hora(lembreteEm)}.` : !foraDeGoiana && plano.foraDaJanela ? " Lembre o cliente no dia (passa das 24 h do WhatsApp, a IA não pode mandar)." : "";
+  const pagou = p.pagamento ? ` Pagamento: ${p.pagamento}.` : "";
   await db.insert(F).values({
     ...base,
-    agendadoPara: plano.equipeEm,
-    tipo: "retirada",
-    motivo: "Separar a moto da retirada",
-    notas: `Separar a ${moto} para ${quem}: vem retirar ${quandoPorExtenso(ret.quando)}.${pagamento ? ` Pagamento: ${pagamento}.` : ""}${plano.lembreteEm ? ` A IA lembra o cliente às ${hora(plano.lembreteEm)}.` : plano.foraDaJanela ? " Lembre o cliente no dia (passa das 24 h do WhatsApp, a IA não pode mandar)." : ""}`,
-    contexto: { detectadoPor: "ia", modelo: moto, retiradaEm: ret.quando.toISOString() },
+    agendadoPara: foraDeGoiana ? agora : plano.equipeEm,
+    tipo: p.modo,
+    motivo: entrega ? (foraDeGoiana ? "Confirmar a entrega fora de Goiana" : "Preparar a entrega") : "Separar a moto da retirada",
+    notas: entrega
+      ? `${foraDeGoiana ? "Confirmar se atende e a taxa, e entregar" : "Entregar"} a ${moto} para ${quem}: ${quandoPorExtenso(ret.quando)}${p.endereco ? ` em ${p.endereco}` : ""}.${pagou}${avisoLembrete}`
+      : `Separar a ${moto} para ${quem}: vem retirar ${quandoPorExtenso(ret.quando)}.${pagou}${avisoLembrete}`,
+    contexto: { detectadoPor: "ia", modelo: moto, [chaveData]: ret.quando.toISOString() },
   });
-  if (plano.lembreteEm && lembrete)
-    await db.insert(F).values({ ...base, agendadoPara: plano.lembreteEm, tipo: "lembrete_retirada", motivo: "Lembrete da retirada", notas: `Lembrete automático da retirada para ${quem}. Cancele se não quiser que saia.`, contexto: { texto: lembrete, retiradaEm: ret.quando.toISOString() } });
-  return { quando: ret.quando, aviso: `Separar a moto: tarefa em Follow-ups às ${hora(plano.equipeEm)}.${plano.lembreteEm ? ` Lembrete ao cliente às ${hora(plano.lembreteEm)}.` : ""}` };
+  if (lembreteEm && lembrete)
+    await db.insert(F).values({ ...base, agendadoPara: lembreteEm, tipo: "lembrete_retirada", motivo: entrega ? "Lembrete da entrega" : "Lembrete da retirada", notas: `Lembrete automático ${doQue} para ${quem}. Cancele se não quiser que saia.`, contexto: { texto: lembrete, [chaveData]: ret.quando.toISOString(), doQue } });
+  return {
+    quando: ret.quando,
+    aviso: foraDeGoiana ? "Entrega fora de Goiana: tarefa em Follow-ups para confirmar se atende." : `${entrega ? "Preparar a entrega" : "Separar a moto"}: tarefa em Follow-ups às ${hora(plano.equipeEm)}.${lembreteEm ? ` Lembrete ao cliente às ${hora(lembreteEm)}.` : ""}`,
+  };
 }
 
 async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
@@ -577,13 +594,13 @@ async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, neg
   if (Object.keys(patch).length) await db.update(schema.clientes).set({ ...patch, atualizadoEm: new Date() }).where(eq(schema.clientes.id, clienteId));
 
   const faltam = camposFaltando(d, modo, { cidade, pagamento: fatos.pagamento });
-  const retirada = modo === "retirada" ? await agendarRetirada(c, clienteId, negocioId, d.horario, primeiroNome(d.nomeCompleto ?? fatos.nome ?? null), fatos.pagamento ?? d.pagamento ?? null).catch(() => null) : null;
+  const combinado = await agendarCombinado(c, { clienteId, negocioId, modo, horarioDito: d.horario, nome: primeiroNome(d.nomeCompleto ?? fatos.nome ?? null), pagamento: fatos.pagamento ?? d.pagamento ?? null, cidade, endereco: enderecoDe(d, cidade) || null }).catch(() => null);
   const linhas = [
     `Pedido pelo WhatsApp (IA): ${c.modeloDaConversa ?? "moto"}`,
     modo === "entrega"
-      ? `Entrega: ${enderecoDe(d, cidade) || "endereço a confirmar"}${d.referencia ? ` (referência: ${d.referencia})` : ""}${d.horario ? ` · receber até: ${d.horario}` : ""}`
-      : `Retirada na loja: ${retirada?.quando ? quandoPorExtenso(retirada.quando) : d.horario ? `${d.horario} (dia e horário a confirmar com o cliente)` : "dia e horário a confirmar"} · endereço do cliente: ${enderecoDe(d, cidade) || "a confirmar"}`,
-    retirada?.aviso ?? null,
+      ? `Entrega: ${enderecoDe(d, cidade) || "endereço a confirmar"}${d.referencia ? ` (referência: ${d.referencia})` : ""}${combinado?.quando ? ` · ${quandoPorExtenso(combinado.quando)}` : d.horario ? ` · receber: ${d.horario} (dia e horário a confirmar)` : ""}`
+      : `Retirada na loja: ${combinado?.quando ? quandoPorExtenso(combinado.quando) : d.horario ? `${d.horario} (dia e horário a confirmar com o cliente)` : "dia e horário a confirmar"} · endereço do cliente: ${enderecoDe(d, cidade) || "a confirmar"}`,
+    combinado?.aviso ?? null,
     `Pagamento: ${d.pagamento ?? fatos.pagamento ?? "a confirmar"}`,
     d.telefone ? "Outro telefone de contato no cadastro" : null,
     patch.cpf || patch.nascimento ? "CPF e data de nascimento salvos no cadastro" : null,
@@ -1412,8 +1429,15 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       const modo = pediuDadosDeRetirada(ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
       /* retirada com dia e hora ("amanhã às 10h"): confirma a data certa e promete o lembrete só se ele vai sair (dono, 15/10/2026) */
-      const ret = modo === "retirada" ? quandoRetirar(trechoDeQuando(lerDadosDoCliente(c.textoBuffer).horario, c.textoBuffer), horario) : null;
-      const marcada = ret?.quando ? textoRetiradaMarcada({ nome, modelo: modeloDaConversa, quandoExtenso: quandoPorExtenso(ret.quando), lembrete: !!planoRetirada(ret.quando, new Date(), new Date()).lembreteEm }) : null;
+      const dados = lerDadosDoCliente(c.textoBuffer);
+      const ret = quandoRetirar(trechoDeQuando(dados.horario, c.textoBuffer), horario);
+      const foraDeGoiana = modo === "entrega" && !!notaDeEntrega(dados.cidade ?? ultimo?.fatos?.cidade ?? c.memoria.fatos.cidade ?? null);
+      const lembrete = !!ret.quando && !foraDeGoiana && !!planoRetirada(ret.quando, new Date(), new Date()).lembreteEm;
+      const marcada = ret.quando
+        ? modo === "retirada"
+          ? textoRetiradaMarcada({ nome, modelo: modeloDaConversa, quandoExtenso: quandoPorExtenso(ret.quando), lembrete })
+          : textoEntregaMarcada({ nome, modelo: modeloDaConversa, quandoExtenso: quandoPorExtenso(ret.quando), lembrete, foraDeGoiana })
+        : null;
       const texto = marcada ?? textoDadosRecebidos({ nome, modelo: modeloDaConversa, modo, lojaAberta: aberta });
       const pipe = { ...r.ctx, texto, textoCatalogo: marcada ?? r.ctx.textoCatalogo, humano: true, motivo: "modelo_pediu_transferencia" as const };
       const motivo = `Fechamento: o cliente mandou os dados para ${modo === "retirada" ? "retirar na loja" : "entrega"}${modeloDaConversa ? ` da ${modeloDaConversa}` : ""}. Conferir os dados e combinar com ele ${modo === "retirada" ? "a separação e o horário da retirada" : "o melhor horário da entrega"}.`;

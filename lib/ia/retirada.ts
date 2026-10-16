@@ -66,3 +66,22 @@ export function textoLembreteVisita(p: { nome: string | null; descricao: string 
   const oque = visita ? "da sua visita" : `do seu test drive da *${p.descricao}*`;
   return `${oi} Passando pra lembrar ${oque} hoje, às ${horaCurta(p.quando)}, aqui na loja 😊 Se precisar mudar o horário, é só me avisar por aqui.`;
 }
+
+/* Entrega com dia e hora (dono, 15/10/2026: "a entrega com dia e hora, tarefa para a equipe e lembrete para ele"). O
+   cliente diz quando pode receber; em Goiana a IA confirma e lembra no dia; fora de Goiana a equipe ainda confirma se
+   atende (e a taxa), então a IA só anota, sem prometer. */
+
+/** Confirmação da entrega com o dia e a hora que o cliente pode receber. */
+export function textoEntregaMarcada(p: { nome: string | null; modelo: string | null; quandoExtenso: string; lembrete: boolean; foraDeGoiana: boolean }): string {
+  const voc = p.nome ? `, ${p.nome}` : "";
+  const moto = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : "a sua moto";
+  if (p.foraDeGoiana) return `Perfeito${voc}! Está tudo certinho ✅ Anotei que você pode receber ${p.quandoExtenso}. A equipe confirma com você se a entrega atende aí e combina tudo certinho pra levar ${moto} 🛵`;
+  return `Perfeito${voc}! Está tudo certinho ✅ Anotei a entrega para ${p.quandoExtenso}. A equipe vai preparar ${moto} pra levar até você${p.lembrete ? ", e no dia eu te mando um lembrete por aqui 😊" : " 😊"}`;
+}
+
+/** O lembrete da entrega no dia ("hoje, às 10h"). */
+export function textoLembreteEntrega(p: { nome: string | null; modelo: string | null; quando: Date }): string {
+  const oi = p.nome ? `Oi, ${p.nome}!` : "Oi!";
+  const moto = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : "a sua moto";
+  return `${oi} Passando pra lembrar que hoje, às ${horaCurta(p.quando)}, a gente leva ${moto} até você 🛵 Se precisar mudar o horário, é só me avisar por aqui.`;
+}

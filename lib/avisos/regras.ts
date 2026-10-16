@@ -75,8 +75,8 @@ export function avisoVisitaMarcada(p: { conversaId: number | null; nome: string;
 }
 
 /** Tarefa da retirada chegou na hora (separar a moto). */
-export function avisoTarefa(p: { followUpId: number; notas: string; conversaId: number | null }): Aviso {
-  return { titulo: "🛵 Separar a moto da retirada", corpo: curto(p.notas, 160), tag: `tarefa-${p.followUpId}`, urgente: false, url: p.conversaId ? conversa(p.conversaId) : "/sistema/follow-ups" };
+export function avisoTarefa(p: { followUpId: number; notas: string; conversaId: number | null; entrega?: boolean }): Aviso {
+  return { titulo: p.entrega ? "🛵 Entrega de hoje" : "🛵 Separar a moto da retirada", corpo: curto(p.notas, 160), tag: `tarefa-${p.followUpId}`, urgente: false, url: p.conversaId ? conversa(p.conversaId) : "/sistema/follow-ups" };
 }
 
 /** Lembrete automático que não saiu: a equipe avisa o cliente. */

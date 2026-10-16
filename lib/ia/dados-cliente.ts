@@ -79,7 +79,7 @@ const ROTULOS: [RegExp, keyof DadosCliente][] = [
   [/^bairro$/, "bairro"],
   [/^(numero da casa|n[ºo°]?|numero|num|casa)$/, "numero"],
   [/^(ponto de )?referencia$/, "referencia"],
-  [/^(ate que horas.*|horario.*|hora.*receber.*)$/, "horario"],
+  [/^(ate que horas.*|horario.*|hora.*receber.*|que dia.*|dia e hor.*|quando.*receber.*)$/, "horario"],
   [/^(forma de )?pagamento$/, "pagamento"],
 ];
 
@@ -210,7 +210,7 @@ export function camposFaltando(d: DadosCliente, modo: "entrega" | "retirada", ja
           ["rua", "rua"],
           ["numero", "número"],
           ["bairro", "bairro"],
-          ["horario", "até que horas pode receber"],
+          ["horario", "dia e horário para receber"],
         ];
   const faltam = obrigatorios.filter(([k]) => !d[k]).map(([, r]) => r);
   if (modo === "entrega" && !d.cidade && !ja.cidade) faltam.push("cidade");

@@ -82,14 +82,14 @@ const diaLocal = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString(
 export async function avisosAgendados(agora = new Date()) {
   /* tarefa da retirada (separar a moto) na hora dela, uma vez */
   const vencidas = await db
-    .select({ id: F.id, notas: F.notas, conversaId: F.conversaId, contexto: F.contexto })
+    .select({ id: F.id, tipo: F.tipo, notas: F.notas, conversaId: F.conversaId, contexto: F.contexto })
     .from(F)
     .leftJoin(schema.conversas, eq(schema.conversas.id, F.conversaId))
-    .where(and(eq(F.status, "pendente"), eq(F.tipo, "retirada"), lte(F.agendadoPara, agora), sql`(${F.contexto}->>'avisado') is null`, sql`coalesce(${schema.conversas.demo}, false) = false`))
+    .where(and(eq(F.status, "pendente"), sql`${F.tipo} in ('retirada', 'entrega') and (${F.contexto} ? 'retiradaEm' or ${F.contexto} ? 'entregaEm')`, lte(F.agendadoPara, agora), sql`(${F.contexto}->>'avisado') is null`, sql`coalesce(${schema.conversas.demo}, false) = false`))
     .limit(10);
   for (const t of vencidas) {
     await db.update(F).set({ contexto: { ...((t.contexto as Record<string, unknown>) ?? {}), avisado: agora.toISOString() } }).where(eq(F.id, t.id));
-    await enviarAviso(avisoTarefa({ followUpId: t.id, notas: t.notas ?? "Retirada na loja hoje.", conversaId: t.conversaId }));
+    await enviarAviso(avisoTarefa({ followUpId: t.id, notas: t.notas ?? "Retirada na loja hoje.", conversaId: t.conversaId, entrega: t.tipo === "entrega" }));
   }
 
   /* resumo das 8h (hora de Recife), uma vez por dia (dono, 15/10/2026: "toda manhã às 8") */

@@ -358,7 +358,8 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
     ja.cidade?.trim() ? "CEP" : "Cidade e CEP",
     "Rua, número e bairro",
     "Ponto de referência",
-    "Até que horas você pode receber?",
+    /* dia e hora para a entrega virar tarefa e lembrete (dono, 15/10/2026) */
+    "Que dia e horário você pode receber?",
     ...(ja.pagamento?.trim() ? [] : ["Forma de pagamento"]),
   ];
   return `Show! Para finalizar seu pedido, me manda por aqui:\n${campos.map((c) => `• ${c}`).join("\n")}`;

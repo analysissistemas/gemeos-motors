@@ -57,3 +57,15 @@ test("lembrete de test drive e de visita", async () => {
   assert.equal(textoLembreteVisita({ nome: null, descricao: "Visita à loja", quando: q }), "Oi! Passando pra lembrar da sua visita hoje, às 15h30, aqui na loja 😊 Se precisar mudar o horário, é só me avisar por aqui.");
   assert.equal(validarResposta(td, {}).aprovada, true, JSON.stringify(validarResposta(td, {}).violacoes));
 });
+
+test("entrega com dia e hora: Goiana confirma e lembra; fora de Goiana só anota", async () => {
+  const { textoEntregaMarcada, textoLembreteEntrega } = await import("../../lib/ia/retirada.ts");
+  const goiana = textoEntregaMarcada({ nome: "Ana", modelo: "N2", quandoExtenso: "sexta, 16/10, às 10h", lembrete: true, foraDeGoiana: false });
+  assert.equal(goiana, "Perfeito, Ana! Está tudo certinho ✅ Anotei a entrega para sexta, 16/10, às 10h. A equipe vai preparar a sua *N2* pra levar até você, e no dia eu te mando um lembrete por aqui 😊");
+  const fora = textoEntregaMarcada({ nome: "Ana", modelo: "N2", quandoExtenso: "sexta, 16/10, às 10h", lembrete: false, foraDeGoiana: true });
+  assert.match(fora, /confirma com você se a entrega atende aí/);
+  assert.doesNotMatch(fora, /lembrete/);
+  const l = textoLembreteEntrega({ nome: "Ana", modelo: "N2", quando: new Date("2026-10-16T13:00:00Z") });
+  assert.equal(l, "Oi, Ana! Passando pra lembrar que hoje, às 10h, a gente leva a sua *N2* até você 🛵 Se precisar mudar o horário, é só me avisar por aqui.");
+  for (const t of [goiana, fora, l]) assert.equal(validarResposta(t, {}).aprovada, true, JSON.stringify(validarResposta(t, {}).violacoes));
+});
