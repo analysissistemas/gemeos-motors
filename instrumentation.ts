@@ -20,4 +20,21 @@ export async function register() {
     }
   };
   setInterval(ciclo, 60_000).unref?.();
+
+  /* Analista (lib/ia/analista.ts): no mesmo relógio, separado do vigia para uma análise lenta nunca
+     atrasar a resposta ao cliente. */
+  const urlAnalista = `http://127.0.0.1:${process.env.PORT || 3000}/api/interno/analista`;
+  let analisando = false;
+  const cicloAnalista = async () => {
+    if (analisando) return;
+    analisando = true;
+    try {
+      await fetch(urlAnalista, { method: "POST", headers: { "x-vigia": token }, signal: AbortSignal.timeout(200_000) });
+    } catch {
+      /* tenta no próximo minuto */
+    } finally {
+      analisando = false;
+    }
+  };
+  setInterval(cicloAnalista, 60_000).unref?.();
 }

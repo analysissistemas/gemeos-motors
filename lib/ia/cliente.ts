@@ -55,6 +55,15 @@ function traduzirErro(e: unknown): IaIndisponivel {
 }
 
 export async function gerarObjeto<S extends z.ZodType>(p: { schema: S; sistema: string; prompt: string; maxTokens?: number }): Promise<z.infer<S>> {
+  return (await gerarObjetoComUso(p)).objeto;
+}
+
+/** Igual a gerarObjeto, com os tokens gastos (o Analista guarda para medir o custo de verdade). */
+export async function gerarObjetoComUso<S extends z.ZodType>(p: { schema: S; sistema: string; prompt: string; maxTokens?: number }): Promise<{
+  objeto: z.infer<S>;
+  tokensEntrada: number | null;
+  tokensSaida: number | null;
+}> {
   await exigirIaLigada();
   try {
     const r = await generateText({
@@ -66,7 +75,7 @@ export async function gerarObjeto<S extends z.ZodType>(p: { schema: S; sistema: 
       timeout: 60_000,
       maxRetries: 1,
     });
-    return r.output as z.infer<S>;
+    return { objeto: r.output as z.infer<S>, tokensEntrada: r.usage?.inputTokens ?? null, tokensSaida: r.usage?.outputTokens ?? null };
   } catch (e) {
     throw traduzirErro(e);
   }

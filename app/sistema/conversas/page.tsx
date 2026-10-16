@@ -41,7 +41,7 @@ export default async function PaginaConversas({ searchParams }: { searchParams: 
       respostas={respostas}
       usuario={{ id: u.id, nome: u.nome, admin: u.papel === "admin" }}
       simulado={(await obterProvedor()).simulado}
-      permissoes={{ clientes: pode(u.papel, "clientes.editar"), funil: pode(u.papel, "funil.editar"), vendas: pode(u.papel, "vendas.ver") }}
+      permissoes={{ clientes: pode(u.papel, "clientes.editar"), funil: pode(u.papel, "funil.editar"), vendas: pode(u.papel, "vendas.ver"), analista: pode(u.papel, "config.gerenciar") }}
     />
   );
 }

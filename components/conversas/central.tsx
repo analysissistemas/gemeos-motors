@@ -59,7 +59,7 @@ export function CentralConversas({
   respostas: Resposta[];
   usuario: { id: number; nome: string; admin?: boolean };
   simulado: boolean;
-  permissoes: { clientes: boolean; funil: boolean; vendas: boolean };
+  permissoes: { clientes: boolean; funil: boolean; vendas: boolean; analista: boolean };
 }) {
   const [itens, setItens] = useState(inicial.itens);
   const [temMais, setTemMais] = useState(inicial.temMais);

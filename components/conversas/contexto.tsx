@@ -12,6 +12,7 @@ import { Botao, classesBotao } from "@/components/ui/botao";
 import { Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { FormularioCliente } from "@/components/clientes/formulario-cliente";
 import { SeletorCliente } from "@/components/clientes/seletor-cliente";
+import { FichaAnalista } from "./ficha-analista";
 import {
   acaoAgendarFollowUp,
   acaoEncerrarFollowUp,
@@ -40,7 +41,7 @@ export function ContextoCliente({
   ctx: ContextoConversa;
   equipe: { id: number; nome: string }[];
   usuarioId: number;
-  permissoes: { clientes: boolean; funil: boolean; vendas: boolean };
+  permissoes: { clientes: boolean; funil: boolean; vendas: boolean; analista: boolean };
   aoAtualizar: () => void;
   aoPedirEtapa: (alvo: AlvoEtapa, atual: string, destino: Etapa) => void;
   aoEditarNegocio: () => void;
@@ -186,6 +187,9 @@ export function ContextoCliente({
           </p>
         </Bloco>
       )}
+
+      {/* Analista: ficha do atendimento, só administrador */}
+      {permissoes.analista && <FichaAnalista key={c.id} conversaId={c.id} />}
 
       {/* negócio */}
       <Bloco

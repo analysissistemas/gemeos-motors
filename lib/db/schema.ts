@@ -926,3 +926,32 @@ export const reservasLancamento = pgTable(
   },
   (t) => [index("reservas_status_idx").on(t.status, t.criadoEm), index("reservas_modelo_idx").on(t.modeloId)],
 );
+
+/* ---------- Analista: ficha de cada conversa por dia (lib/ia/analista.ts) ----------
+   Uma linha por conversa e dia da loja. A ficha é refeita de madrugada se o cliente mandou mais coisa
+   depois da análise das 18:30. `ultimaMensagemId` = última mensagem do dia que entrou na análise. */
+export const analisesConversa = pgTable(
+  "analises_conversa",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    conversaId: integer()
+      .notNull()
+      .references(() => conversas.id, { onDelete: "cascade" }),
+    dia: date({ mode: "string" }).notNull(),
+    ultimaMensagemId: bigint({ mode: "number" }).notNull(),
+    ficha: jsonb().$type<import("@/lib/ia/analista-regras").FichaConversa>().notNull(),
+    metricas: jsonb().$type<import("@/lib/ia/analista-regras").MetricasConversa>().notNull(),
+    /* repetidos da ficha para filtrar e somar sem abrir o JSON */
+    assunto: text().notNull(),
+    resultado: text().notNull(),
+    nota: integer(),
+    /* achados que citavam mensagem inexistente e foram descartados */
+    descartados: integer().notNull().default(0),
+    modelo: text(),
+    tokensEntrada: integer(),
+    tokensSaida: integer(),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [uniqueIndex("analises_conversa_dia_unico").on(t.conversaId, t.dia), index("analises_conversa_dia_idx").on(t.dia)],
+);
