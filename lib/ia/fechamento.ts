@@ -64,6 +64,18 @@ const RX_QUER_COMPRAR = /(?<![a-z])(quero (comprar|uma moto|um patinete|adquirir
 const RX_INTERESSE = /(?<![a-z])(quero|queria|interess\w*|comprar|compra|preco|valor|quanto|condic\w*|pagamento|parcel\w*|a vista|pix|cartao|disponivel|tem (a|o|essa|esse))(?![a-z])/;
 
 /** Em que momento da compra o cliente está, pela mensagem dele e pela última mensagem da loja. */
+/* Cliente com visita marcada que manda outro dia ou hora: só é remarcação se fala de ir à loja ("vou", "passo", "na
+   verdade", "pode ser"…) ou se a mensagem é só a data e a hora ("quarta feira que vem", "quinta às 10h"). "Amanhã te
+   mando o comprovante" não remarca nada (Simulador de 16/10/2026: depois dos follow-ups, "na verdade vou na quinta"
+   não remarcava porque o "Agendado" já tinha saído das últimas mensagens). */
+const RX_FALA_DE_IR = /\b(vou|vamos|irei|ir|passo|passar|chego|chegar|apareco|visita|test ?drive|remarc\w*|mudar|muda|trocar|troca|adiar|antecipar|outro dia|outro horario|pode ser|melhor|na verdade|da pra|fica bom)\b/;
+const RX_SO_QUANDO =
+  /\b(segunda|terca|quarta|quinta|sexta|sabado|domingo|feira|que vem|proxim[ao]|amanha|depois|hoje|dia|as|a|da|de|do|na|no|tarde|manha|noite|cedo|por volta|mais ou menos|umas|tipo|entao|ok|h|hs|horas?|min)\b|\d+|[:/.,!h]/g;
+export function ehRemarcacao(texto: string) {
+  const t = semAcento(texto).toLowerCase();
+  return RX_FALA_DE_IR.test(t) || t.replace(RX_SO_QUANDO, " ").replace(/\s+/g, "").length <= 2;
+}
+
 export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number; jaAgendou?: boolean }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
@@ -106,7 +118,7 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
   /* já agendado e o cliente manda outro dia ou hora (Elton, 15/10/2026: "quarta feira que vem" depois do agendado na
      sexta; a IA disse "confirmado" e a agenda ficou na sexta): remarca. Pergunta ("abre sábado?") não remarca. */
-  if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora)) return "informou_visita";
+  if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora) && ehRemarcacao(p.textoCliente)) return "informou_visita";
   if (RX_QUER_VISITAR.test(p.textoCliente)) return dh.temDia && dh.temHora ? "informou_visita" : "quer_visitar";
   /* perguntou onde fica: responde o endereço e já pergunta o dia e o horário (dono, 14/10/2026) */
   if (RX_PERGUNTA_ENDERECO.test(p.textoCliente)) return "quer_visitar";

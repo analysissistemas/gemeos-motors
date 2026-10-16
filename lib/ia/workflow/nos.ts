@@ -1232,7 +1232,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
     const ultimaDaLoja = ultimaFalaDaLoja(c.memoria.historico);
     /* acabou de agendar: outro dia ou hora agora é remarcação (Elton, 15/10/2026) */
-    const jaAgendou = RX_AGENDADO.test(ultimasFalasDaLoja(c.memoria.historico, 3));
+    /* tem visita marcada na agenda (não só nas últimas mensagens: os follow-ups empurram o "Agendado" para trás) */
+    const jaAgendou = RX_AGENDADO.test(ultimasFalasDaLoja(c.memoria.historico, 3)) || !!(await visitaAbertaDaConversa(c.conversaId));
     const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || jaAgendou || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
     const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes), jaAgendou }) : null;
     const horario = await lerHorario();

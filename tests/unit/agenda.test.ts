@@ -83,3 +83,12 @@ test("Simulador 15/10 (quinta, 22:42): \"na verdade vou na quinta feira\" depois
   // quinta de manhã, "quinta" sem hora ainda é hoje
   assert.equal(diaPorExtenso(dataHoraDaVisita("passo aí quinta", new Date("2026-10-15T12:00:00Z")).dia!), "quinta, 15/10");
 });
+
+test("com visita marcada: outro dia ou hora remarca só se fala de ir à loja ou é só a data", async () => {
+  const { ehRemarcacao } = await import("../../lib/ia/fechamento.ts");
+  for (const t of ["Na verdade vou na quinta feira", "Quarta feira que vem", "quinta às 10h", "pode ser sexta?", "melhor sábado de manhã", "passo aí na segunda", "amanhã às 15h", "Dia 22"]) assert.equal(ehRemarcacao(t), true, t);
+  for (const t of ["amanhã te mando o comprovante", "segunda eu recebo o salário", "hoje não consigo falar, minha esposa decide sábado"]) assert.equal(ehRemarcacao(t), false, t);
+  const AGORA16 = new Date("2026-10-16T22:13:00Z");
+  assert.equal(detectarMomento({ textoCliente: "Na verdade vou na quinta feira", ultimaDaLoja: "O que está faltando para concluirmos a sua compra? 😊", conheceModelo: true, agora: AGORA16, jaAgendou: true }), "informou_visita");
+  assert.notEqual(detectarMomento({ textoCliente: "amanhã te mando o comprovante", ultimaDaLoja: "Qualquer coisa estou por aqui", conheceModelo: true, agora: AGORA16, jaAgendou: true }), "informou_visita");
+});
