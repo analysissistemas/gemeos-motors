@@ -3,6 +3,7 @@ import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { diaDaLoja } from "@/lib/ia/analista-regras";
 import { naoClientes, prontosParaVendedor } from "@/lib/consultas/followups";
+import type { ResumoRelatorio } from "@/lib/avisos/relatorio-texto";
 
 /* Relatório da manhã (dono, 15/10/2026: "toda manhã às 8, separado por área: como está o estoque, como está vendas, o
    que a IA sugere, plano de ação, como está o atendimento"). Números de ontem e do mês, o que tem para hoje e o que o
@@ -41,7 +42,7 @@ export async function relatorioDaManha(agora = new Date()) {
       .where(and(eq(C.demo, false), gte(M.criadoEm, iniOntem), lt(M.criadoEm, iniHoje), ne(M.direcao, "system"))),
     /* agora: cliente escreveu por último e a conversa está em Humano */
     db
-      .select({ id: C.id, nome: sql<string>`coalesce(${C.contatoNome}, ${C.contatoTelefone})`, desde: C.ultimaMensagemEm })
+      .select({ id: C.id, nome: sql<string>`coalesce(${C.contatoNome}, ${C.contatoTelefone})`, telefone: C.contatoTelefone, desde: C.ultimaMensagemEm })
       .from(C)
       .where(and(eq(C.demo, false), eq(C.modo, "humano"), eq(C.ultimaMensagemDirecao, "incoming"), sql`${C.status} not in ('resolvida', 'encerrada')`, gte(C.ultimaMensagemEm, sql`now() - interval '3 days'`)))
       .orderBy(C.ultimaMensagemEm)
@@ -100,11 +101,15 @@ export async function relatorioDaManha(agora = new Date()) {
   const fora = await naoClientes(todosProntos.map((p) => p.conversaId));
   const prontos = todosProntos.filter((p) => !fora.has(p.conversaId));
   const qualidade = fichas && fichas.conversas > 0 ? fichas : null;
+  /* o próprio Milton (número da equipe) não é cliente esperando */
+  const { ehDaEquipe } = await import("@/lib/avisos/whatsapp-equipe");
+  const esperandoClientes = [];
+  for (const e of esperando) if (!(await ehDaEquipe(e.telefone))) esperandoClientes.push(e);
 
   return {
     hoje,
     ontem,
-    atendimento: { ...atend[0], esperando, qualidade },
+    atendimento: { ...atend[0], esperando: esperandoClientes, qualidade },
     vendas: { ontem: vendasOntem[0], mes: vendasMes[0], perdidasOntem: perdidasOntem[0]?.n ?? 0, funil, prontos },
     estoque: { modelos: estoque, procuradosSemEstoque: procuradosSemEstoque.filter((p) => !estoque.some((e) => e.disponiveis > 0 && e.modelo.toLowerCase() === p.modelo.toLowerCase())) },
     hojeNaLoja: { retiradas: retiradasHoje, testDrives: testDrivesHoje, followUpsAtrasados: atrasados[0]?.n ?? 0 },
@@ -125,4 +130,27 @@ export function planoDeAcao(r: RelatorioManha): { texto: string; href: string }[
   for (const p of r.estoque.procuradosSemEstoque.slice(0, 3)) acoes.push({ texto: `Repor ${p.modelo}: ${p.n} cliente${p.n === 1 ? "" : "s"} esperando unidade`, href: "/sistema/estoque" });
   for (const c of r.ia.plano.slice(0, 3)) acoes.push({ texto: `Plano aprovado: ${c.titulo}`, href: "/sistema/melhorias" });
   return acoes;
+}
+
+/** O que vai no WhatsApp do Milton (lib/avisos/relatorio-texto.ts). */
+export function resumoParaWhatsapp(r: RelatorioManha): ResumoRelatorio {
+  return {
+    conversasOntem: r.atendimento.conversas,
+    vendasOntem: r.vendas.ontem.n,
+    valorOntem: r.vendas.ontem.valor,
+    vendasMes: r.vendas.mes.n,
+    valorMes: r.vendas.mes.valor,
+    prontos: r.vendas.prontos.map((p) => ({ nome: p.cliente ?? "Cliente", porque: p.porque })),
+    esperando: r.atendimento.esperando.map((e) => e.nome),
+    retiradas: r.hojeNaLoja.retiradas.map((t) => (t.notas ?? "Retirada").split(".")[0]),
+    testDrives: r.hojeNaLoja.testDrives.map((t) => `${t.nome ?? "Cliente"} · ${t.descricao ?? "visita"}`),
+    atrasados: r.hojeNaLoja.followUpsAtrasados,
+    disponiveis: r.estoque.modelos.reduce((x, m) => x + m.disponiveis, 0),
+    semUnidade: r.estoque.modelos.filter((m) => !m.disponiveis).map((m) => m.modelo),
+    procuradosSemEstoque: r.estoque.procuradosSemEstoque.map((p) => `${p.modelo} (${p.n})`),
+    nota: r.atendimento.qualidade?.notaMedia ?? null,
+    maiorEsperaMin: r.atendimento.qualidade?.maiorEsperaMin ?? null,
+    sugestoes: r.ia.sugestoes.map((c) => c.titulo),
+    plano: planoDeAcao(r).map((p) => p.texto),
+  };
 }

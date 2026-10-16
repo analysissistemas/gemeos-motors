@@ -127,5 +127,7 @@ export async function quemEDaConversa(conversaId: number): Promise<{ nome: strin
     .limit(1);
   if (!c) return null;
   const nome = c.nome && /\p{L}{2}/u.test(c.nome) ? c.nome.trim().split(/\s+/).slice(0, 2).join(" ") : c.telefone;
-  return { nome, demo: c.demo };
+  /* a conversa do próprio Milton (número da equipe) não gera aviso */
+  const { ehDaEquipe } = await import("./whatsapp-equipe");
+  return { nome, demo: c.demo || (await ehDaEquipe(c.telefone)) };
 }

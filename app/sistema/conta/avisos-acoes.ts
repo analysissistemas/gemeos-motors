@@ -1,6 +1,6 @@
 "use server";
 import { z } from "zod";
-import { ErroAcesso, obterUsuario } from "@/lib/auth/dal";
+import { autorizar, ErroAcesso, obterUsuario } from "@/lib/auth/dal";
 import { executar, ErroRegra } from "@/lib/acao";
 import { chavePublica, desinscrever, enviarAviso, inscrever, inscricoes } from "@/lib/avisos/push";
 import { registrarLog } from "@/lib/logs";
@@ -52,4 +52,60 @@ export async function acaoAvisoDeTeste() {
     if (!r.enviados) throw new ErroRegra(`O aviso não saiu (${r.motivo ?? "o celular recusou"}). Desative e ative de novo.`);
     return r.enviados;
   }, "Aviso de teste enviado");
+}
+
+/* ---------- relatório das 8h no WhatsApp do Milton (só administrador) ---------- */
+
+export async function acaoWhatsappRelatorio() {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    const { lerWhatsappEquipe, situacaoModeloRelatorio } = await import("@/lib/avisos/whatsapp-equipe");
+    const e = await lerWhatsappEquipe();
+    let modelo: { status: string; motivo: string | null } | null = null;
+    let erroModelo: string | null = null;
+    try {
+      modelo = await situacaoModeloRelatorio();
+    } catch (x) {
+      erroModelo = x instanceof Error ? x.message : String(x);
+    }
+    return { telefone: e?.telefone ?? "", nome: e?.nome ?? "Milton", ultimaMsgEm: e?.ultimaMsgEm ?? null, ultimoEnvio: e?.ultimoEnvio ?? null, modelo, erroModelo };
+  });
+}
+
+export async function acaoSalvarWhatsappRelatorio(telefone: string, nome: string) {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const d = telefone.replace(/\D/g, "");
+    if (d && (d.length < 10 || d.length > 13)) throw new ErroRegra("Número inválido. Use DDD + número, ex.: (81) 99386-9767.");
+    const { salvarWhatsappEquipe } = await import("@/lib/avisos/whatsapp-equipe");
+    await salvarWhatsappEquipe(d, nome);
+    await registrarLog(u, { acao: "avisos.whatsapp", entidade: "configuracao", entidadeId: 0, descricao: d ? "Cadastrou o WhatsApp do relatório das 8h" : "Removeu o WhatsApp do relatório das 8h" });
+    return true;
+  }, "Número salvo");
+}
+
+export async function acaoCriarModeloRelatorio() {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const { criarModeloRelatorio } = await import("@/lib/avisos/whatsapp-equipe");
+    let r;
+    try {
+      r = await criarModeloRelatorio();
+    } catch (x) {
+      throw new ErroRegra(`A Meta recusou: ${x instanceof Error ? x.message : String(x)}`);
+    }
+    await registrarLog(u, { acao: "avisos.modelo", entidade: "configuracao", entidadeId: 0, descricao: `Criou o modelo de mensagem relatorio_manha na Meta (${r.status})` });
+    return r;
+  });
+}
+
+export async function acaoEnviarRelatorioAgora() {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    const { relatorioDaManha, resumoParaWhatsapp } = await import("@/lib/consultas/relatorio-manha");
+    const { enviarRelatorioWhatsApp } = await import("@/lib/avisos/whatsapp-equipe");
+    const r = await enviarRelatorioWhatsApp(resumoParaWhatsapp(await relatorioDaManha()));
+    if (!r.ok) throw new ErroRegra(`Não saiu: ${r.erro ?? "erro desconhecido"}`);
+    return r.como;
+  });
 }

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { aplicarReacaoDoCliente, aplicarRevogacao, aplicarStatus, executarTriagem, receberMensagem, triagemAutomaticaLigada } from "@/lib/mensageria/servico";
+import { mensagemDaEquipe } from "@/lib/avisos/whatsapp-equipe";
 import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
 import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
@@ -117,6 +118,8 @@ export async function POST(req: NextRequest) {
   const paraAnalisar: { id: number; texto: string }[] = [];
   for (const m of recebidas) {
     const r = await receberMensagem(m);
+    /* número da equipe (Milton, relatório das 8h): conversa sempre em Humano, a IA não responde (dono, 16/10/2026) */
+    if (r.conversaId && (await mensagemDaEquipe(m.telefone).catch(() => false))) continue;
     if (r.conversaId && r.mensagemId) entradas.push({ conversaId: r.conversaId, mensagemId: r.mensagemId });
     if (r.conversaId && r.modo === "ia") conversas.push(r.conversaId);
     if (r.conversaId && m.tipo === "texto" && m.conteudo) paraAnalisar.push({ id: r.conversaId, texto: m.conteudo });

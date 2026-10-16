@@ -6,6 +6,7 @@ import { CabecalhoPagina, ItemInfo, Painel } from "@/components/ui/basicos";
 import { TrocarSenha } from "./trocar-senha";
 import { MinhaFoto } from "./minha-foto";
 import { AvisosNoCelular } from "./avisos-celular";
+import { RelatorioNoWhatsapp } from "./relatorio-whatsapp";
 
 export const metadata: Metadata = { title: "Minha conta" };
 
@@ -27,6 +28,7 @@ export default async function PaginaConta() {
         </dl>
       </Painel>
       <AvisosNoCelular />
+      {u.papel === "admin" && <RelatorioNoWhatsapp />}
       <TrocarSenha />
     </Pagina>
   );

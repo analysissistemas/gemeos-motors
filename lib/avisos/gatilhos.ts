@@ -101,7 +101,7 @@ export async function avisosAgendados(agora = new Date()) {
   if ((marca?.valor as { dia?: string } | null)?.dia === hoje) return;
   await db.insert(schema.configuracoes).values({ chave: "avisos.resumo", valor: { dia: hoje } }).onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor: { dia: hoje }, atualizadoEm: new Date() } });
 
-  const { relatorioDaManha } = await import("@/lib/consultas/relatorio-manha");
+  const { relatorioDaManha, resumoParaWhatsapp } = await import("@/lib/consultas/relatorio-manha");
   const r = await relatorioDaManha(agora);
   await enviarAviso(
     avisoResumoDoDia({
@@ -116,4 +116,8 @@ export async function avisosAgendados(agora = new Date()) {
       sugestoes: r.ia.sugestoes.length,
     }),
   );
+  /* e no WhatsApp pessoal do Milton (dono, 16/10/2026) */
+  const { enviarRelatorioWhatsApp } = await import("./whatsapp-equipe");
+  const w = await enviarRelatorioWhatsApp(resumoParaWhatsapp(r));
+  if (!w.ok && w.como !== "nenhum") console.error("[relatorio whatsapp]", w.erro);
 }
