@@ -158,7 +158,7 @@ export default async function PaginaRelatorio() {
               <li key={m.modelo} className="flex gap-2">
                 <span className="w-40 shrink-0 font-medium">{m.modelo}</span>
                 <span className={m.disponiveis ? "" : "text-critico"}>
-                  {m.disponiveis ? `${m.disponiveis} disponível${m.disponiveis === 1 ? "" : "is"}` : "sem unidade disponível"}
+                  {m.disponiveis ? `${m.disponiveis} ${m.disponiveis === 1 ? "disponível" : "disponíveis"}` : "sem unidade disponível"}
                   {m.cores ? <span className="text-ink-3"> · {m.cores}</span> : null}
                   {m.reservados ? <span className="text-ink-3"> · {m.reservados} reservada{m.reservados === 1 ? "" : "s"}</span> : null}
                 </span>
