@@ -955,3 +955,29 @@ export const analisesConversa = pgTable(
   },
   (t) => [uniqueIndex("analises_conversa_dia_unico").on(t.conversaId, t.dia), index("analises_conversa_dia_idx").on(t.dia)],
 );
+
+/* ---------- chamados de melhoria: sugestões do Analista que o dono aprova (lib/ia/chamados.ts) ----------
+   Resposta para a IA e regra de atendimento são aplicadas sozinhas ao aprovar (e podem ser desfeitas);
+   o resto vira item do plano de ação. `resultado` guarda o que foi aplicado, para desfazer. */
+export const chamadosMelhoria = pgTable(
+  "chamados_melhoria",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    tipo: text().notNull(), // base_conhecimento | regra_ia | plano_acao
+    area: text().notNull(), // ia | estoque | preco_pagamento | equipe | sistema | marketing
+    titulo: text().notNull(),
+    problema: text().notNull(),
+    proposta: jsonb().$type<import("@/lib/ia/chamados-regras").PropostaChamado>().notNull(),
+    evidencias: jsonb().$type<import("@/lib/ia/chamados-regras").EvidenciaChamado[]>().notNull().default([]),
+    /* conversas diferentes que mostram o problema */
+    clientes: integer().notNull().default(0),
+    status: text().notNull().default("novo"), // novo | aplicado | plano | feito | recusado | desfeito
+    resultado: jsonb().$type<Record<string, unknown>>(),
+    observacao: text(),
+    decididoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),
+    decididoEm: quando(),
+    criadoEm: criadoEm(),
+    atualizadoEm: criadoEm(),
+  },
+  (t) => [index("chamados_melhoria_status_idx").on(t.status, t.criadoEm)],
+);

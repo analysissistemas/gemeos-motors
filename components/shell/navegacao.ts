@@ -42,6 +42,7 @@ export const SECOES_MENU: { titulo: string; itens: ItemMenu[] }[] = [
       { href: "/sistema/financeiro", rotulo: "Financeiro", icone: "financeiro", permissao: "financeiro.ver" },
       { href: "/sistema/logs", rotulo: "Histórico do sistema", icone: "logs", permissao: "logs.ver" },
       { href: "/sistema/cameras", rotulo: "Câmeras", icone: "cameras", permissao: "cameras.ver" },
+      { href: "/sistema/melhorias", rotulo: "Melhorias", icone: "melhorias", permissao: "config.gerenciar" },
       { href: "/sistema/ia", rotulo: "Inteligência artificial", icone: "ia", permissao: "config.gerenciar" },
       { href: "/sistema/usuarios", rotulo: "Usuários", icone: "usuarios", permissao: "usuarios.gerenciar" },
       { href: "/sistema/configuracoes", rotulo: "Configurações", icone: "config", permissao: "config.gerenciar" },

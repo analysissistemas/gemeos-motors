@@ -5,6 +5,7 @@ import { db, schema } from "@/lib/db";
 import { ETAPAS } from "@/lib/dominio";
 import { gerarObjetoComUso, IaIndisponivel, MODELO_IA } from "./cliente";
 import { iaLigada } from "./controle";
+import { talvezGerarChamados } from "./chamados";
 import {
   AREAS_SUGESTAO,
   ASSUNTOS,
@@ -216,6 +217,15 @@ export async function rodarAnalista(agora = new Date()) {
         /* sem crédito, sem chave ou limite da OpenAI: para o passo, tenta no próximo minuto */
         if (e instanceof IaIndisponivel) return { analisadas, motivo: e.message };
       }
+    }
+  }
+  /* fila vazia: as fichas do dia estão prontas, é a hora dos chamados (uma vez por dia, a partir das 18:45) */
+  if (analisadas === 0) {
+    try {
+      const chamados = await talvezGerarChamados(agora, false);
+      if (chamados) return { analisadas, chamados };
+    } catch (e) {
+      console.error("[analista] chamados", e instanceof Error ? e.message : e);
     }
   }
   return { analisadas };
