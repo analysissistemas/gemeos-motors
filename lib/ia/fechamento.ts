@@ -64,7 +64,7 @@ const RX_QUER_COMPRAR = /(?<![a-z])(quero (comprar|uma moto|um patinete|adquirir
 const RX_INTERESSE = /(?<![a-z])(quero|queria|interess\w*|comprar|compra|preco|valor|quanto|condic\w*|pagamento|parcel\w*|a vista|pix|cartao|disponivel|tem (a|o|essa|esse))(?![a-z])/;
 
 /** Em que momento da compra o cliente está, pela mensagem dele e pela última mensagem da loja. */
-export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number }): Momento | null {
+export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number; jaAgendou?: boolean }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
   /* respondendo a lista de dados */
@@ -104,6 +104,9 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
   if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
+  /* já agendado e o cliente manda outro dia ou hora (Elton, 15/10/2026: "quarta feira que vem" depois do agendado na
+     sexta; a IA disse "confirmado" e a agenda ficou na sexta): remarca. Pergunta ("abre sábado?") não remarca. */
+  if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora)) return "informou_visita";
   if (RX_QUER_VISITAR.test(p.textoCliente)) return dh.temDia && dh.temHora ? "informou_visita" : "quer_visitar";
   /* perguntou onde fica: responde o endereço e já pergunta o dia e o horário (dono, 14/10/2026) */
   if (RX_PERGUNTA_ENDERECO.test(p.textoCliente)) return "quer_visitar";

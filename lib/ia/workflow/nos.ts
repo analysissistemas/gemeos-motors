@@ -10,8 +10,9 @@ import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/li
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
-import { dataHoraDaVisita, LOCAL_LOJA, quandoPorExtenso, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
-import { criarTestDrive } from "@/lib/servicos/test-drive";
+import { dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
+import { STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
@@ -410,23 +411,80 @@ function horarioCurto(h: HorarioLoja) {
 /* Visita / test drive marcado pela IA (pedido do dono, 03/10/2026). Usa o mesmo serviço da equipe (conflito
    de horário, histórico, conversa). Nunca diz que marcou sem ter marcado: falta dia ou hora, horário fora
    do funcionamento ou ocupado, ele pergunta de novo. */
+/** A IA já marcou (ou remarcou) nas últimas falas da loja. */
+const RX_AGENDADO = /\b(Agendado|Remarcado) ✅ Te esperamos/;
+/** O que a própria IA escreveu ao perguntar ("Quarta, 21/10. E que horas…?", "Perfeito, às 14h! E qual dia…?"): só o
+    dia e a hora ditos, sem o "das 8h às 18h" do horário da loja. É a memória do agendamento, escrita na conversa. */
+function diaEHoraDaPergunta(historico: string | null | undefined) {
+  const ultima = ultimasFalasDaLoja(historico, 1);
+  if (!/(que horas|qual dia) fica melhor/i.test(ultima)) return "";
+  const dia = /(domingo|segunda|terça|quarta|quinta|sexta|sábado), \d{2}\/\d{2}/i.exec(ultima)?.[0] ?? "";
+  const hora = /^Agente IA: Perfeito, (às \d{1,2}h(?:\d{2})?)!/.exec(ultima)?.[1] ?? "";
+  return [dia, hora].filter(Boolean).join(" ");
+}
+const horaCurta = (h: { hora: number; min: number }) => (h.min ? `${h.hora}h${String(h.min).padStart(2, "0")}` : `${h.hora}h`);
+const maiuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/* Visita já marcada nesta conversa (agendada ou confirmada, ainda por vir): o cliente que manda outro dia ou hora
+   remarca esta, não cria outra. */
+async function visitaAbertaDaConversa(conversaId: number) {
+  const t = schema.testDrives;
+  const [v] = await db
+    .select({ id: t.id, agendadoPara: t.agendadoPara })
+    .from(t)
+    .where(and(eq(t.conversaId, conversaId), inArray(t.status, STATUS_ABERTOS), gt(t.agendadoPara, new Date())))
+    .orderBy(t.agendadoPara)
+    .limit(1);
+  return v ?? null;
+}
+
+/* Linear, sem margem para erro (dono, 15/10/2026, conversa do Elton): dia → hora → agendado. O dia dito fica escrito
+   na pergunta da hora; hora sem dia nunca vira "amanhã" sozinha (a IA pergunta o dia); o cliente que corrige depois
+   do agendado remarca o mesmo test drive. */
 async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; nome: string | null; horario: HorarioLoja }): Promise<{ texto: string; quando: Date | null; erro?: string }> {
+  const quem = p.nome ? `, ${p.nome}` : "";
+  const funciona = horarioCurto(p.horario);
+  /* a loja precisa estar aberta na hora marcada e meia hora depois */
+  const lojaFunciona = (q: Date) => lojaAberta(p.horario, q) && lojaAberta(p.horario, new Date(q.getTime() + 30 * 60_000));
+
+  /* já tem visita marcada: o que ele disse agora muda só o que ele disse (dia ou hora) */
+  const marcada = await visitaAbertaDaConversa(c.conversaId);
+  if (marcada) {
+    const novo = remarcarPara(dataHoraDaVisita(c.textoBuffer), marcada.agendadoPara);
+    if (!novo || novo.getTime() === marcada.agendadoPara.getTime())
+      return { texto: `Está agendado ✅ Te esperamos ${quandoPorExtenso(marcada.agendadoPara)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: null };
+    if (novo.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou 😅 Qual outro dia e horário fica bom pra você?", quando: null };
+    if (!lojaFunciona(novo)) return { texto: `Nesse horário a loja está fechada 😕 Funcionamos ${funciona}. Qual outro horário fica bom pra você?`, quando: null };
+    try {
+      await reagendarTestDrive(null, marcada.id, novo);
+    } catch (e) {
+      if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado 😕 Pode ser um pouco antes ou depois?", quando: null, erro: e.message };
+      throw e;
+    }
+    return { texto: `Remarcado ✅ Te esperamos ${quandoPorExtenso(novo)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: novo };
+  }
+
   let dh = dataHoraDaVisita(c.textoBuffer);
+  let textoDh = c.textoBuffer;
   /* o dia numa mensagem e a hora na outra ("quarta" → "Que horas fica melhor?" → "às 10h"): junta com as 2 últimas
      mensagens do cliente; a mensagem de agora vem primeiro e vale mais (dono, 14/10/2026). "às 10h" sozinho
      não é amanhã quando ele já disse o dia antes (Simulador de 14/10/2026: "quarta" virou quinta) */
   if (!dh.diaDito || !dh.temHora) {
     const recentes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((b) => b.startsWith("Lead:")).slice(-2).map((b) => b.replace(/^Lead:\s*/, "")).join("\n");
-    const junto = dataHoraDaVisita(`${c.textoBuffer}\n${recentes}`);
-    if (junto.temDia && junto.temHora && (junto.diaDito || !dh.temDia)) dh = junto;
+    /* a pergunta da IA traz o dia (e a hora) já entendidos e vem antes das mensagens velhas do cliente */
+    const texto = [c.textoBuffer, diaEHoraDaPergunta(c.memoria.historico), recentes].filter(Boolean).join("\n");
+    const junto = dataHoraDaVisita(texto);
+    if (junto.temDia && junto.temHora && (junto.diaDito || !dh.temDia)) [dh, textoDh] = [junto, texto];
+    else if (!dh.diaDito && junto.diaDito) [dh, textoDh] = [junto, texto];
   }
-  const funciona = horarioCurto(p.horario);
-  if (!dh.temDia) return { texto: `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
-  if (!dh.temHora || !dh.quando) return { texto: `Show! E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
+  /* sem dia, ou só a hora (que sozinha viraria "amanhã"): pergunta o dia, repetindo a hora que ele já disse */
+  if (!dh.temDia || !diaClaro(dh, textoDh))
+    return { texto: dh.hora ? `Perfeito, às ${horaCurta(dh.hora)}! E qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊` : `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
+  /* dia sem hora: repete o dia com a data, que fica escrita para a próxima mensagem */
+  if (!dh.temHora || !dh.quando) return { texto: `Show! ${dh.dia ? `${maiuscula(diaPorExtenso(dh.dia))}. ` : ""}E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
   const quando = dh.quando;
   if (quando.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou 😅 Qual outro dia e horário fica bom pra você?", quando: null };
-  /* a loja precisa estar aberta na hora marcada e meia hora depois */
-  if (!lojaAberta(p.horario, quando) || !lojaAberta(p.horario, new Date(quando.getTime() + 30 * 60_000)))
+  if (!lojaFunciona(quando))
     return { texto: `Nesse horário a loja está fechada 😕 Funcionamos ${funciona}. Qual outro horário fica bom pra você?`, quando: null };
   let modeloId: number | null = null;
   if (p.modelo) {
@@ -445,7 +503,6 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
     if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado 😕 Pode ser um pouco antes ou depois?", quando: null, erro: e.message };
     throw e;
   }
-  const quem = p.nome ? `, ${p.nome}` : "";
   /* só promete a moto esperando se tem unidade Disponível (Simulador de 14/10/2026: X GÊMEOS sem estoque) */
   const moto = p.modelo && (await temUnidadeDisponivel(p.modelo, !!c.conversa?.demo)) ? ` ${artigo(p.modelo).toUpperCase()} *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
   return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}`, quando };
@@ -1172,8 +1229,10 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const nomesCat = (await nomesDoCatalogo()).map((nome) => ({ nome }));
     const modeloDaConversa = ultimaCitada(nomesCat, [c.memoria.fatos.interesse ?? "", leadAntes, c.textoBuffer].join("\n"))?.nome ?? null;
     const ultimaDaLoja = ultimaFalaDaLoja(c.memoria.historico);
-    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
-    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes) }) : null;
+    /* acabou de agendar: outro dia ou hora agora é remarcação (Elton, 15/10/2026) */
+    const jaAgendou = RX_AGENDADO.test(ultimasFalasDaLoja(c.memoria.historico, 3));
+    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || jaAgendou || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
+    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes), jaAgendou }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);

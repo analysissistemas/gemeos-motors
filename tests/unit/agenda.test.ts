@@ -35,3 +35,42 @@ test("quer vir à loja / test drive; a loja perguntou o horário", () => {
   assert.ok(!RX_QUER_VISITAR.test("quanto custa a AG08?"));
   assert.ok(RX_PEDIU_HORARIO_VISITA.test("Qual dia e horário fica melhor pra você vir? 😊"));
 });
+
+/* Elton, 15/10/2026 (quinta, 16:34 em Recife): "Na quarta feira à tarde" → "Que horas?" → "Por volta das 14:00".
+   O test drive foi parar na sexta 16/10; depois ele disse "Quarta feira que vem" e a agenda ficou na sexta. */
+import { diaClaro, diaPorExtenso, remarcarPara } from "../../lib/ia/agenda.ts";
+import { detectarMomento } from "../../lib/ia/fechamento.ts";
+const ELTON = new Date("2026-10-15T19:34:00Z");
+
+test("Elton: só a hora não é dia claro (a IA pergunta o dia, não supõe amanhã)", () => {
+  const so = dataHoraDaVisita("Por volta das 14:00 mais ou menos", ELTON);
+  assert.equal(so.diaDito, false);
+  assert.equal(diaClaro(so, "Por volta das 14:00 mais ou menos"), false);
+  assert.equal(diaClaro(dataHoraDaVisita("hoje às 17h", ELTON), "hoje às 17h"), true);
+  assert.equal(diaClaro(dataHoraDaVisita("amanhã às 10h", ELTON), "amanhã às 10h"), true);
+});
+
+test("Elton: a hora junta com o dia escrito na pergunta da IA (\"Quarta, 21/10. E que horas…\")", () => {
+  const dia = dataHoraDaVisita("Na quarta feira à tarde", ELTON);
+  assert.equal(diaPorExtenso(dia.dia!), "quarta, 21/10");
+  const junto = dataHoraDaVisita("Por volta das 14:00 mais ou menos\nquarta, 21/10", ELTON);
+  assert.equal(junto.diaDito, true);
+  assert.equal(quandoPorExtenso(junto.quando!), "quarta, 21/10, às 14h");
+  // o horário da loja na pergunta ("das 8h às 18h") não entra: a hora do cliente vem primeiro
+  assert.equal(quandoPorExtenso(dataHoraDaVisita("às 15h\nquarta, 21/10", ELTON).quando!), "quarta, 21/10, às 15h");
+});
+
+test("remarcar: muda só o que o cliente disse", () => {
+  const sexta14h = new Date("2026-10-16T17:00:00Z");
+  assert.equal(quandoPorExtenso(remarcarPara(dataHoraDaVisita("Quarta feira que vem", ELTON), sexta14h)!), "quarta, 21/10, às 14h");
+  assert.equal(quandoPorExtenso(remarcarPara(dataHoraDaVisita("pode ser às 16h?", ELTON), sexta14h)!), "sexta, 16/10, às 16h");
+  assert.equal(quandoPorExtenso(remarcarPara(dataHoraDaVisita("melhor sábado às 9h", ELTON), sexta14h)!), "sábado, 17/10, às 9h");
+  assert.equal(remarcarPara(dataHoraDaVisita("ok, combinado", ELTON), sexta14h), null);
+});
+
+test("depois do agendado, outro dia ou hora é remarcação; pergunta não é", () => {
+  const loja = "Agendado ✅ Te esperamos sexta, 16/10, às 14h, Elton, aqui na loja";
+  assert.equal(detectarMomento({ textoCliente: "Quarta feira que vem", ultimaDaLoja: loja, conheceModelo: false, agora: ELTON, jaAgendou: true }), "informou_visita");
+  assert.equal(detectarMomento({ textoCliente: "vocês abrem sábado?", ultimaDaLoja: loja, conheceModelo: false, agora: ELTON, jaAgendou: true }), null);
+  assert.equal(detectarMomento({ textoCliente: "Quarta feira que vem", ultimaDaLoja: "Qual modelo te interessou?", conheceModelo: false, agora: ELTON }), null);
+});

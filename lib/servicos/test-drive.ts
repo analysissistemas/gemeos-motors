@@ -202,7 +202,7 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
   });
 }
 
-export async function reagendarTestDrive(u: Quem, testDriveId: number, quando: Date) {
+export async function reagendarTestDrive(u: Quem | null, testDriveId: number, quando: Date) {
   conferirFuturo(quando);
   return db.transaction(async (tx) => {
     await travarAgenda(tx);

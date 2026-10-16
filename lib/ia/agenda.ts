@@ -26,7 +26,15 @@ export const RX_PERGUNTA_ENDERECO = /(?<![\p{L}])(onde (fica|[ée]|voc[êe]s fic
 const DIAS_SEMANA: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
 
 /** diaDito: o cliente escreveu o dia; sem ele, "às 10h" sozinho vira hoje ou amanhã (temDia) */
-export type DataHoraVisita = { quando: Date | null; temDia: boolean; temHora: boolean; diaDito: boolean };
+export type DataHoraVisita = {
+  quando: Date | null;
+  temDia: boolean;
+  temHora: boolean;
+  diaDito: boolean;
+  /** o dia entendido (dito ou suposto) e a hora, separados, para juntar com outra mensagem ou remarcar */
+  dia: { ano: number; mes: number; dia: number } | null;
+  hora: { hora: number; min: number } | null;
+};
 
 /** Dia e hora que o cliente escreveu ("sábado às 10h", "amanhã 15h", "dia 6 às 9", "06/10 14:30", "hoje às 4 da tarde"). */
 export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataHoraVisita {
@@ -79,12 +87,35 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
   if (!dia && hora !== null && /\b(hoje|agora|mais tarde)\b|^\D*\d{1,2}\s*(h|:)/.test(t)) dia = mais(hoje, hora > hoje.hora ? 0 : 1);
 
   const quando = dia && hora !== null ? instante(dia.ano, dia.mes, dia.dia, hora, min) : null;
-  return { quando, temDia: !!dia, temHora: hora !== null, diaDito };
+  return { quando, temDia: !!dia, temHora: hora !== null, diaDito, dia, hora: hora !== null ? { hora, min } : null };
 }
 
 function mais(h: { ano: number; mes: number; dia: number }, n: number) {
   const d = new Date(Date.UTC(h.ano, h.mes, h.dia + n));
   return { ano: d.getUTCFullYear(), mes: d.getUTCMonth(), dia: d.getUTCDate() };
+}
+
+/** O dia ficou claro? Dito pelo cliente ("quarta", "amanhã", "21/10") ou "hoje"/"agora"/"mais tarde". Só a hora
+    ("por volta das 14:00") não é dia claro: a IA pergunta o dia, nunca supõe amanhã (Elton, 15/10/2026: disse quarta,
+    a hora veio na mensagem seguinte e o test drive foi parar na sexta). */
+export function diaClaro(dh: DataHoraVisita, texto: string) {
+  return dh.diaDito || /\b(hoje|agora|mais tarde)\b/.test(semAcento(texto));
+}
+
+/** Remarcação: o que o cliente disse agora vale; o que ele não disse fica como estava ("quarta" mantém as 14h). */
+export function remarcarPara(dh: DataHoraVisita, atual: Date): Date | null {
+  if (!dh.diaDito && !dh.temHora) return null;
+  const a = local(atual);
+  const d = dh.diaDito && dh.dia ? dh.dia : { ano: a.ano, mes: a.mes, dia: a.dia };
+  const h = dh.hora ?? { hora: a.hora, min: a.min };
+  return instante(d.ano, d.mes, d.dia, h.hora, h.min);
+}
+
+/** "quarta, 21/10" no fuso de Recife (a IA repete o dia ao perguntar a hora: fica escrito na conversa). */
+export function diaPorExtenso(d: { ano: number; mes: number; dia: number }) {
+  const sem = new Date(Date.UTC(d.ano, d.mes, d.dia)).getUTCDay();
+  const dias = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  return `${dias[sem]}, ${String(d.dia).padStart(2, "0")}/${String(d.mes + 1).padStart(2, "0")}`;
 }
 
 /** "sábado, 04/10, às 10h" no fuso de Recife. */
