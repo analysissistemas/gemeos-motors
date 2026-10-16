@@ -216,25 +216,34 @@ export async function enviarLembretesRetirada(agora = new Date()) {
   const vencidos = await db
     .select({ id: F.id, conversaId: F.conversaId, contexto: F.contexto, notas: F.notas })
     .from(F)
-    .where(and(eq(F.status, "pendente"), eq(F.tipo, "lembrete_retirada"), lte(F.agendadoPara, agora)))
+    .where(and(eq(F.status, "pendente"), inArray(F.tipo, ["lembrete_retirada", "lembrete_visita"]), lte(F.agendadoPara, agora)))
     .limit(20);
   for (const f of vencidos) {
     const [meu] = await db.update(F).set({ status: "concluido", concluidoEm: agora }).where(and(eq(F.id, f.id), eq(F.status, "pendente"))).returning({ id: F.id });
     if (!meu || !f.conversaId) continue;
     try {
-      const ctx = (f.contexto ?? {}) as { texto?: string };
+      const ctx = (f.contexto ?? {}) as { texto?: string; testDriveId?: number; quando?: string };
+      /* test drive cancelado, realizado ou remarcado depois de agendar o lembrete: não sai (o remarcado tem o dele) */
+      if (ctx.testDriveId) {
+        const [td] = await db.select({ status: schema.testDrives.status, agendadoPara: schema.testDrives.agendadoPara }).from(schema.testDrives).where(eq(schema.testDrives.id, ctx.testDriveId)).limit(1);
+        if (!td || !["agendado", "confirmado"].includes(td.status) || (ctx.quando && new Date(td.agendadoPara).getTime() !== new Date(ctx.quando).getTime())) {
+          await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: o test drive mudou ou foi cancelado.`.slice(0, 1000) }).where(eq(F.id, f.id));
+          continue;
+        }
+      }
+      const doQue = ctx.testDriveId ? "do test drive" : "da retirada";
       const [cv] = await db.select({ telefone: C.contatoTelefone, demo: C.demo, status: C.status }).from(C).where(eq(C.id, f.conversaId)).limit(1);
       if (!cv || cv.status === "encerrada" || !ctx.texto) {
         await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: conversa encerrada.`.slice(0, 1000) }).where(eq(F.id, f.id));
         continue;
       }
-      const env = await enviarRespostaDaIa(db, { conversaId: f.conversaId, telefone: cv.telefone, texto: ctx.texto, origem: "lembrete da retirada na loja", simulado: cv.demo });
+      const env = await enviarRespostaDaIa(db, { conversaId: f.conversaId, telefone: cv.telefone, texto: ctx.texto, origem: `lembrete ${doQue}`, simulado: cv.demo });
       if (env.enviada) {
-        await db.update(F).set({ notas: `Lembrete da retirada enviado pela IA: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
-        await mensagemSistema(db, f.conversaId, "Lembrete da retirada na loja enviado ao cliente.", { triagem: true });
+        await db.update(F).set({ notas: `Lembrete ${doQue} enviado pela IA: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
+        await mensagemSistema(db, f.conversaId, `Lembrete ${doQue} enviado ao cliente.`, { triagem: true });
         r.enviados++;
       } else {
-        await db.update(F).set({ status: "pendente", tipo: "retorno_cliente", concluidoEm: null, notas: `O lembrete automático da retirada não saiu (${env.explicacao ?? env.motivo}). Lembre o cliente: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
+        await db.update(F).set({ status: "pendente", tipo: "retorno_cliente", concluidoEm: null, notas: `O lembrete automático ${doQue} não saiu (${env.explicacao ?? env.motivo}). Lembre o cliente: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
         r.erros++;
       }
     } catch (e) {

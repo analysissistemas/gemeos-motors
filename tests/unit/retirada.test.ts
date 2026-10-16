@@ -48,3 +48,12 @@ test("trecho de quando e confirmação com dia e hora", async () => {
   assert.equal(t, "Perfeito, Teste! Está tudo certinho ✅ Anotei sua retirada para sexta, 16/10, às 10h. A equipe vai deixar a sua *N2* separada pra você, e no dia eu te mando um lembrete por aqui 😊");
   assert.equal(validarResposta(t, {}).aprovada, true, JSON.stringify(validarResposta(t, {}).violacoes));
 });
+
+test("lembrete de test drive e de visita", async () => {
+  const { textoLembreteVisita } = await import("../../lib/ia/retirada.ts");
+  const q = new Date("2026-10-16T18:30:00Z"); // 15h30
+  const td = textoLembreteVisita({ nome: "Ana", descricao: "Gêmeos M6", quando: q });
+  assert.equal(td, "Oi, Ana! Passando pra lembrar do seu test drive da *Gêmeos M6* hoje, às 15h30, aqui na loja 😊 Se precisar mudar o horário, é só me avisar por aqui.");
+  assert.equal(textoLembreteVisita({ nome: null, descricao: "Visita à loja", quando: q }), "Oi! Passando pra lembrar da sua visita hoje, às 15h30, aqui na loja 😊 Se precisar mudar o horário, é só me avisar por aqui.");
+  assert.equal(validarResposta(td, {}).aprovada, true, JSON.stringify(validarResposta(td, {}).violacoes));
+});

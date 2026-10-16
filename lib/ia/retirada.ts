@@ -58,3 +58,11 @@ export function textoRetiradaMarcada(p: { nome: string | null; modelo: string | 
   const moto = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : "a sua moto";
   return `Perfeito${voc}! Está tudo certinho ✅ Anotei sua retirada para ${p.quandoExtenso}. A equipe vai deixar ${moto} separada pra você${p.lembrete ? ", e no dia eu te mando um lembrete por aqui 😊" : " 😊"}`;
 }
+
+/** Lembrete do test drive ou da visita marcada ("hoje, às 15h"). `descricao` é a moto do test drive, ou "Visita à loja". */
+export function textoLembreteVisita(p: { nome: string | null; descricao: string | null; quando: Date }): string {
+  const oi = p.nome ? `Oi, ${p.nome}!` : "Oi!";
+  const visita = !p.descricao || /^visita/iu.test(p.descricao);
+  const oque = visita ? "da sua visita" : `do seu test drive da *${p.descricao}*`;
+  return `${oi} Passando pra lembrar ${oque} hoje, às ${horaCurta(p.quando)}, aqui na loja 😊 Se precisar mudar o horário, é só me avisar por aqui.`;
+}

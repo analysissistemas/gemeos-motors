@@ -69,7 +69,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
       .leftJoin(schema.clientes, eq(schema.clientes.id, F.clienteId))
       .leftJoin(schema.conversas, eq(schema.conversas.id, F.conversaId))
       .leftJoin(fechou, eq(fechou.id, F.concluidoPor))
-      .where(and(sql`${F.status} <> 'pendente'`, sql`coalesce(${F.tipo}, '') not in ('aquecimento', 'lembrete_retirada')`, sql`coalesce(${schema.conversas.demo}, false) = false`, verTodos ? undefined : or(eq(F.usuarioId, u.id), isNull(F.usuarioId))))
+      .where(and(sql`${F.status} <> 'pendente'`, sql`coalesce(${F.tipo}, '') not in ('aquecimento', 'lembrete_retirada', 'lembrete_visita')`, sql`coalesce(${schema.conversas.demo}, false) = false`, verTodos ? undefined : or(eq(F.usuarioId, u.id), isNull(F.usuarioId))))
       .orderBy(desc(F.concluidoEm))
       .limit(20),
   ]);
@@ -84,7 +84,7 @@ export default async function PaginaFollowUps({ searchParams }: { searchParams: 
   const ordemNivel: Record<NivelPrioridade, number> = { alta: 0, media: 1, baixa: 2 };
   const daEquipe = pendentes
     /* o lembrete da retirada a IA manda sozinha: aparece dentro da tarefa "Retirada na loja" */
-    .filter((f) => f.tipo !== "aquecimento" && f.tipo !== "lembrete_retirada")
+    .filter((f) => !["aquecimento", "lembrete_retirada", "lembrete_visita"].includes(f.tipo ?? ""))
     .map((f) => ({
       ...f,
       prio: prioridadeDoFollowUp({

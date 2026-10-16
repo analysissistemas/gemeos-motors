@@ -9,6 +9,7 @@ import { ETAPAS_ABERTAS } from "@/lib/dominio";
 import { data, dataHora, formatarTelefone, hora, soDigitos, telefoneWhatsapp } from "@/lib/formato";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { DURACAO_TEST_DRIVE_MIN, STATUS_ABERTOS, STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
+import { planoRetirada, textoLembreteVisita } from "@/lib/ia/retirada";
 
 type Quem = { id: number; nome: string };
 
@@ -166,7 +167,7 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
   }
   if (!descricao) throw new ErroRegra("Escolha o veículo ou modelo do test drive.");
 
-  return db.transaction(async (tx) => {
+  const criado = await db.transaction(async (tx) => {
     await travarAgenda(tx);
     await conferirConflito(tx, { agendadoPara: d.agendadoPara, veiculoId: d.veiculoId, modeloId });
     const [td] = await tx
@@ -200,6 +201,48 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
     );
     return { id: td.id, conversaId: d.conversaId, quando: d.agendadoPara };
   });
+  await agendarLembreteTestDrive(criado.id).catch((e) => console.error("[lembrete test drive]", e));
+  return criado;
+}
+
+/* Lembrete do test drive / visita no dia (dono, 15/10/2026: "lembrete de visita e test drive"): 2 h antes, nunca
+   antes das 8 h, só dentro da janela de 24 h do WhatsApp (contada da última mensagem do cliente). Vale para o que a IA
+   marca e para o que a equipe marca. Remarcou: o lembrete acompanha; cancelou: o envio confere e não sai. */
+export async function agendarLembreteTestDrive(testDriveId: number) {
+  const F = schema.followUps;
+  const [td] = await db.select().from(schema.testDrives).where(eq(schema.testDrives.id, testDriveId)).limit(1);
+  if (!td) return null;
+  await db
+    .update(F)
+    .set({ status: "cancelado", concluidoEm: new Date() })
+    .where(and(eq(F.status, "pendente"), eq(F.tipo, "lembrete_visita"), sql`(${F.contexto}->>'testDriveId')::int = ${td.id}`));
+  if (!td.conversaId || !STATUS_ABERTOS.includes(td.status as StatusTestDrive)) return null;
+  const [ultima] = await db
+    .select({ em: schema.mensagens.criadoEm })
+    .from(schema.mensagens)
+    .where(and(eq(schema.mensagens.conversaId, td.conversaId), eq(schema.mensagens.direcao, "incoming")))
+    .orderBy(desc(schema.mensagens.id))
+    .limit(1);
+  if (!ultima) return null;
+  const agora = new Date();
+  const plano = planoRetirada(td.agendadoPara, agora, new Date(ultima.em));
+  if (!plano.lembreteEm) return null;
+  const [cli] = td.clienteId ? await db.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, td.clienteId)).limit(1) : [];
+  const nome = (cli?.nome ?? td.nomeContato ?? "").trim().split(/\s+/)[0] || null;
+  const texto = textoLembreteVisita({ nome: nome && /\p{L}{2}/u.test(nome) ? nome : null, descricao: td.veiculoDescricao, quando: td.agendadoPara });
+  await db.insert(F).values({
+    conversaId: td.conversaId,
+    clienteId: td.clienteId,
+    negocioId: td.negocioId,
+    usuarioId: td.responsavelId,
+    agendadoPara: plano.lembreteEm,
+    tipo: "lembrete_visita",
+    motivo: "Lembrete do test drive",
+    origem: "ia",
+    notas: `Lembrete automático do test drive de ${dataHora(td.agendadoPara)}. Cancele se não quiser que saia.`,
+    contexto: { texto, testDriveId: td.id, quando: td.agendadoPara.toISOString() },
+  });
+  return plano.lembreteEm;
 }
 
 export async function reagendarTestDrive(u: Quem | null, testDriveId: number, quando: Date) {
@@ -218,6 +261,9 @@ export async function reagendarTestDrive(u: Quem | null, testDriveId: number, qu
       tx,
     );
     return { id: td.id, conversaId: td.conversaId, quando };
+  }).then(async (r) => {
+    await agendarLembreteTestDrive(r.id).catch((e) => console.error("[lembrete test drive]", e));
+    return r;
   });
 }
 

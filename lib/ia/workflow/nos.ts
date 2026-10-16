@@ -505,7 +505,9 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
   }
   /* só promete a moto esperando se tem unidade Disponível (Simulador de 14/10/2026: X GÊMEOS sem estoque) */
   const moto = p.modelo && (await temUnidadeDisponivel(p.modelo, !!c.conversa?.demo)) ? ` ${artigo(p.modelo).toUpperCase()} *${p.modelo}* vai estar te esperando pro test drive 🛵` : "";
-  return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}`, quando };
+  /* o lembrete do dia sai sozinho (servicos/test-drive.ts): só promete quando ele vai sair (dono, 15/10/2026) */
+  const lembrete = planoRetirada(quando, new Date(), new Date()).lembreteEm ? " No dia eu te mando um lembrete por aqui." : "";
+  return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}${lembrete}`, quando };
 }
 
 /* Dados do pedido no CRM (pedido do dono, 03/10/2026: "o objetivo da IA é pegar essas informações e
