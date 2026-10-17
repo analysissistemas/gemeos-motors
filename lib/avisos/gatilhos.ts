@@ -3,6 +3,8 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { sinalDeCompra } from "@/lib/followup-prioridade";
 import { quandoPorExtenso } from "@/lib/ia/agenda";
+import { lojaAberta } from "@/lib/ia/horario";
+import { lerHorario } from "@/lib/ia/prompt";
 import { enviarAviso, quemEDaConversa } from "./push";
 import { avisoDaAnotacao, avisoLembreteNaoSaiu, avisoProntoParaFechar, avisoResumoDoDia, avisoTarefa, avisoVisitaMarcada } from "./regras";
 
@@ -80,8 +82,10 @@ const diaLocal = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString(
 
 /** Chamado pelo vigia a cada minuto: tarefa da retirada que chegou na hora e o resumo das 8h. */
 export async function avisosAgendados(agora = new Date()) {
-  /* tarefa da retirada (separar a moto) na hora dela, uma vez */
-  const vencidas = await db
+  /* tarefa da retirada/entrega na hora dela, uma vez. Antes da loja abrir (entrega às 10h vence às 7h) espera a
+     abertura: o aviso não urgente seria descartado e não tentaria de novo */
+  const aberta = lojaAberta(await lerHorario(), agora);
+  const vencidas = !aberta ? [] : await db
     .select({ id: F.id, tipo: F.tipo, notas: F.notas, conversaId: F.conversaId, contexto: F.contexto })
     .from(F)
     .leftJoin(schema.conversas, eq(schema.conversas.id, F.conversaId))
