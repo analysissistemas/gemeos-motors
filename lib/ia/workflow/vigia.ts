@@ -82,14 +82,15 @@ async function retomarInterrompidas(agora: Date) {
 }
 
 /* Simulação ou entrega que a IA disse que o vendedor ia mandar, e ninguém mandou: aviso na conversa (uma vez) e
-   prioridade alta. Só com a loja aberta; a tarefa feita de madrugada é cobrada quando a loja abre. */
+   prioridade alta. Só com a loja aberta; a tarefa feita de madrugada é cobrada quando a loja abre. Entrega em Goiana
+   com dia e hora não entra: a IA já confirmou o dia ao cliente, a tarefa é só preparar (17/10/2026). */
 async function cobrarTarefasDaLoja(agora: Date, aberta: boolean) {
   if (!aberta) return 0;
   const F = schema.followUps;
   const tarefas = await db
     .select({ id: F.id, conversaId: F.conversaId, criadoEm: F.criadoEm, motivo: F.motivo, tipo: F.tipo, contexto: F.contexto })
     .from(F)
-    .where(and(eq(F.status, "pendente"), eq(F.origem, "ia"), inArray(F.tipo, ["simulacao", "entrega"]), gt(F.criadoEm, new Date(agora.getTime() - 3 * 24 * 3600_000)), sql`coalesce(${F.contexto}->>'cobrada', 'false') <> 'true'`))
+    .where(and(eq(F.status, "pendente"), eq(F.origem, "ia"), inArray(F.tipo, ["simulacao", "entrega"]), gt(F.criadoEm, new Date(agora.getTime() - 3 * 24 * 3600_000)), sql`coalesce(${F.contexto}->>'cobrada', 'false') <> 'true'`, sql`not (${F.contexto} ? 'entregaEm' and coalesce(${F.motivo}, '') = 'Preparar a entrega')`))
     .limit(30);
   let cobradas = 0;
   for (const t of tarefas) {
