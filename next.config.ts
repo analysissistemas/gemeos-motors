@@ -9,7 +9,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["@react-pdf/renderer"],
   /* anexos do chat (até 2 MB) viajam codificados, ~35% maiores que o arquivo */
-  experimental: { authInterrupts: true, serverActions: { bodySizeLimit: "4mb" } },
+  /* vídeo da moto no catálogo: o do celular passa fácil de 10 MB (o padrão do proxy); o servidor compacta */
+  experimental: { authInterrupts: true, serverActions: { bodySizeLimit: "4mb" }, proxyClientMaxBodySize: "100mb" },
   async redirects() {
     return [
       /* a loja abre no endereço limpo (gemeosmotors.com.br); /vitrine antigo cai nele */

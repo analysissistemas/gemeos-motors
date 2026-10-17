@@ -4,13 +4,33 @@ import { revalidatePath } from "next/cache";
 import { db, schema } from "@/lib/db";
 import { autorizar, ErroAcesso } from "@/lib/auth/dal";
 import { registrarLog } from "@/lib/logs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { guardarMidia } from "@/lib/mensageria/midia";
+import { compactarVideoArquivo } from "@/lib/mensageria/compactar";
 
 /* Vídeo da moto no catálogo (Estoque → Catálogo → editar modelo). A IA manda esse vídeo no WhatsApp
    junto com a ficha da moto. Rota própria (e não ação de servidor) porque a ação aceita só 4 MB.
-   Limite de 10 MB: é o que o proxy guarda do corpo do pedido, e o WhatsApp aceita até 16 MB.
-   Fica no volume de mídia (/data), como os vídeos do chat, e é compactado em segundo plano. */
-const VIDEO_LIMITE_BYTES = 10 * 1024 * 1024;
+   Aceita até 100 MB (proxyClientMaxBodySize no next.config): vídeo do celular passa fácil de 10 MB. Acima de 10 MB
+   compacta na hora (720p), porque o WhatsApp aceita até 16 MB (dono, 17/10/2026: "todo vídeo que eu coloco fala que
+   passa de 10 MB"). Fica no volume de mídia (/data), como os vídeos do chat. */
+const VIDEO_LIMITE_BYTES = 100 * 1024 * 1024;
+const VIDEO_DIRETO_BYTES = 10 * 1024 * 1024;
+const WHATSAPP_LIMITE_BYTES = 16 * 1024 * 1024;
+
+async function compactarNaHora(bytes: Uint8Array): Promise<Uint8Array> {
+  const pasta = await mkdtemp(join(tmpdir(), "video-moto-"));
+  try {
+    const entrada = join(pasta, "original.mp4");
+    const saida = join(pasta, "leve.mp4");
+    await writeFile(entrada, bytes);
+    await compactarVideoArquivo(entrada, saida, 4 * 60_000);
+    return new Uint8Array(await readFile(saida));
+  } finally {
+    await rm(pasta, { recursive: true, force: true });
+  }
+}
 
 const ehMp4 = (b: Uint8Array) => b.length > 12 && String.fromCharCode(...b.subarray(4, 8)) === "ftyp";
 
@@ -31,9 +51,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const dados = await req.formData().catch(() => null);
     const arquivo = dados?.get("video");
     if (!(arquivo instanceof File) || arquivo.size === 0) return erro("Escolha um vídeo.", 400);
-    if (arquivo.size > VIDEO_LIMITE_BYTES) return erro("O vídeo passa de 10 MB. Mande um mais curto ou mais leve.", 413);
-    const bytes = new Uint8Array(await arquivo.arrayBuffer());
+    if (arquivo.size > VIDEO_LIMITE_BYTES) return erro("O vídeo passa de 100 MB. Mande um mais curto.", 413);
+    let bytes: Uint8Array = new Uint8Array(await arquivo.arrayBuffer());
     if (!ehMp4(bytes)) return erro("Use um vídeo MP4 (o formato do celular).", 400);
+    if (bytes.length > VIDEO_DIRETO_BYTES) bytes = await compactarNaHora(bytes);
+    if (bytes.length > WHATSAPP_LIMITE_BYTES) return erro("Mesmo compactado, o vídeo ficou grande demais para o WhatsApp (16 MB). Mande um mais curto, de até 1 minuto.", 413);
     const midia = await guardarMidia(bytes, `video-${m.nome}.mp4`, "video/mp4");
     await db.transaction(async (tx) => {
       await tx.update(schema.modelos).set({ videoUrl: midia.url }).where(eq(schema.modelos.id, m.id));

@@ -279,11 +279,12 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     }
   }
 
-  /* vídeo vai por rota própria (até 10 MB); a ação de servidor só aceita 4 MB */
+  /* vídeo vai por rota própria (até 100 MB; acima de 10 MB o servidor compacta); a ação de servidor só aceita 4 MB */
   async function trocarVideo(arquivo: File | null) {
     if (!item) return;
     if (arquivo && arquivo.type !== "video/mp4") return void toast.error("Use um vídeo MP4.");
-    if (arquivo && arquivo.size > 10 * 1024 * 1024) return void toast.error("O vídeo passa de 10 MB. Mande um mais curto ou mais leve.");
+    if (arquivo && arquivo.size > 100 * 1024 * 1024) return void toast.error("O vídeo passa de 100 MB. Mande um mais curto.");
+    if (arquivo && arquivo.size > 10 * 1024 * 1024) toast.info("Vídeo grande: o sistema está deixando ele mais leve para o WhatsApp. Pode levar até 1 minuto.");
     setEnviandoVideo(true);
     try {
       let r: Response;
@@ -390,7 +391,7 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
           </span>
           <div className="min-w-0 flex-1 text-[13px]">
             <p className="font-semibold">Vídeo da moto</p>
-            <p className="text-ink-3">{item ? "A IA manda no WhatsApp junto com a ficha, quando o cliente fala desta moto. MP4 até 10 MB." : "Salve o modelo primeiro; depois dá para pôr o vídeo."}</p>
+            <p className="text-ink-3">{item ? "A IA manda no WhatsApp junto com a ficha, quando o cliente fala desta moto. MP4 do celular (o sistema deixa leve para o WhatsApp)." : "Salve o modelo primeiro; depois dá para pôr o vídeo."}</p>
           </div>
           {item && (
             <div className="flex gap-1">
