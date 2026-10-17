@@ -3,7 +3,8 @@ import { autonomiaMinima, comGasolinaDaRegiao, lerParametrosEconomia, textoEcono
 import { gasolinaPara, type GasolinaDoCliente } from "./gasolina";
 import { and, asc, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { TIPOS_ELETRICOS } from "@/lib/dominio";
+import { TIPOS_VENDA_IA } from "@/lib/dominio";
+import { definirMotosACombustao } from "@/lib/ia/estoque-tipos";
 import { compilarPrompt, SECOES_PROMPT } from "./secoes";
 import { normalizarHorario, textoHorario, type HorarioLoja } from "./horario";
 
@@ -101,6 +102,13 @@ export function apelidosDoModelo(nome: string) {
   return Array.from(new Set([nome.trim(), ...pedacos]));
 }
 
+/** Preenche a lista das motos a combustão (para os textos fixos fora da conversa, como o follow-up). */
+export async function carregarMotosACombustao() {
+  const m = schema.modelos;
+  const linhas = await db.select({ nome: m.nome, marca: m.marca }).from(m).where(and(eq(m.ativo, true), eq(m.tipo, "moto_combustao")));
+  definirMotosACombustao(linhas.flatMap((l) => [l.nome, [l.marca, l.nome].filter(Boolean).join(" ")]));
+}
+
 /* Catálogo oficial (Estoque → Catálogo, o mesmo do site) + o que há no estoque agora. Regras do dono:
    só moto ELÉTRICA (nunca combustão nem carro) e acessório (27/09/2026); e a IA só OFERECE moto com
    unidade disponível no estoque (02/10/2026: "nunca ofereça uma que não tem no estoque"). Moto sem
@@ -114,24 +122,25 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     db
       .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade })
       .from(m)
-      .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_ELETRICOS, "acessorio"])))
+      .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA, "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
     db.select({ modeloId: schema.modeloCores.modeloId, nome: schema.modeloCores.nome }).from(schema.modeloCores).where(eq(schema.modeloCores.ativo, true)).orderBy(asc(schema.modeloCores.ordem)),
     db
       .select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor })
       .from(v)
-      .where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
+      .where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_VENDA_IA]), opcoes.incluirTeste ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
     /* encomenda a caminho (05/10/2026: "a M6 chega dia 9/10, a linha esgotou e o dono fez o pedido"): unidade
        Reservado com data de entrada no futuro. A IA diz quando chega e anota o interesse, sem vender como disponível */
     db
       .select({ modeloId: v.modeloId, modelo: v.modelo, entradaEm: v.entradaEm })
       .from(v)
-      .where(and(eq(v.status, "reservado"), inArray(v.tipo, [...TIPOS_ELETRICOS]), sql`${v.entradaEm} > current_date`, opcoes.incluirTeste ? undefined : eq(v.teste, false))),
+      .where(and(eq(v.status, "reservado"), inArray(v.tipo, [...TIPOS_VENDA_IA]), sql`${v.entradaEm} > current_date`, opcoes.incluirTeste ? undefined : eq(v.teste, false))),
   ]);
   /* conta de economia × gasolina com os números da base (preço da gasolina, km/l, custo da carga) */
   const baseEconomia = lerParametrosEconomia(base.map((b) => b.conteudo));
   const economia = baseEconomia && comGasolinaDaRegiao(baseEconomia, opcoes.gasolina !== undefined ? opcoes.gasolina : await gasolinaPara().catch(() => null));
+  definirMotosACombustao(linhas.filter((l) => l.tipo === "moto_combustao").flatMap((l) => [l.nome, [l.marca, l.nome].filter(Boolean).join(" ")]));
   if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[], semEstoque: [] as string[][] };
   const brl = (x: number | null) => (x ? reais(Number(x)) : "preço sob consulta");
   const comEstoque: string[] = [];
@@ -162,18 +171,19 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     const coresEstoque = Array.from(new Set(minhas.map((u) => u.cor?.trim()).filter((c): c is string => !!c)));
     const coresDoModelo = coresEstoque.length ? coresEstoque : cores.filter((c) => c.modeloId === l.id).map((c) => c.nome);
     const rotuloCores = coresEstoque.length ? "cores das unidades (SÓ estas; outra cor, a equipe confirma)" : "cores";
-    const autonomia = autonomiaMinima(f.autonomia);
+    const combustao = l.tipo === "moto_combustao";
+    const autonomia = combustao ? null : autonomiaMinima(f.autonomia);
     const conta = economia && autonomia ? ` | ${textoEconomia(autonomia, economia, opcoes.kmSemana)}` : "";
     const detalhes = l.descricao?.trim() ? ` | detalhes: ${l.descricao.trim()}` : "";
-    itens.push(`• ${nome}${l.tipo === "patinete" ? " (patinete elétrico)" : ""}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
+    itens.push(`• ${nome}${l.tipo === "patinete" ? " (patinete elétrico)" : combustao ? " (moto a combustão seminova: precisa de CNH, placa e IPVA)" : ""}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
   }
   const vindo = semEstoque.filter((x) => x.chega);
   const avisoSem = semEstoque.length
     ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.${vindo.length ? `\nENCOMENDA A CAMINHO (a loja já fez o pedido): ${vindo.map((x) => `${x.nome} chega em ${x.chega}`).join("; ")}. Se o cliente perguntar por esse modelo, diga que no momento não tem disponível, que a próxima remessa chega em ${vindo.length === 1 ? vindo[0].chega : "a data acima"} e ofereça anotar o interesse para a equipe avisar assim que chegar. Não prometa reserva nem preço.` : ""}`
     : "";
-  const nenhuma = comEstoque.length ? "" : "\nNENHUMA moto elétrica com unidade disponível agora: não ofereça modelo; diga que a equipe confirma o que chegou e já te retorna.";
+  const nenhuma = comEstoque.length ? "" : "\nNENHUMA moto com unidade disponível agora: não ofereça modelo; diga que a equipe confirma o que chegou e já te retorna.";
   const texto = `# CATÁLOGO DA LOJA E ESTOQUE AGORA
-Só motos e patinetes ELÉTRICOS e acessórios. NUNCA ofereça moto a combustão nem carro, nem se o cliente perguntar (diga que a loja trabalha com mobilidade elétrica). Item marcado "(patinete elétrico)" é patinete: chame de patinete, nunca de moto. Afirme SÓ o que está escrito na ficha e nos detalhes DAQUELE modelo: autonomia, garantia, quantas pessoas leva (garupa), carga, velocidade. Não deduza comparando modelos (se a T5 diz "2 anos de garantia na bateria" e a T3 não diz nada, a T3 NÃO "não tem": diga que a equipe confirma). Sem o dado, diga com naturalidade que confirma com a equipe. Não diga "mais popular", "mais vendida" nem "campeã de vendas" (não há esse dado). Triciclo (três rodas): só é triciclo o modelo cuja descrição diz "triciclo" ou "três rodas"; nenhum outro é triciclo (o nome "T3" NÃO quer dizer três rodas). Sem modelo assim no catálogo, diga que no momento não tem triciclo.
+O foco da loja são motos e patinetes ELÉTRICOS e acessórios. A loja também vende as motos a combustão seminovas listadas abaixo (marcadas "moto a combustão seminova"): são as que entram na troca e a loja revende. Só essas: nunca outra moto a combustão nem carro. Moto a combustão precisa de CNH, placa e IPVA e gasta gasolina: NUNCA diga que ela é sem CNH, sem IPVA, sem emplacamento ou que economiza gasolina, e não faça conta de economia com ela. Ofereça moto a combustão só quando o cliente pedir moto a gasolina ou citar o modelo; para quem não disse, apresente as elétricas. A loja ACEITA TROCA (venda facilitada): moto, carro, celular e outros produtos podem entrar como parte do pagamento, e a equipe avalia. Nunca diga que a loja não pega moto a combustão (ou qualquer item) na troca, nem dê valor para o que o cliente quer dar. Isto vale acima de qualquer regra anterior que diga para nunca oferecer moto a combustão ou que a loja trabalha só com elétrica. Item marcado "(patinete elétrico)" é patinete: chame de patinete, nunca de moto. Afirme SÓ o que está escrito na ficha e nos detalhes DAQUELE modelo: autonomia, garantia, quantas pessoas leva (garupa), carga, velocidade. Não deduza comparando modelos (se a T5 diz "2 anos de garantia na bateria" e a T3 não diz nada, a T3 NÃO "não tem": diga que a equipe confirma). Sem o dado, diga com naturalidade que confirma com a equipe. Não diga "mais popular", "mais vendida" nem "campeã de vendas" (não há esse dado). Triciclo (três rodas): só é triciclo o modelo cuja descrição diz "triciclo" ou "três rodas"; nenhum outro é triciclo (o nome "T3" NÃO quer dizer três rodas). Sem modelo assim no catálogo, diga que no momento não tem triciclo.
 Só ofereça as motos e patinetes listados abaixo (todas têm unidade no estoque): nome, preço de tabela, ficha e as cores dela. Nunca invente cor, versão nem modelo.${nenhuma}${avisoSem}
 ${economia ? `ECONOMIA × GASOLINA: a conta de cada modelo já está pronta ("economia"), com gasolina a ${`R$ ${economia.gasolina.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} o litro${economia.origemGasolina ? ` (${economia.origemGasolina}, pesquisa semanal da ANP; diga isso ao cliente)` : ""} e moto a gasolina fazendo ${economia.kmPorLitro} km por litro. Use SÓ esses valores, sem refazer conta: ${opcoes.kmSemana ? `o cliente roda uns ${opcoes.kmSemana} km por semana, use a CONTA DO CLIENTE (semana e mês)` : "o cliente ainda não disse quanto roda: pergunte, ou use o cenário de km por semana mais perto do que ele contou"}.
 ` : ""}${itens.join("\n")}`;

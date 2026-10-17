@@ -9,7 +9,7 @@
 
    Puro (sem banco), para os testes rodarem direto no Node. Quem envia é lib/ia/workflow/aquecimento.ts, pelo único
    caminho autorizado (enviarRespostaDaIa: chave geral, permissão de envio e validador). */
-import { artigo } from "./estoque-tipos.ts";
+import { artigo, ehACombustao } from "./estoque-tipos.ts";
 import { lojaAberta, type HorarioLoja } from "./horario.ts";
 
 export const ETAPAS_AQUECIMENTO = [
@@ -71,6 +71,7 @@ export function mensagemPadraoAquecimento(p: { etapa: number; nome: string | nul
   const N = (t: string) => (p.nome ? `${p.nome}, ${t}` : `${t[0].toUpperCase()}${t.slice(1)}`);
   const m = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : null;
   if (p.etapa === 1) return m ? N(`${PERGUNTA_DO_DONO.replace("?", ` d${artigo(p.modelo)} *${p.modelo}*?`)} 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
+  if (p.etapa === 2 && ehACombustao(p.modelo)) return N(`${m} ainda está aqui, com a documentação em dia e pronta pra rodar. Quer que eu te explique como fica pra você? 😊`);
   if (p.etapa === 2)
     return m
       ? N(`lembrando que ${m} é elétric${artigo(p.modelo)}: você carrega na tomada de casa e esquece a gasolina. Quer que eu te explique como fica pra você? 😊`)

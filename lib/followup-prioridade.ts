@@ -17,6 +17,7 @@ const ETAPA: Record<string, { pontos: number; texto: string }> = {
 };
 const TIPO: Record<string, { pontos: number; texto: string }> = {
   retirada: { pontos: 40, texto: "Vem retirar a moto" },
+  avaliacao: { pontos: 30, texto: "Quer dar algo na troca" },
   revisar_ia: { pontos: 20, texto: "Reclamou do atendimento" },
   retorno_cliente: { pontos: 15, texto: "Fez uma pergunta sem resposta" },
   simulacao: { pontos: 15, texto: "Pediu simulação" },

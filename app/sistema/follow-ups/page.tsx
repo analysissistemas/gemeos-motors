@@ -26,6 +26,7 @@ export const metadata: Metadata = { title: "Follow-ups" };
 const TIPOS: Record<string, string> = {
   retorno_cliente: "Responder cliente",
   retirada: "Retirada na loja",
+  avaliacao: "Avaliar na troca",
   simulacao: "Simulação",
   entrega: "Entrega",
   revisar_ia: "Revisar IA",

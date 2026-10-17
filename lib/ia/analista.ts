@@ -79,7 +79,7 @@ Regras obrigatórias:
 - Dados pessoais aparecem como [cpf], [telefone], [endereço]: isso é normal, não é erro.
 
 Como preencher:
-- assunto: "nao_cliente" para operadora, banco, fornecedor, agência ou robô oferecendo serviço. Nesse caso: nota null, resultado "nao_e_venda" e listas vazias.
+- assunto: "nao_cliente" para operadora, banco, fornecedor, agência ou robô oferecendo serviço. Nesse caso: nota null, resultado "nao_e_venda" e listas vazias. Quem oferece moto, carro, celular ou outro produto na troca, ou quer vender a moto dele para a loja, É cliente: a loja faz venda facilitada com troca e compra moto (assunto "compra").
 - resultado: "comprou" só se a conversa ou o negócio mostrar a venda fechada; "perdeu" se o cliente desistiu ou o negócio foi perdido; "nao_e_venda" para assistência, garantia e não-cliente.
 - objecoes: só o que o CLIENTE disse que trava a compra ("tá caro", "a parcela ficou alta", "é longe", "vou ver com minha esposa", "vou pensar").
 - concorrentes: outra loja, site, marketplace ou preço de fora que o cliente citou.

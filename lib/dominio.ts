@@ -106,6 +106,9 @@ export const TIPOS_VEICULO = {
 export type TipoVeiculo = keyof typeof TIPOS_VEICULO;
 /** Os tipos da linha elétrica que a IA oferece e o site mostra (sem CNH, sem emplacamento, sem IPVA). */
 export const TIPOS_ELETRICOS = ["moto_eletrica", "patinete"] as const;
+/** O que a IA vende no WhatsApp: a linha elétrica e as motos a combustão seminovas, que entram na troca e a loja
+ *  revende (dono, 17/10/2026). Carro continua fora. */
+export const TIPOS_VENDA_IA = [...TIPOS_ELETRICOS, "moto_combustao"] as const;
 /* "triciclo_eletrico" saiu em 26/09/2026 (virou moto elétrica); segue aceito aqui por segurança */
 export const ehEletrico = (t: string) => t === "moto_eletrica" || t === "patinete" || t === "triciclo_eletrico";
 

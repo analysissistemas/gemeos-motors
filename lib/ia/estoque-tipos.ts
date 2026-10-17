@@ -63,4 +63,12 @@ export function decidirEstoque(linhas: ItemEstoque[], termo: string): ResultadoE
 
 /** Artigo do produto pelo nome, para as frases prontas: "o Patinete 350W", "a T1" (moto). O tipo não chega até
  *  essas frases, então vale o nome (patinete cadastrado com "Patinete" no nome, 04/10/2026). */
+/* Motos a combustão do catálogo (seminovas que entram na troca e a loja revende; dono, 17/10/2026). Os textos de
+   benefício da elétrica (esquece a gasolina, sem IPVA nem emplacamento) não valem para elas. Quem lê o catálogo do
+   banco preenche (catalogoParaIa / carregarMotosACombustao). */
+let motosACombustao = new Set<string>();
+export function definirMotosACombustao(nomes: string[]) {
+  motosACombustao = new Set(nomes.map((n) => n.trim().toLowerCase()).filter(Boolean));
+}
+export const ehACombustao = (nome: string | null | undefined) => !!nome && motosACombustao.has(nome.trim().toLowerCase());
 export const artigo = (nome: string | null | undefined) => (/^\s*patinete/iu.test(nome ?? "") ? "o" : "a");

@@ -9,6 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
+import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
@@ -61,7 +62,7 @@ import type { ImplNo } from "./motor";
 import { corNoTexto, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
-import { ETAPAS_ABERTAS, TIPOS_ELETRICOS } from "@/lib/dominio";
+import { ETAPAS_ABERTAS, TIPOS_VENDA_IA } from "@/lib/dominio";
 
 /* fora do horário ninguém assume agora: a IA avisa sem prometer atendimento imediato */
 /* resposta barrada no meio da conversa, com a loja fechada: honesta, sem se apresentar de novo */
@@ -139,6 +140,8 @@ export type CtxWorkflow = {
   recado?: boolean;
   /** quem escreve não é cliente (oferta de serviço, robô) ou a conversa entrou em loop: a IA para e passa para a equipe */
   naoCliente?: NaoCliente;
+  /** venda com troca ou compra do que o cliente tem: a IA pediu os dados e a conversa vai para um vendedor a qualquer hora */
+  avaliacao?: PedidoAvaliacao;
 };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -352,6 +355,29 @@ async function modeloMaisEmConta(c: CtxWorkflow, modelo: string, preco: number) 
     .orderBy(desc(m.precoTabela))
     .limit(1);
   return mais?.preco ? { nome: mais.nome, preco: Number(mais.preco) } : null;
+}
+/* Venda facilitada com troca / compra (dono, 17/10/2026): tarefa para o vendedor avaliar o que o cliente quer dar
+   na troca (ou vender) e passar o valor. Uma por conversa enquanto estiver aberta. */
+async function tarefaAvaliacao(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
+  const a = c.avaliacao!;
+  const cv = await carregarConversa(c.conversaId);
+  const F = schema.followUps;
+  const [aberta] = await db.select({ id: F.id }).from(F).where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), eq(F.tipo, "avaliacao"))).limit(1);
+  if (aberta) return;
+  const item = ROTULO_ITEM[a.item];
+  await db.insert(F).values({
+    conversaId: c.conversaId,
+    clienteId,
+    negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: new Date(),
+    tipo: "avaliacao",
+    motivo: a.tipo === "troca" ? `Avaliar ${item} na troca` : `Avaliar ${item} para compra`,
+    notas: c.motivoTransferencia ?? null,
+    origem: "ia",
+    modeloId: null,
+    contexto: { detectadoPor: "ia", avaliacao: a.tipo, item: a.item, modelo: c.modeloDaConversa ?? null },
+  });
 }
 async function criarTarefaSimulacao(c: CtxWorkflow, sim: { parcelas: number | null; bandeira: string | null }, modelo: string | null) {
   const cv = await carregarConversa(c.conversaId);
@@ -797,8 +823,8 @@ async function itensDisponiveis(c: CtxWorkflow): Promise<ItemDisponivel[]> {
   const m = schema.modelos;
   const v = schema.veiculos;
   const [modelos, unidades] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor, valor: v.valorAnunciado }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor, valor: v.valorAnunciado }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_VENDA_IA]), c.conversa?.demo ? undefined : eq(v.teste, false))),
   ]);
   return modelos
     .map((x) => {
@@ -930,8 +956,8 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
   const m = schema.modelos;
   const v = schema.veiculos;
   const [modelos, unidades, base] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ id: m.id, nome: m.nome, preco: m.precoTabela, ficha: m.ficha }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_VENDA_IA]), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ conteudo: schema.iaConhecimento.conteudo }).from(schema.iaConhecimento).where(eq(schema.iaConhecimento.ativo, true)),
   ]);
   const pBase = lerParametrosEconomia(base.map((b) => b.conteudo));
@@ -983,8 +1009,8 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   const v = schema.veiculos;
   const k = schema.modeloCores;
   const [modelos, unidades, cores] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, fotoWhatsappUrl: m.fotoWhatsappUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_ELETRICOS]))),
-    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_ELETRICOS]), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ id: m.id, nome: m.nome, fotoUrl: m.fotoUrl, fotoWhatsappUrl: m.fotoWhatsappUrl, videoUrl: m.videoUrl }).from(m).where(and(eq(m.ativo, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), inArray(v.tipo, [...TIPOS_VENDA_IA]), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ modeloId: k.modeloId, nome: k.nome, fotoUrl: k.fotoUrl }).from(k),
   ]);
   return modelos.flatMap((x) => {
@@ -1316,6 +1342,17 @@ ${intencao === "compra" ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
     /* foto ou áudio do cliente, de qualquer jeito que venha (só, com legenda, foto e depois "tem essa?"): a IA não tenta
        reconhecer nem sugere moto (dono, 09 e 10/10/2026: oferecia moto nada a ver, e às vezes a foto é de modelo que a
        loja nem trabalha). Texto do sistema com o catálogo; escreveu o nome de um modelo, a IA atende sobre ele. */
+    /* venda facilitada com troca ou compra do que o cliente tem (dono, 17/10/2026: "a IA está dizendo que não pega moto
+       como entrada... pede pra pessoa enviar os dados para avaliação e transfere já para um humano"). Texto do sistema
+       com os dados daquele item (moto, carro, celular, outro), nunca valor; vai para um vendedor na hora. */
+    const avaliacao = jaPediuAvaliacao(c.memoria.historico ?? "") ? null : pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
+    if (avaliacao) {
+      const texto = textoPedidoAvaliacao({ ...avaliacao, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
+      const relato = semAberturaDoSite(c.textoBuffer).replace(/\s+/g, " ").trim().slice(0, 300);
+      const motivo = motivoAvaliacao({ ...avaliacao, modeloDeInteresse: modeloDaConversa, relato });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao: avaliacao.tipo === "troca" ? ("compra" as const) : null, modeloDaConversa, ultimaDaLoja, avaliacao, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, avaliacao } };
+    }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
     if (r.ctx.texto && paraMidia) {
       /* catálogo + a lista do que tem disponível, montada pelo estoque (usuário, 12/10/2026) */
@@ -1504,6 +1541,13 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       await mensagemSistema(db, c.conversaId, `IA parada nesta conversa. ${MOTIVO_NAO_CLIENTE[c.naoCliente]}. Se for um cliente de verdade, volte a chave para IA. Última mensagem: "${c.textoBuffer.slice(0, 160)}"`, { triagem: true });
       return { ctx: { pipe }, saida: { transferida: true, status: "HUMANO", motivo: c.motivoTransferencia, naoCliente: c.naoCliente, avisoAoCliente: pipe.texto } };
     }
+    /* avaliação de troca/compra: vai para um vendedor a qualquer hora (dono, 17/10/2026: "transfere já para um humano");
+       de noite a IA não segue negociando o que só o vendedor avalia. O cliente já sabe que a resposta vem quando abrir. */
+    if (c.avaliacao) {
+      await db.update(schema.conversas).set({ modo: "humano", prioridade: "alta", atualizadoEm: new Date() }).where(eq(schema.conversas.id, c.conversaId));
+      await mensagemSistema(db, c.conversaId, `Transferido para atendimento humano pela IA. Motivo: ${semPontoFinal(c.motivoTransferencia ?? "avaliar o que o cliente quer dar na troca")}`, { triagem: true });
+      return { ctx: { pipe, aguardaEquipe: true }, saida: { transferida: true, status: "HUMANO", motivo: c.motivoTransferencia, avaliacao: c.avaliacao, avisoAoCliente: pipe.texto } };
+    }
     /* regra do dono (27/09/2026): fora do horário NUNCA passa para humano. A IA continua atendendo,
        a conversa fica em prioridade alta e a equipe vê o aviso para assumir quando a loja abrir. */
     if (!lojaAberta(await lerHorario())) {
@@ -1559,6 +1603,8 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       pedido = await salvarDadosDoPedido(c, q.clienteId, q.negocioId).catch((e) => ({ erro: e instanceof Error ? e.message : String(e) }));
       /* parou de responder: a IA chama de novo em 1 h, 3 h e 23 h (follow-up de aquecimento) */
       await lembretesSemResposta(c, q.clienteId, q.negocioId).catch(() => null);
+      /* troca/compra: a tarefa do vendedor avaliar, já com o cliente e o negócio */
+      if (c.avaliacao) await tarefaAvaliacao(c, q.clienteId, q.negocioId).catch(() => null);
     } catch (e) {
       qualificacao = { erro: e instanceof Error ? e.message : String(e) };
     }

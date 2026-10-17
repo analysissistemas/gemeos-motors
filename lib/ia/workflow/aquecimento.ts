@@ -6,7 +6,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { gerarObjeto, transcrever } from "@/lib/ia/cliente";
 import { lerControle } from "@/lib/ia/controle";
 import { enviarRespostaDaIa } from "@/lib/ia/envio";
-import { lerHorario } from "@/lib/ia/prompt";
+import { carregarMotosACombustao, lerHorario } from "@/lib/ia/prompt";
 import { lojaAberta } from "@/lib/ia/horario";
 import { limparEmojis } from "@/lib/ia/validador";
 import {
@@ -125,6 +125,7 @@ async function escreverMensagem(conversaId: number, etapa: number, nome: string 
 
 export async function enviarAquecimentos(agora = new Date()) {
   const r = { enviados: 0, pulados: 0, erros: 0 };
+  await carregarMotosACombustao().catch(() => null);
   const vencidos = await db
     .select({ id: F.id, conversaId: F.conversaId, contexto: F.contexto, notas: F.notas })
     .from(F)

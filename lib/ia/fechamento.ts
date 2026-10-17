@@ -13,7 +13,7 @@
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
-import { artigo } from "./estoque-tipos.ts";
+import { artigo, ehACombustao } from "./estoque-tipos.ts";
 
 export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "negociar" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
@@ -242,6 +242,7 @@ No *dinheiro ou Pix* fica ${brl(p.aVista)}, sem nenhuma taxa 😉 ${persuasao(p.
  *  persuasão"): o benefício da elétrica e o fechamento assumido. Uma mensagem só, sem linha em branco (senão vira 3). */
 export function persuasao(modelo: string) {
   const a = artigo(modelo);
+  if (ehACombustao(modelo)) return `A *${modelo}* está com a documentação em dia e pronta pra rodar. Posso separar a sua?`;
   return `Com ${a} *${modelo}* você esquece a gasolina e não paga IPVA nem emplacamento. Posso separar ${a === "o" ? "o seu" : "a sua"}?`;
 }
 /** Simulação no débito (relatório do dono, 10/10/2026: o cliente paga a taxa do débito). */
@@ -274,7 +275,7 @@ export function textoTabelaCompleta(p: { nome: string | null; modelo: string; ba
   const linha = (l: { parcelas: number; parcela: number; total: number }) => `• ${l.parcelas}x de ${brl(l.parcela)}`;
   const tabela = p.linhas.map(linha).join("\n");
   const amex = p.bandeira === "American Express" && !p.amexConfirmado && p.linhas.length > 2 ? "\nNo American Express, acima de 12 vezes depende do cartão: se o seu permitir, me fala em quantas vezes que eu simulo 😉" : "";
-  return `${abre} d${artigo(p.modelo)} *${p.modelo}* no ${p.bandeira}${ent} (à vista ${brl(p.aVista)}):\n${tabela}${amex}\nNo *dinheiro ou Pix* fica ${brl(p.aVista)}, sem taxa 😉 Com ${artigo(p.modelo)} *${p.modelo}* você esquece a gasolina e não paga IPVA nem emplacamento. Qual dessas fica melhor pra você?`;
+  return `${abre} d${artigo(p.modelo)} *${p.modelo}* no ${p.bandeira}${ent} (à vista ${brl(p.aVista)}):\n${tabela}${amex}\nNo *dinheiro ou Pix* fica ${brl(p.aVista)}, sem taxa 😉${ehACombustao(p.modelo) ? "" : ` Com ${artigo(p.modelo)} *${p.modelo}* você esquece a gasolina e não paga IPVA nem emplacamento.`} Qual dessas fica melhor pra você?`;
 }
 /** O cliente perguntou o total depois da simulação: a conta sai da própria simulação enviada (parcelas × valor). */
 export function textoTotais(ultimaDaLoja: string): { texto: string; registro: string } | null {
@@ -314,6 +315,8 @@ export const parabens = (modelo: string | null) => {
   const a = artigo(modelo);
   const m = modelo ? `${a} *${modelo}*` : "essa moto";
   const M = modelo ? `${a.toUpperCase()} *${modelo}*` : "Essa moto";
+  if (ehACombustao(modelo))
+    return [`Parabéns pela escolha! 🎉 ${M} é uma ótima aquisição, com a documentação em dia e pronta pra rodar.`, `Que ótima escolha! 🙌 ${M} está pronta pra rodar, com a documentação em dia.`];
   return [
     `Parabéns pela escolha! 🎉 ${M} é uma ótima aquisição: você vai ter economia de verdade no dia a dia, sem gastar com gasolina, IPVA nem emplacamento.`,
     `Que ótima escolha! 🙌 Com ${m} você ganha economia e conforto no dia a dia, e nunca mais gasta com gasolina.`,
@@ -418,6 +421,13 @@ export function textoDadosRecebidos(p: { nome?: string | null; modelo?: string |
 /** O que a IA precisa saber antes de escrever, em cada momento. */
 export function instrucaoDeFechamento(momento: Momento | null, modelo: string | null): string {
   const m = modelo ? `${artigo(modelo)} ${modelo}` : "a moto";
+  /* moto a combustão (seminova da troca): nada de "sem gasolina, sem IPVA"; o ganho é o preço e a documentação em dia */
+  if (ehACombustao(modelo) && momento === "decidido")
+    return `# MOMENTO DA COMPRA
+O cliente decidiu comprar ${m} (moto a combustão seminova). Parabenize com entusiasmo e naturalidade (ótima aquisição, documentação em dia, pronta pra rodar) e pergunte só: "Você prefere retirar aqui na loja ou receber por entrega?". NÃO diga que é sem gasolina, sem IPVA ou sem emplacamento: ela é a combustão.`;
+  if (ehACombustao(modelo) && momento === "objecao_preco")
+    return `# MOMENTO DA COMPRA
+O cliente achou caro ${m} (moto a combustão seminova). NUNCA diga que não tem desconto nem prometa desconto: quem negocia é o vendedor, e o sistema passa para ele se o cliente insistir. Mostre o valor dela com o que está nos detalhes do catálogo (por exemplo, abaixo da tabela FIPE, revisada, documentação em dia). Pode lembrar que no Pix sai o melhor valor, que dá para parcelar no cartão e que a loja aceita troca. NÃO fale de economia de gasolina, IPVA ou emplacamento: ela é a combustão. Tom caloroso, sem discutir.`;
   switch (momento) {
     case "interesse":
       return `# MOMENTO DA COMPRA
@@ -540,7 +550,8 @@ export function textoRecusouSimulacao(p: { nome: string | null; modelo: string |
     ...(p.maisEmConta ? [`• Se preferir, tem ${artigo(p.maisEmConta.nome)} *${p.maisEmConta.nome}* por ${brl(p.maisEmConta.preco)}, também com pronta entrega`] : []),
   ];
   const eletrico = artigo(p.modelo) === "o" ? "o patinete elétrico" : "a moto elétrica";
-  return `Entendo${voc}! Vamos achar um jeito que caiba no seu bolso 😊\n${opcoes.join("\n")}\nE lembra: com ${eletrico} você esquece a gasolina, e essa economia já ajuda a pagar a parcela. Qual dessas fica melhor pra você?`;
+  const lembra = ehACombustao(p.modelo) ? "" : `E lembra: com ${eletrico} você esquece a gasolina, e essa economia já ajuda a pagar a parcela. `;
+  return `Entendo${voc}! Vamos achar um jeito que caiba no seu bolso 😊\n${opcoes.join("\n")}\n${lembra}Qual dessas fica melhor pra você?`;
 }
 
 /** O cliente já disse como quer receber ("quero a N2, vou buscar na loja"): a IA não pergunta "retirar ou entrega?"
