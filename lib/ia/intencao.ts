@@ -125,11 +125,14 @@ export const semAberturaDoSite = (texto: string) => texto.replace(RX_ABERTURA_SI
 
 /** Instrução de quem chegou pelo botão do site. Damarys (07/10/2026) mandou a frase do site + "Vcs tem disponível" +
  *  "Valor", e a IA só perguntou "como posso te ajudar?" duas vezes. Perguntou algo além da frase pronta: responde. */
+const BASE_DO_SITE = 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe.';
+/** Só o aviso de que o consultor é a IA (na qualificação, quem faz a pergunta é o sistema). */
+export const instrucaoDoSiteBase = (texto: string) => (veioDoSite(texto) ? `${BASE_DO_SITE}\n\n` : "");
 export function instrucaoDoSite(texto: string): string {
   if (!veioDoSite(texto)) return "";
   /* "Olá! [frase do site] Bom dia": cumprimento não é pergunta, saem todos (dono, 15/10/2026: o "Bom dia" virou a lista do estoque) */
   const resto = semAberturaDoSite(texto).replace(/^(?:(?:ol[áa]|oi+|opa|e\s+a[ií]|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+(?:bem|bom|certo|joia)|blz|beleza)[!.,?\s]*)+/iu, "").trim();
-  const base = 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe.';
+  const base = BASE_DO_SITE;
   if (!/\p{L}{2,}/u.test(resto)) return `${base} Atenda e pergunte o que ele procura.\n\n`;
   return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
 }

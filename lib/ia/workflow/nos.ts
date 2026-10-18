@@ -45,7 +45,7 @@ import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
-import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia, TEXTO_DA_RESPOSTA, type ItemDisponivel } from "@/lib/ia/foto-cliente";
@@ -1341,7 +1341,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${qualificacao ? instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${emDescoberta ? "" : instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -1546,6 +1546,9 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     let pipe = r.ctx;
     const segurou = !!momento && MOMENTOS_SEM_TRANSFERIR.includes(momento) && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !!pipe.texto && pipe.texto !== TEXTO_TRANSFERENCIA && !RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer));
     if (segurou) pipe = { ...pipe, humano: false, motivo: null };
+    /* na qualificação a IA não passa ao vendedor por conta própria (teste de 18/10/2026: o botão do site "quero falar com um
+       consultor" virou transferência); cliente que pede uma pessoa com todas as letras, passa */
+    if (qualificacao && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer))) pipe = { ...pipe, humano: false, motivo: null };
     if (qualificacao && !pipe.humano) return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, qualificacao, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, qualificacao: { pergunta: qualificacao.pergunta, abertura: qualificacao.abertura, necessidade } } };
     return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
   },
