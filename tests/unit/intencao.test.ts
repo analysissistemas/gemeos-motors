@@ -38,7 +38,11 @@ test("a IA é avisada antes de escrever", () => {
 test("frase comum de quem está comprando não vira assistência", () => {
   for (const t of ["sem problema, pode ser terça", "tem problema se eu pagar no cartão?", "qual a garantia da T1?", "vem com carregador? quanto custa a AG08?", "e a revisão da moto, como funciona?", "não tem problema nenhum"])
     assert.notEqual(intencaoDoTexto(t, NOMES), "assistencia", t);
-  for (const t of ["comprei uma moto aí, a garantia ainda vale?", "a garantia da minha moto", "estou com problema na T1"]) assert.equal(intencaoDoTexto(t, NOMES), "assistencia", t);
+  for (const t of ["comprei uma moto aí, a garantia ainda vale?", "a garantia da minha moto", "estou com problema na T1", "Comprei uma com vocês e não gostei do suporte"]) assert.equal(intencaoDoTexto(t, NOMES), "assistencia", t);
+  /* áudio do Jordão (17/10/2026): comprou em OUTRA loja e quer trocar por uma elétrica; "comprei" sozinho não é assistência */
+  const jordao = "[áudio] eu fiz a compra dessa moto, tá quitada. Inclusive eu comprei até na Chinerai mesmo, essa loja aí que fica aí vizinha de vocês. Aí eu queria ver se eu conseguia uma venda com troco, tá entendendo?";
+  assert.notEqual(intencaoDoTexto(jordao, NOMES), "assistencia");
+  assert.notEqual(intencaoDoTexto("comprei uma moto em outra loja e quero trocar numa elétrica", NOMES), "assistencia");
 });
 
 test("pós-venda que vai para uma pessoa: empatia, sem insistir, sem oferecer moto", async () => {
