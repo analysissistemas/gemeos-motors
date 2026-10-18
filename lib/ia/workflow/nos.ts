@@ -47,7 +47,7 @@ import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { registrarInteresse } from "@/lib/servicos/interesses";
 import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeMidia, planejarApresentacao, planejarIndicacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia, TEXTO_DA_RESPOSTA, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -1418,10 +1418,13 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
     if (passo?.acao === "indicar" && r.ctx.texto) {
-      const texto = textoIndicacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), n: necessidade, indicadas: indicarMotos(necessidade, motosQualif) });
+      const indicadas = indicarMotos(necessidade, motosQualif);
+      const texto = textoIndicacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), n: necessidade, indicadas });
       if (texto) {
         const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
-        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, qualificacao: { indicou: true, necessidade } } };
+        /* a foto e o vídeo de cada moto indicada vão logo depois do texto */
+        const midiaIndicacao = planejarIndicacao({ modelos: await motosComMidia(c), nomes: indicadas.map((x) => x.moto.nome), jaEnviadas: await midiasJaEnviadas(c.conversaId) });
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaIndicacao, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, qualificacao: { indicou: true, necessidade } } };
       }
     }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
@@ -1814,7 +1817,7 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       /* o cliente PEDIU (usuário, 12/10/2026: "pedi foto da M6 e ele não enviou"; tinha ido na véspera): vai de novo,
          a não ser que tenha ido há menos de 30 min. Sem pedido, a trava de 24 h continua */
       const bloqueadas = pedidoAgora ? await midiasJaEnviadas(c.conversaId, 0.5) : jaEnviadas;
-      const itens = midia.itens.filter((i) => !bloqueadas.includes(i.url)).slice(0, 3);
+      const itens = midia.itens.filter((i) => !bloqueadas.includes(i.url)).slice(0, midia.maxItens ?? 3);
       if (pedidoAgora) jaForam = midia.itens.filter((i) => bloqueadas.includes(i.url)).map((i) => i.legenda.replace(/\*/g, "").replace(/^Vídeo d[aeo]s?\s+/iu, "").split(" na cor")[0].trim());
       midia = itens.length ? { ...midia, itens } : { ...midia, itens: [] };
     }

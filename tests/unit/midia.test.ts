@@ -2,7 +2,7 @@
    nem WhatsApp. Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia } from "../../lib/ia/midia-tipos.ts";
+import { instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarIndicacao, planejarOpcoes, planejarPedido, tirarPromessaDeMidia, ultimaCitada, type ModeloComMidia } from "../../lib/ia/midia-tipos.ts";
 
 const AG08: ModeloComMidia = { id: 5, nome: "AG08", fotos: [{ url: "/api/vitrine/foto/modelo-5-a.webp", cor: "Cinza" }], videoUrl: "/api/midia/chat/video-AG08-x.mp4" };
 const TANK: ModeloComMidia = { id: 1, nome: "TANK AG11", fotos: [{ url: "/api/vitrine/foto/modelo-1-b.webp", cor: "Preta" }], videoUrl: null };
@@ -101,4 +101,14 @@ test("a frase do site não é cortada no ponto de 'gemeosmotors.com.br' (12/10/2
   const t = tirarPromessaDeMidia("Pela foto eu não consigo confirmar o modelo, mas aqui estão todos os que a gente tem, com foto e preço: gemeosmotors.com.br. Me diz qual te chamou atenção.");
   assert.doesNotMatch(t, /^com\.br/u);
   assert.doesNotMatch(t, /(?<![\p{L}])com\.br/u);
+});
+
+test("indicação da qualificação: foto e vídeo de cada moto indicada, até 4 arquivos, sem repetir", () => {
+  const p = planejarIndicacao({ modelos: [AG08, TANK, DF17], nomes: ["AG08", "TANK AG11"], jaEnviadas: [] })!;
+  assert.deepEqual(p.itens.map((i) => i.legenda), ["*AG08* na cor Cinza", "Vídeo da *AG08*", "*TANK AG11* na cor Preta"]);
+  assert.equal(p.maxItens, 4);
+  /* a foto da AG08 já foi: vai o resto */
+  assert.deepEqual(planejarIndicacao({ modelos: [AG08, TANK], nomes: ["AG08", "TANK AG11"], jaEnviadas: [AG08.fotos[0].url] })!.itens.map((i) => i.tipo), ["video", "foto"]);
+  /* sem arquivo nenhum (DF17): nada */
+  assert.equal(planejarIndicacao({ modelos: [DF17], nomes: ["DF17"], jaEnviadas: [] }), null);
 });
