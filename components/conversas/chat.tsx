@@ -310,6 +310,7 @@ type Meta = {
   longitude?: number;
   contatos?: { nome: string | null; telefones: { numero: string; rotulo: string | null }[] }[];
   avaliacaoIa?: AvaliacaoIa;
+  transcricao?: string;
 };
 type AvaliacaoIa = { nota: "legal" | "nao_legal"; motivo: string | null; por: string; em: string; chamadoId: number | null };
 
@@ -510,6 +511,8 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
               </a>
             )}
             {m.tipo === "audio" && <AudioMensagem url={m.midiaUrl} duracaoGuardada={typeof meta.duracao === "number" ? meta.duracao : null} />}
+            {/* o que o cliente falou no áudio (transcrição automática), para a equipe ler sem ouvir */}
+            {m.tipo === "audio" && meta.transcricao && <p className="mt-1 max-w-[320px] whitespace-pre-wrap text-[12.5px] italic text-ink-2">“{meta.transcricao}”</p>}
             {m.tipo === "contato" && <CartoesContato contatos={meta.contatos ?? []} aoConversarCom={acoes.aoConversarCom} />}
             {m.tipo === "localizacao" && (
               <a

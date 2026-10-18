@@ -1168,7 +1168,13 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     return { ramo: humano ? "humano" : "ia", saida: { status: humano ? "HUMANO" : "I.A", responsavel: c.conversa!.responsavelId, lojaAberta: aberta } };
   },
 
-  ia_off: () => ({ fim: "parou", detalhe: "Atendimento HUMANO: a IA não responde. A mensagem fica na memória.", saida: { respondeu: false } }),
+  ia_off: async (c) => {
+    /* áudio em atendimento HUMANO também é transcrito (dono, 18/10/2026: "a IA não está analisando o áudio"; o do Valmir,
+       em Humano, ficou sem texto): o vendedor lê no chat, e a IA e a Sonix têm o conteúdo quando voltarem */
+    let transcrito = false;
+    if (c.mensagem?.tipo === "audio" && c.config.transcreverAudio && !transcricaoDe(c.mensagem)) transcrito = !!(await analisarNo(c, "audio", true).catch(() => null));
+    return { fim: "parou", detalhe: `Atendimento HUMANO: a IA não responde. A mensagem fica na memória.${transcrito ? " O áudio foi transcrito para a equipe." : ""}`, saida: { respondeu: false, transcrito } };
+  },
 
   tipo_msg: (c) => {
     const t = c.mensagem!.tipo;
@@ -1976,7 +1982,8 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
   try {
     const analise = await analisarMidia(tipo, arq.bytes, m.midiaMime ?? arq.mime);
     const texto = [analise, m.conteudo ? `(legenda: ${m.conteudo})` : ""].filter(Boolean).join("\n");
-    await db.update(schema.mensagens).set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ transcricao: texto })}::jsonb` }).where(eq(schema.mensagens.id, m.id));
+    /* alteradaEm: a tela aberta recebe a transcrição na hora (aparece embaixo do áudio) */
+    await db.update(schema.mensagens).set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ transcricao: texto })}::jsonb`, alteradaEm: new Date() }).where(eq(schema.mensagens.id, m.id));
     const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento" }[tipo];
     return { ctx: { textoEntrada: `[${rotulo}] ${texto}` }, entrada: { arquivo: m.midiaNome ?? m.midiaUrl, mime: m.midiaMime, bytes: arq.bytes.length }, saida: { texto } };
   } catch (e) {
