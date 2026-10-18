@@ -8,6 +8,7 @@
    Ela vira a "intenção de compra" da triagem da conversa (alta / média / baixa), que a tela já mostra. */
 import type { TriagemIa } from "../db/schema";
 import type { FatosLead } from "./workflow/util";
+import { lerNecessidade, resumoDaNecessidade } from "./necessidade.ts";
 
 export type Temperatura = "quente" | "morno" | "frio";
 
@@ -41,10 +42,20 @@ const CAMPOS: [keyof FatosLead, string][] = [
   ["cidade", "cidade"],
 ];
 
-/** Triagem da conversa montada a partir dos fatos (mantém o que a triagem anterior já tinha). */
+/** Triagem da conversa montada a partir dos fatos (mantém o que a triagem anterior já tinha). A necessidade da
+ *  qualificação (uso, km por dia, garupa/carga, faixa de valor) entra no "Falta perguntar" do vendedor. */
 export function triagemDosFatos(f: FatosLead, resumo: string | null, anterior: TriagemIa | null, sinais: { pediuProposta?: boolean } = {}): TriagemIa {
   const temperatura = temperaturaDoLead(f, sinais);
   const troca = temTroca(f.troca);
+  const n = lerNecessidade(f.necessidade);
+  const necessidade = resumoDaNecessidade(n) || null;
+  const daQualificacao: [boolean, string][] = [
+    [!!n.uso || tem(f.uso), "uso"],
+    [!!n.kmDia, "km por dia"],
+    [n.garupa !== null || n.carga !== null, "garupa ou carga"],
+    [!!(n.faixaAte || n.faixaDe || n.maisBarata), "faixa de valor"],
+  ];
+  const outros = CAMPOS.filter(([k]) => k !== "uso");
   return {
     resumo: resumo?.trim() || anterior?.resumo || "",
     interesse: tem(f.interesse) ? f.interesse!.trim() : (anterior?.interesse ?? null),
@@ -52,8 +63,9 @@ export function triagemDosFatos(f: FatosLead, resumo: string | null, anterior: T
     temTroca: troca ?? anterior?.temTroca ?? null,
     trocaDescricao: troca ? f.troca!.trim() : troca === false ? null : (anterior?.trocaDescricao ?? null),
     intencaoCompra: INTENCAO_DA_TEMPERATURA[temperatura],
-    dadosColetados: CAMPOS.filter(([k]) => tem(f[k])).map(([, r]) => r),
-    faltaPerguntar: CAMPOS.filter(([k]) => !tem(f[k])).map(([, r]) => r),
+    dadosColetados: [...outros.filter(([k]) => tem(f[k])).map(([, r]) => r), ...daQualificacao.filter(([ok]) => ok).map(([, r]) => r)],
+    faltaPerguntar: [...daQualificacao.filter(([ok]) => !ok).map(([, r]) => r), ...outros.filter(([k]) => !tem(f[k])).map(([, r]) => r)],
     prontoParaHumano: anterior?.prontoParaHumano ?? false,
+    necessidade: necessidade ?? anterior?.necessidade ?? null,
   };
 }

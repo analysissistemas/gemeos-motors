@@ -536,6 +536,8 @@ export type TriagemIa = {
   dadosColetados: string[];
   faltaPerguntar: string[];
   prontoParaHumano: boolean;
+  /** o que o cliente precisa (qualificação, 18/10/2026): "pro trabalho, uns 20 km por dia, levando alguém na garupa" */
+  necessidade?: string | null;
 };
 
 export const mensagens = pgTable(

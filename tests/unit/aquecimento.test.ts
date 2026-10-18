@@ -51,7 +51,8 @@ test("Damarys: veio do site e perguntou disponível e valor — a IA responde em
   assert.match(so, /pergunte o que ele procura/u);
   const perguntou = instrucaoDoSite("Olá! Vim pelo site da Gêmeos Motors e quero falar com um consultor.\n\nVcs tem disponível\n\nValor");
   assert.match(perguntou, /RESPONDA isso agora/u);
-  assert.match(perguntou, /liste as motos EM ESTOQUE com o preço/u);
+  /* qualificação (18/10/2026): nada de listar o estoque; o sistema pergunta o que falta e indica sob medida */
+  assert.doesNotMatch(perguntou, /liste as motos/u);
   assert.doesNotMatch(perguntou, /pergunte o que ele procura/u);
   assert.equal(instrucaoDoSite("quanto custa a T1?"), "");
 });

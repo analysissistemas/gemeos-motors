@@ -170,7 +170,7 @@ export function formatarHistorico(msgs: MensagemMemoria[]) {
     .join("\n\n");
 }
 
-export type FatosLead = { nome?: string | null; interesse?: string | null; uso?: string | null; pagamento?: string | null; troca?: string | null; cidade?: string | null; observacoes?: string | null };
+export type FatosLead = { nome?: string | null; interesse?: string | null; uso?: string | null; pagamento?: string | null; troca?: string | null; cidade?: string | null; observacoes?: string | null; /** qualificação consultiva (JSON de lib/ia/necessidade.ts), 18/10/2026 */ necessidade?: string | null };
 
 /** Junta fatos novos aos antigos: valor vazio nunca apaga o que já se sabia. */
 export function mesclarFatos(antigos: FatosLead, novos: FatosLead): FatosLead {

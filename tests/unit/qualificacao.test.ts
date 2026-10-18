@@ -28,7 +28,12 @@ test("triagem pelos fatos: intenção, dados coletados, o que falta e o que já 
   assert.equal(t.temTroca, true);
   assert.equal(t.trocaDescricao, "Biz 2015");
   assert.deepEqual(t.dadosColetados, ["nome", "moto de interesse", "forma de pagamento", "troca"]);
-  assert.deepEqual(t.faltaPerguntar, ["uso", "cidade"]);
+  /* a qualificação vem primeiro no que falta perguntar (18/10/2026) */
+  assert.deepEqual(t.faltaPerguntar, ["uso", "km por dia", "garupa ou carga", "faixa de valor", "cidade"]);
+  assert.equal(t.necessidade, null);
+  const q = triagemDosFatos({ necessidade: JSON.stringify({ uso: "trabalho", kmDia: 20, garupa: true, faixaAte: 10000 }) }, null, null);
+  assert.equal(q.necessidade, "pro trabalho, uns 20 km por dia, levando alguém na garupa, até uns 10 mil");
+  assert.deepEqual(q.faltaPerguntar.slice(0, 1), ["nome"]);
   const anterior = { ...t, prontoParaHumano: true, veiculo: "M6 branca" };
   const t2 = triagemDosFatos({ nome: "Ana" }, null, anterior);
   assert.equal(t2.prontoParaHumano, true);

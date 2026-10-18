@@ -131,7 +131,7 @@ export function instrucaoDoSite(texto: string): string {
   const resto = semAberturaDoSite(texto).replace(/^(?:(?:ol[áa]|oi+|opa|e\s+a[ií]|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+(?:bem|bom|certo|joia)|blz|beleza)[!.,?\s]*)+/iu, "").trim();
   const base = 'O cliente chegou pelo botão do site, com a mensagem automática "Vim pelo site da Gêmeos Motors e quero falar com um consultor". O consultor é VOCÊ: NÃO transfira por causa disso e não diga que vai passar para a equipe.';
   if (!/\p{L}{2,}/u.test(resto)) return `${base} Atenda e pergunte o que ele procura.\n\n`;
-  return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. Perguntou se tem disponível, valor ou preço sem dizer o modelo: liste as motos EM ESTOQUE com o preço de cada (do catálogo) e pergunte qual chamou mais a atenção. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
+  return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
 }
 
 /* Triciclo (06/10/2026): a IA chamou a T3 Retrô (duas rodas) de triciclo. O dono confirmou que o MM3 tem TRÊS rodas.
