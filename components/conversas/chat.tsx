@@ -1,6 +1,6 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleAlert, Clock, Copy, FileText, Info, MapPin, MessageCircle, Phone, Reply, StickyNote, Trash2, UserCheck, UserRound } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleAlert, Clock, Copy, FileText, Info, MapPin, MessageCircle, Phone, Reply, StickyNote, ThumbsDown, ThumbsUp, Trash2, UserCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
@@ -8,6 +8,8 @@ import { formatarTelefone, hora } from "@/lib/formato";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Botao } from "@/components/ui/botao";
+import { AreaTexto } from "@/components/ui/campos";
+import { acaoAvaliarIa } from "@/app/sistema/conversas/acoes";
 import { AudioMensagem } from "./audio-mensagem";
 import { Compositor, type EnvioChat, type Resposta } from "./compositor";
 import { comLinks, ETIQUETA_ETAPA, rotuloDia } from "./util";
@@ -307,7 +309,9 @@ type Meta = {
   latitude?: number;
   longitude?: number;
   contatos?: { nome: string | null; telefones: { numero: string; rotulo: string | null }[] }[];
+  avaliacaoIa?: AvaliacaoIa;
 };
+type AvaliacaoIa = { nota: "legal" | "nao_legal"; motivo: string | null; por: string; em: string; chamadoId: number | null };
 
 const REACOES_RAPIDAS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -539,6 +543,7 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
               </p>
             )}
           </div>
+          {ia && real && !meta.figurinha && <AvaliacaoDaIa key={meta.avaliacaoIa?.em ?? "sem"} mensagemId={m.id} salva={meta.avaliacaoIa ?? null} />}
           <p className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px] text-ink-3">
             {hora(m.criadoEm)}
             {saida && <Tiques status={m.status} />}
@@ -561,6 +566,65 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
         </div>
       </div>
     </li>
+  );
+}
+
+/* Legal / Não legal na resposta da IA (dono, 18/10/2026): o vendedor ensina o Miltinho. "Não legal" pede o porquê e a
+   Sonix abre um chamado em Melhorias com a regra que corrige; o dono aprova e a IA para de responder assim. */
+function AvaliacaoDaIa({ mensagemId, salva }: { mensagemId: number; salva: AvaliacaoIa | null }) {
+  const [atual, setAtual] = useState<AvaliacaoIa | null>(salva);
+  const [aberto, setAberto] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [pendente, iniciar] = useTransition();
+  const avaliar = (nota: AvaliacaoIa["nota"], porque: string | null) =>
+    iniciar(async () => {
+      const r = await acaoAvaliarIa(mensagemId, nota, porque);
+      if (!r.ok) return void toast.error(r.erro);
+      setAtual(r.dados as AvaliacaoIa);
+      setAberto(false);
+      setMotivo("");
+      toast.success(nota === "legal" ? "Valeu! A Sonix guardou essa resposta como um bom exemplo." : "Anotado! A Sonix abriu um chamado em Melhorias para a IA não responder mais assim.");
+    });
+  return (
+    <div className="mt-1.5 border-t border-linha/70 pt-1.5 text-[11.5px]">
+      {atual && !aberto ? (
+        <p className="flex flex-wrap items-center gap-1 text-ink-2">
+          {atual.nota === "legal" ? <ThumbsUp className="size-3.5 text-bom" /> : <ThumbsDown className="size-3.5 text-critico" />}
+          <span className="font-semibold">{atual.nota === "legal" ? "Legal" : "Não legal"}</span>
+          <span className="text-ink-3">· {atual.por}</span>
+          {atual.motivo && <span className="basis-full text-ink-2">“{atual.motivo}”</span>}
+          {atual.chamadoId && <span className="basis-full text-ink-3">Virou o chamado #{atual.chamadoId} em Melhorias</span>}
+          <button className="ml-auto text-ink-3 underline underline-offset-2 hover:text-ink" onClick={() => setAberto(true)}>
+            mudar
+          </button>
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-ink-3">A resposta da IA ficou:</span>
+            <button disabled={pendente} className="inline-flex items-center gap-1 rounded-full border border-linha px-2 py-0.5 hover:border-bom hover:text-bom disabled:opacity-50" onClick={() => avaliar("legal", null)}>
+              <ThumbsUp className="size-3.5" /> Legal
+            </button>
+            <button disabled={pendente} className="inline-flex items-center gap-1 rounded-full border border-linha px-2 py-0.5 hover:border-critico hover:text-critico disabled:opacity-50" onClick={() => setAberto((v) => !v || !atual)}>
+              <ThumbsDown className="size-3.5" /> Não legal
+            </button>
+          </div>
+          {aberto && (
+            <div className="flex flex-col gap-1.5">
+              <AreaTexto value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que não ficou legal? Ex.: o cliente veio do site e a IA passou para o vendedor sem atender" className="min-h-[64px] text-[13px]" maxLength={500} autoFocus />
+              <div className="flex justify-end gap-1.5">
+                <Botao tamanho="sm" variante="secundario" onClick={() => setAberto(false)}>
+                  Cancelar
+                </Botao>
+                <Botao tamanho="sm" variante="primario" carregando={pendente} disabled={motivo.trim().length < 5} onClick={() => avaliar("nao_legal", motivo)}>
+                  Enviar para a Sonix
+                </Botao>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

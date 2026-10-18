@@ -136,6 +136,15 @@ export async function acaoReagir(mensagemId: number, emoji: string) {
   });
 }
 
+/** O vendedor avalia a resposta da IA (Legal / Não legal com o motivo); o "Não legal" vira chamado da Sonix em Melhorias. */
+export async function acaoAvaliarIa(mensagemId: number, nota: string, motivo: string | null) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    const { avaliarRespostaDaIa } = await import("@/lib/ia/avaliacao-ia");
+    return avaliarRespostaDaIa(u, z.number().int().positive().parse(mensagemId), z.enum(["legal", "nao_legal"]).parse(nota), z.string().max(500).nullable().parse(motivo));
+  });
+}
+
 export async function acaoApagarParaMim(mensagemId: number) {
   return executar(async () => {
     const u = await autorizar("conversas.ver");
