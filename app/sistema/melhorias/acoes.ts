@@ -1,6 +1,7 @@
 "use server";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
@@ -26,9 +27,25 @@ export async function acaoAprovarChamado(id: number, proposta: unknown, observac
   return executar(async () => {
     const u = await quemPode(id);
     const r = await aprovarChamado(u, id, esquemaProposta.parse(proposta), texto.parse(observacao) || null);
+    /* aplicado na IA: a Sonix já roda de novo, no Simulador, a conversa em que o erro aconteceu e traz o relatório */
+    if (r.status === "aplicado") {
+      const { comecarTreino } = await import("@/lib/ia/sonix-treino");
+      await comecarTreino(id, after);
+    }
     revalidatePath("/sistema/melhorias");
     return r;
-  }, "Chamado aprovado");
+  }, "Chamado aprovado. A Sonix está testando a correção no Simulador");
+}
+
+/** Roda de novo o treino da Sonix (ex.: depois de mudar o prompt na mão). */
+export async function acaoTreinarChamado(id: number) {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    const { comecarTreino } = await import("@/lib/ia/sonix-treino");
+    await comecarTreino(z.number().int().positive().parse(id), after);
+    revalidatePath("/sistema/melhorias");
+    return null;
+  }, "A Sonix começou a testar no Simulador");
 }
 
 export async function acaoRecusarChamado(id: number, observacao?: string) {

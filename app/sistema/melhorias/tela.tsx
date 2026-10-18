@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Lightbulb, RotateCcw, ScanSearch, X } from "lucide-react";
+import { Check, ChevronDown, FlaskConical, Lightbulb, RotateCcw, ScanSearch, X } from "lucide-react";
 import type { ChamadoTela, RelatorioTela } from "@/lib/ia/chamados";
 import { AREAS_SUGESTAO } from "@/lib/ia/analista-regras";
 import { aplicaSozinho, STATUS_CHAMADO, TIPOS_CHAMADO, type PropostaChamado, type StatusChamado, type TipoChamado } from "@/lib/ia/chamados-regras";
@@ -14,7 +14,8 @@ import { Botao } from "@/components/ui/botao";
 import { AreaTexto, Campo, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { acaoDesbloquearConfig } from "@/app/sistema/configuracoes/desbloqueio";
-import { acaoAprovarChamado, acaoConcluirPlano, acaoDesfazerChamado, acaoGerarChamados, acaoRecusarChamado } from "./acoes";
+import { acaoAprovarChamado, acaoConcluirPlano, acaoDesfazerChamado, acaoGerarChamados, acaoRecusarChamado, acaoTreinarChamado } from "./acoes";
+import type { TreinoSonix } from "@/lib/ia/sonix-treino";
 
 type Aba = "relatorio" | "chamados" | "plano" | "historico";
 const fDia = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "2-digit" });
@@ -402,6 +403,14 @@ function ItemPlano({ c }: { c: ChamadoTela }) {
 
 function Historico({ itens, comSenha }: { itens: ChamadoTela[]; comSenha: Comsenha }) {
   const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  /* a Sonix está testando algum: a tela se atualiza sozinha até o relatório chegar */
+  const testando = itens.some((c) => ((c.resultado ?? {}) as { treino?: TreinoSonix }).treino?.status === "rodando");
+  useEffect(() => {
+    if (!testando) return;
+    const t = setInterval(() => router.refresh(), 10000);
+    return () => clearInterval(t);
+  }, [testando, router]);
   if (!itens.length) return <EstadoVazio titulo="Nada decidido ainda" texto="Chamados aprovados, recusados e feitos ficam registrados aqui." />;
   const tom: Record<StatusChamado, "bom" | "neutro" | "atencao" | "serio" | "info" | "marca"> = { aplicado: "bom", feito: "bom", recusado: "neutro", desfeito: "atencao", novo: "info", plano: "info" };
   return (
@@ -420,6 +429,7 @@ function Historico({ itens, comSenha }: { itens: ChamadoTela[]; comSenha: Comsen
               </div>
               <p className="mt-1 font-medium">{c.titulo}</p>
               {c.observacao && <p className="text-[12.5px] text-ink-3">Obs.: {c.observacao}</p>}
+              <RelatorioSonix id={c.id} treino={((c.resultado ?? {}) as { treino?: TreinoSonix }).treino ?? null} aplicado={c.status === "aplicado"} />
             </div>
             {c.status === "aplicado" && (
               <Botao tamanho="sm" variante="fantasma" disabled={pendente} onClick={() => iniciar(async () => void (await comSenha(() => acaoDesfazerChamado(c.id))))}>
@@ -429,6 +439,76 @@ function Historico({ itens, comSenha }: { itens: ChamadoTela[]; comSenha: Comsen
           </Painel>
         );
       })}
+    </div>
+  );
+}
+
+/* ---------------- relatório da Sonix (treino no Simulador) ---------------- */
+function RelatorioSonix({ id, treino, aplicado }: { id: number; treino: TreinoSonix | null; aplicado: boolean }) {
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const [aberto, setAberto] = useState(false);
+  const testar = () =>
+    iniciar(async () => {
+      const r = await acaoTreinarChamado(id);
+      if (!r.ok) return void toast.error(r.erro);
+      toast.success("A Sonix começou a testar no Simulador");
+      router.refresh();
+    });
+  if (!treino) {
+    return aplicado ? (
+      <Botao tamanho="sm" variante="fantasma" className="mt-2" carregando={pendente} onClick={testar}>
+        <FlaskConical className="size-4" /> Sonix: testar no Simulador
+      </Botao>
+    ) : null;
+  }
+  if (treino.status === "rodando") return <p className="mt-2 text-[12.5px] text-ink-2">⏳ A Sonix está rodando de novo, no Simulador, a conversa em que o erro aconteceu. Leva alguns minutos; esta tela se atualiza sozinha.</p>;
+  if (treino.status === "erro")
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px] text-critico">
+        Sonix não conseguiu testar: {treino.motivo}
+        <Botao tamanho="sm" variante="fantasma" carregando={pendente} onClick={testar}>
+          Tentar de novo
+        </Botao>
+      </div>
+    );
+  const titulo = treino.resolvido === true ? "✅ Resolvido, conferido no Simulador" : treino.resolvido === false ? "⚠️ Ainda não resolveu no Simulador" : "Testado no Simulador: confira a resposta nova";
+  return (
+    <div className="mt-2 rounded-xl border border-linha bg-trilho/40 p-3 text-[12.5px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-semibold">Relatório da Sonix · {titulo}</p>
+        <span className="text-ink-3">{dataHora(treino.em)}</span>
+        <button className="ml-auto text-ink-3 underline underline-offset-2" onClick={() => setAberto((v) => !v)}>
+          {aberto ? "esconder" : "ver antes e depois"}
+        </button>
+      </div>
+      {treino.cenarios.map((x, i) => (
+        <div key={i} className="mt-1.5">
+          <p className="text-ink-2">{x.porque}</p>
+          {aberto && (
+            <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+              <p className="sm:col-span-2 text-ink-3">Cliente: “{x.cliente}”</p>
+              <div className="rounded-lg bg-critico/10 p-2">
+                <p className="mb-1 font-semibold text-critico">Antes</p>
+                <p className="whitespace-pre-wrap">{x.antes}</p>
+              </div>
+              <div className="rounded-lg bg-bom/10 p-2">
+                <p className="mb-1 font-semibold text-bom">Depois da correção</p>
+                <p className="whitespace-pre-wrap">{x.depois || "(a IA não respondeu)"}</p>
+              </div>
+              {x.conversaTesteId && (
+                <Link href={`/sistema/conversas?c=${x.conversaTesteId}`} className="text-marca underline underline-offset-2 sm:col-span-2">
+                  Abrir a conversa de teste no Atendimento
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+      {treino.ajusteChamadoId && <p className="mt-1.5 font-medium">A Sonix propôs um ajuste para você aprovar: chamado #{treino.ajusteChamadoId}, na aba Chamados.</p>}
+      <Botao tamanho="sm" variante="fantasma" className="mt-1.5" carregando={pendente} onClick={testar}>
+        <FlaskConical className="size-4" /> Testar de novo
+      </Botao>
     </div>
   );
 }
