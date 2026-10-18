@@ -45,6 +45,11 @@ test("lê o uso, os km, a garupa e a faixa das frases reais", () => {
   assert.equal(lerDoCliente("eu ando cerca de 10 a 20 km por dia").kmDia, 20);
   assert.equal(lerDoCliente("uns 100 km por semana").kmDia, 17);
   assert.equal(lerDoCliente("Então, estou buscando uma que o valor seja abaixo de 10K").faixaAte, 10000);
+  /* Simulador, 18/10/2026: o "k" de "km" virava "mil" (faixa de até 20 mil) */
+  const trabalho = lerDoCliente("Oi, boa tarde! Quero uma moto elétrica pra ir trabalhar, rodo uns 20 km por dia");
+  assert.equal(trabalho.faixaAte, null);
+  assert.equal(trabalho.kmDia, 20);
+  assert.equal(trabalho.uso, "trabalho");
   assert.equal(lerDoCliente("Queria abaixo dos 5.000").faixaAte, 5000);
   assert.equal(lerDoCliente("Tem menor valor ?").maisBarata, true);
   assert.equal(lerDoCliente("Olha eu sou muito obesa quais opções você tem ?").pesoKg, 120);

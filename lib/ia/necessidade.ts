@@ -69,7 +69,7 @@ const RX_TRICICLO = /\b(?:triciclo|tres rodas|3 rodas)\b/;
 
 /** "7 mil" → 7000; "7.500" → 7500; "10k" → 10000; "7" sozinho (resposta da faixa) → 7000. */
 function valor(txt: string, soNumeroEhMil = false): number | null {
-  const m = txt.match(/(\d{1,3}(?:[.,]\d{3})+|\d+(?:,\d+)?)\s*(mil|k)?/);
+  const m = txt.match(/(\d{1,3}(?:[.,]\d{3})+|\d+(?:,\d+)?)\s*(mil|k(?![a-z]))?/);
   if (!m) return null;
   let n = Number(m[1].replace(/\.(?=\d{3})/g, "").replace(",", "."));
   if (m[2] || (soNumeroEhMil && n < 100)) n *= 1000;
@@ -79,24 +79,24 @@ function valor(txt: string, soNumeroEhMil = false): number | null {
 /** Faixa de valor que o cliente disse ("até 7 mil", "abaixo de 10k", "entre 7 e 10", "acima de 10 mil"). */
 export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: number | null; ate: number | null } | null {
   const t = norm(texto).replace(/r\$\s*/g, "");
-  const entre = t.match(/\bentre\s+(\d[\d.,]*)\s*(?:mil|k)?\s+e\s+(\d[\d.,]*)\s*(mil|k)?/);
+  const entre = t.match(/\bentre\s+(\d[\d.,]*)\s*(?:mil|k(?![a-z]))?\s+e\s+(\d[\d.,]*)\s*(mil|k(?![a-z]))?/);
   if (entre) {
     const ate = valor(`${entre[2]} ${entre[3] ?? ""}`, true);
     const de = valor(`${entre[1]} ${entre[3] ?? ""}`, true);
     if (de && ate) return { de, ate };
   }
-  const acima = t.match(/\b(?:acima|mais)\s+de\s+(\d[\d.,]*\s*(?:mil|k)?)/);
+  const acima = t.match(/\b(?:acima|mais)\s+de\s+(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/);
   if (acima && (respondendoFaixa || /mil|k|\d{4}/.test(acima[1]))) {
     const de = valor(acima[1], true);
     if (de) return { de, ate: null };
   }
-  const ate = t.match(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k)?)/);
+  const ate = t.match(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/);
   if (ate && (respondendoFaixa || /mil|k|\d{4}|\d\.\d{3}/.test(ate[1]))) {
     const v = valor(ate[1], true);
     if (v) return { de: null, ate: v };
   }
   if (respondendoFaixa) {
-    const solto = t.match(/^\D{0,12}(\d[\d.,]*\s*(?:mil|k)?)\D{0,12}$/);
+    const solto = t.match(/^\D{0,12}(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)\D{0,12}$/);
     if (solto) {
       const v = valor(solto[1], true);
       if (v) return { de: null, ate: v };
