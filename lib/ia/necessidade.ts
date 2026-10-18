@@ -326,7 +326,7 @@ export function resumoDaNecessidade(n: Necessidade): string {
     n.kmDia ? `uns ${n.kmDia} km por dia` : null,
     n.garupa ? "levando alguém na garupa" : null,
     n.carga ? "com carga" : null,
-    n.faixaAte ? `até uns ${mil(n.faixaAte)}` : n.faixaDe ? `acima de ${mil(n.faixaDe)}` : n.maisBarata ? "procurando a mais em conta" : null,
+    n.faixaDe && n.faixaAte ? `entre ${Math.round(n.faixaDe / 1000)} e ${mil(n.faixaAte)}` : n.faixaAte ? `até uns ${mil(n.faixaAte)}` : n.faixaDe ? `acima de ${mil(n.faixaDe)}` : n.maisBarata ? "procurando a mais em conta" : null,
   ].filter(Boolean);
   return partes.join(", ");
 }
