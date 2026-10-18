@@ -50,6 +50,9 @@ test("lê o uso, os km, a garupa e a faixa das frases reais", () => {
   assert.equal(trabalho.faixaAte, null);
   assert.equal(trabalho.kmDia, 20);
   assert.equal(trabalho.uso, "trabalho");
+  /* tudo numa frase só: o "uns 25 km" vem antes do "até uns 12 mil" */
+  const paulo = lerDoCliente("Boa noite! Me chamo Paulo. Quero uma moto elétrica pra ir trabalhar, rodo uns 25 km por dia, às vezes levo minha esposa na garupa, e quero gastar até uns 12 mil");
+  assert.deepEqual([paulo.uso, paulo.kmDia, paulo.garupa, paulo.faixaAte], ["trabalho", 25, true, 12000]);
   assert.equal(lerDoCliente("Queria abaixo dos 5.000").faixaAte, 5000);
   assert.equal(lerDoCliente("Tem menor valor ?").maisBarata, true);
   assert.equal(lerDoCliente("Olha eu sou muito obesa quais opções você tem ?").pesoKg, 120);

@@ -85,13 +85,14 @@ export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: num
     const de = valor(`${entre[1]} ${entre[3] ?? ""}`, true);
     if (de && ate) return { de, ate };
   }
-  const acima = t.match(/\b(?:acima|mais)\s+de\s+(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/);
-  if (acima && (respondendoFaixa || /mil|k|\d{4}/.test(acima[1]))) {
+  /* todas as ocorrências: "rodo uns 25 km ... até uns 12 mil" (Simulador, 18/10/2026: parava no "uns 25" do km) */
+  for (const acima of t.matchAll(/\b(?:acima|mais)\s+de\s+(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/g)) {
+    if (!respondendoFaixa && !/mil|k|\d{4}/.test(acima[1])) continue;
     const de = valor(acima[1], true);
     if (de) return { de, ate: null };
   }
-  const ate = t.match(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/);
-  if (ate && (respondendoFaixa || /mil|k|\d{4}|\d\.\d{3}/.test(ate[1]))) {
+  for (const ate of t.matchAll(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/g)) {
+    if (!respondendoFaixa && !/mil|k|\d{4}|\d\.\d{3}/.test(ate[1])) continue;
     const v = valor(ate[1], true);
     if (v) return { de: null, ate: v };
   }
