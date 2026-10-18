@@ -217,3 +217,39 @@ export async function acaoTestarApiOficial() {
     return `${r.nome ?? "Número"} · ${r.numero ?? c.phoneNumberId}`;
   });
 }
+
+/* Número novo na Meta (troca para o 81 98388-1281, 17/10/2026): depois de verificado com o código, a Meta só deixa
+   a API usar o número quando ele é REGISTRADO com um PIN de 6 dígitos (verificação em duas etapas). O Gerenciador do
+   WhatsApp não tem botão para isso; aqui o registro usa o token permanente já salvo, sem precisar colar token. */
+const esquemaAtivarNumero = z.object({
+  phoneNumberId: apenasNumeros.pipe(z.string().min(5, "Informe o ID do número de telefone (aparece na Meta, ao abrir o número).").max(30)),
+  pin: z.string().regex(/^\d{6}$/, "O PIN tem 6 números."),
+});
+
+export async function acaoAtivarNumeroNaMeta(dados: Record<string, unknown>) {
+  return executar(async () => {
+    const u = await autorizarConfig("config");
+    const d = esquemaAtivarNumero.parse(dados);
+    const c = await lerConfigWhatsApp();
+    if (!c.token) throw new ErroRegra("Salve o token permanente primeiro.");
+    const versao = process.env.WHATSAPP_API_VERSAO || "v21.0";
+    let j: { success?: boolean; error?: { message?: string; error_user_msg?: string } } = {};
+    let ok = false;
+    try {
+      const r = await fetch(`https://graph.facebook.com/${versao}/${d.phoneNumberId}/register`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${c.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", pin: d.pin }),
+      });
+      j = (await r.json().catch(() => ({}))) as typeof j;
+      ok = r.ok && j.success !== false;
+    } catch {
+      throw new ErroRegra("Não deu para falar com a Meta agora. Tente de novo em instantes.");
+    }
+    if (!ok) throw new ErroRegra(`A Meta não ativou o número: ${j.error?.error_user_msg ?? j.error?.message ?? "erro desconhecido"}. Confira se ele já foi verificado com o código no Gerenciador do WhatsApp.`);
+    /* garante que o app recebe as mensagens da conta (webhook); se já estava, a Meta só confirma */
+    if (c.wabaId) await fetch(`https://graph.facebook.com/${versao}/${c.wabaId}/subscribed_apps`, { method: "POST", headers: { Authorization: `Bearer ${c.token}` } }).catch(() => null);
+    await registrarLog(u, { acao: "configuracao.whatsapp", entidade: "configuracao", descricao: `Ativou na Meta o número de ID ${d.phoneNumberId} (registro da API)` });
+    return null;
+  }, "Número ativado na Meta. Agora troque o número e o ID acima e salve.");
+}

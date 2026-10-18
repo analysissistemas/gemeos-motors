@@ -6,7 +6,7 @@ import { Check, Copy, RefreshCw } from "lucide-react";
 import { Painel, Selo, TituloSecao } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { Alternar, Campo, Entrada } from "@/components/ui/campos";
-import { acaoGerarVerifyToken, acaoSalvarApiOficial, acaoTestarApiOficial } from "./acoes";
+import { acaoAtivarNumeroNaMeta, acaoGerarVerifyToken, acaoSalvarApiOficial, acaoTestarApiOficial } from "./acoes";
 
 export type ApiOficial = {
   ativo: boolean;
@@ -54,6 +54,7 @@ export function PainelApiOficial({ inicial, urlCallback }: { inicial: ApiOficial
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
   const [f, setF] = useState({ ativo: inicial.ativo, telefone: inicial.telefone, phoneNumberId: inicial.phoneNumberId, wabaId: inicial.wabaId, token: "", appSecret: "" });
+  const [ativar, setAtivar] = useState({ phoneNumberId: "", pin: "" });
   const set = (k: keyof typeof f) => (x: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: x.target.value });
 
   return (
@@ -111,6 +112,34 @@ export function PainelApiOficial({ inicial, urlCallback }: { inicial: ApiOficial
         </div>
 
         <div className="flex flex-col gap-4">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">Número novo: ativar na Meta</p>
+          <p className="text-[12px] leading-relaxed text-ink-3">
+            Depois de adicionar o número no Gerenciador do WhatsApp e confirmar com o código, ele ainda precisa ser ativado para a API. Use o ID do número novo e escolha um PIN de 6 números (anote: a Meta pede esse PIN se o número for registrado de novo). Depois troque o número e o ID ao lado e salve.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Campo rotulo="ID do número novo">
+              <Entrada value={ativar.phoneNumberId} onChange={(x) => setAtivar({ ...ativar, phoneNumberId: x.target.value })} />
+            </Campo>
+            <Campo rotulo="PIN (6 números)">
+              <Entrada {...semAutopreencher} name="gm-meta-pin" inputMode="numeric" maxLength={6} value={ativar.pin} onChange={(x) => setAtivar({ ...ativar, pin: x.target.value.replace(/\D/g, "") })} />
+            </Campo>
+          </div>
+          <div className="flex justify-end">
+            <Botao
+              carregando={pendente}
+              onClick={() =>
+                iniciar(async () => {
+                  const r = await acaoAtivarNumeroNaMeta(ativar);
+                  if (!r.ok) return void toast.error(r.erro);
+                  toast.success(r.mensagem);
+                  setAtivar({ ...ativar, pin: "" });
+                })
+              }
+            >
+              Ativar número na Meta
+            </Botao>
+          </div>
+
           <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">2. Webhook (cole no Meta for Developers)</p>
           <Campo rotulo="URL de callback">
             <Copiavel valor={urlCallback} />
