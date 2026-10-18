@@ -5,6 +5,7 @@ import { db, schema } from "@/lib/db";
 import { receberMensagem } from "@/lib/mensageria/servico";
 import { rodarWorkflowAtendimento, workflowAtivo } from "./workflow/executar";
 import { gerarObjeto } from "./cliente";
+import { textoDaMensagem } from "./workflow/util";
 import { anonimizar } from "./analista-regras";
 import type { EvidenciaChamado, PropostaChamado } from "./chamados-regras";
 
@@ -33,7 +34,9 @@ export type TreinoSonix =
   | { status: "pronto"; em: string; resolvido: boolean | null; cenarios: CenarioTreino[]; ajusteChamadoId: number | null }
   | { status: "erro"; em: string; motivo: string };
 
-const texto = (m: { tipo: string; conteudo: string | null }) => (m.tipo === "texto" ? (m.conteudo ?? "").trim() : m.conteudo?.trim() ? `[${m.tipo}] ${m.conteudo.trim()}` : `[${m.tipo}]`);
+/* o mesmo texto que a IA leu (áudio com a transcrição, foto com a legenda) */
+const texto = (m: { tipo: string; conteudo: string | null; metadados?: unknown }) =>
+  textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: ((m.metadados ?? {}) as { transcricao?: string }).transcricao ?? null }).trim();
 
 async function gravarTreino(id: number, treino: TreinoSonix) {
   await db
@@ -56,7 +59,7 @@ async function cenarioDaProva(ev: EvidenciaChamado): Promise<{ turnos: string[][
   const ultimaDoCliente = doCliente[0]?.id;
   if (!ultimaDoCliente) return null;
   const historico = await db
-    .select({ id: M.id, direcao: M.direcao, tipo: M.tipo, conteudo: M.conteudo })
+    .select({ id: M.id, direcao: M.direcao, tipo: M.tipo, conteudo: M.conteudo, metadados: M.metadados })
     .from(M)
     .where(and(eq(M.conversaId, ev.conversaId), lte(M.id, ultimaDoCliente), inArray(M.direcao, ["incoming", "outgoing"])))
     .orderBy(asc(M.id));
