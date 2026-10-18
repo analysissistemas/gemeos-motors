@@ -7,6 +7,7 @@ import { rodarWorkflowAtendimento, workflowAtivo } from "./workflow/executar";
 import { gerarObjeto } from "./cliente";
 import { textoDaMensagem } from "./workflow/util";
 import { anonimizar } from "./analista-regras";
+import { acaoDeCodigo, ehTextoDoSistema } from "./texto-do-sistema";
 import type { EvidenciaChamado, PropostaChamado } from "./chamados-regras";
 
 /* ============================================================
@@ -28,7 +29,7 @@ const M = schema.mensagens;
 const MAX_CENARIOS = 2;
 const MAX_TURNOS = 4;
 
-export type CenarioTreino = { conversaTesteId: number | null; cliente: string; antes: string; depois: string; resolvido: boolean | null; porque: string };
+export type CenarioTreino = { conversaTesteId: number | null; cliente: string; antes: string; depois: string; resolvido: boolean | null; porque: string; doSistema?: boolean };
 export type TreinoSonix =
   | { status: "rodando"; inicio: string }
   | { status: "pronto"; em: string; resolvido: boolean | null; cenarios: CenarioTreino[]; ajusteChamadoId: number | null }
@@ -103,13 +104,13 @@ async function rodarNoSimulador(turnos: string[][], chamadoId: number) {
     }
     if (conversaId && ultima) await rodarWorkflowAtendimento({ conversaId, mensagemId: ultima, gatilho: "teste", simulado: true });
   }
-  if (!conversaId || !ultima) return { conversaId, depois: "" };
+  if (!conversaId || !ultima) return { conversaId, depois: "", doSistema: false };
   const respostas = await db
-    .select({ tipo: M.tipo, conteudo: M.conteudo })
+    .select({ tipo: M.tipo, conteudo: M.conteudo, metadados: M.metadados })
     .from(M)
     .where(and(eq(M.conversaId, conversaId), gt(M.id, ultima), eq(M.direcao, "outgoing")))
     .orderBy(asc(M.id));
-  return { conversaId, depois: respostas.map(texto).join("\n") };
+  return { conversaId, depois: respostas.map(texto).join("\n"), doSistema: respostas.some((x) => ehTextoDoSistema(x.conteudo, x.metadados)) };
 }
 
 const esquemaVeredito = z.object({
@@ -153,7 +154,7 @@ export async function treinarChamado(id: number): Promise<TreinoSonix> {
       } catch {
         veredito = { resolvido: null, porque: "A conversa rodou de novo, mas a IA não respondeu para a Sonix conferir agora. Veja a resposta nova abaixo." };
       }
-      cenarios.push({ conversaTesteId: r.conversaId, cliente: anonimizar(cliente).slice(0, 400), antes: cen.antes.slice(0, 1500), depois: r.depois.slice(0, 1500), ...veredito });
+      cenarios.push({ conversaTesteId: r.conversaId, cliente: anonimizar(cliente).slice(0, 400), antes: cen.antes.slice(0, 1500), depois: r.depois.slice(0, 1500), ...veredito, doSistema: r.doSistema });
     }
     if (!cenarios.length) {
       const t: TreinoSonix = { status: "erro", em: new Date().toISOString(), motivo: "As provas deste chamado não apontam para uma mensagem da conversa: não deu para remontar o cenário." };
@@ -163,7 +164,23 @@ export async function treinarChamado(id: number): Promise<TreinoSonix> {
     const resolvido = cenarios.some((x) => x.resolvido === null) ? null : cenarios.every((x) => x.resolvido);
     /* não resolveu: a Sonix propõe um ajuste num chamado novo (o dono decide) */
     let ajusteChamadoId: number | null = null;
-    if (resolvido === false && c.tipo === "regra_ia") {
+    const falhouNoSistema = cenarios.find((x) => x.resolvido === false && x.doSistema);
+    if (resolvido === false && falhouNoSistema) {
+      /* a resposta errada é texto pronto do sistema: outra regra não resolveria; vai para o plano de ação (código) */
+      const [novo] = await db
+        .insert(C)
+        .values({
+          tipo: "plano_acao",
+          area: "sistema",
+          titulo: `Mudar no código: ${c.titulo}`.slice(0, 120),
+          problema: `A Sonix testou o chamado #${id} no Simulador e o erro continuou num texto pronto do sistema: ${falhouNoSistema.porque}`,
+          proposta: { acao: acaoDeCodigo({ problema: c.problema, trecho: falhouNoSistema.depois }) },
+          evidencias: c.evidencias,
+          clientes: c.clientes,
+        })
+        .returning({ id: C.id });
+      ajusteChamadoId = novo?.id ?? null;
+    } else if (resolvido === false && c.tipo === "regra_ia") {
       try {
         const falhou = cenarios.find((x) => x.resolvido === false)!;
         const a = await gerarObjeto({

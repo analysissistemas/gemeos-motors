@@ -7,6 +7,7 @@ import { registrarLog } from "@/lib/logs";
 import { gerarObjeto } from "./cliente";
 import { proximaVersao } from "./prompt";
 import { SECOES_PROMPT, secaoPorChave } from "./secoes";
+import { acaoDeCodigo, ehTextoDoSistema } from "./texto-do-sistema";
 import { AREAS_SUGESTAO, anonimizar, diaDaLoja, type FichaConversa, type MetricasConversa } from "./analista-regras";
 import {
   aplicaSozinho,
@@ -141,6 +142,21 @@ export async function refazerChamados(agora = new Date()) {
   return { novos, reforcados, dias: dias.length };
 }
 
+/** A prova aponta para um texto pronto do sistema (a resposta da IA logo depois da mensagem da prova, ou a própria)? */
+async function provaEmTextoDoSistema(ev: EvidenciaChamado[]) {
+  for (const e of ev) {
+    if (!e.mensagemId) continue;
+    const ms = await db
+      .select({ conteudo: schema.mensagens.conteudo, metadados: schema.mensagens.metadados })
+      .from(schema.mensagens)
+      .where(and(eq(schema.mensagens.conversaId, e.conversaId), gte(schema.mensagens.id, e.mensagemId), eq(schema.mensagens.autor, "ia")))
+      .orderBy(asc(schema.mensagens.id))
+      .limit(3);
+    if (ms.some((m) => ehTextoDoSistema(m.conteudo, m.metadados))) return true;
+  }
+  return false;
+}
+
 export async function gerarChamados(dia: string) {
   const achados = await achadosDoDia(dia);
   if (!achados.length) return { novos: 0, reforcados: 0 };
@@ -198,6 +214,12 @@ ${instrucoes}`;
       if (soltos.length) proposta.conteudo = `${proposta.conteudo}\n[PREENCHER: confira ${soltos.join(", ")}: este número não apareceu na conversa]`;
     }
     const j = juntarEvidencias([], ev);
+    /* a resposta ruim era texto pronto do sistema (18/10/2026, chamado #20: a regra não mudaria nada): vai para o plano, para o código */
+    if (n.tipo === "regra_ia" && (await provaEmTextoDoSistema(ev))) {
+      await db.insert(C).values({ tipo: "plano_acao", area: "sistema", titulo: `Mudar no código: ${n.titulo}`.slice(0, 120), problema: n.problema, proposta: { acao: acaoDeCodigo({ problema: n.problema, trecho: ev[0]?.trecho ?? "" }) }, evidencias: j.evidencias, clientes: j.clientes });
+      novos++;
+      continue;
+    }
     await db.insert(C).values({ tipo: n.tipo, area: n.tipo === "plano_acao" ? n.area : "ia", titulo: n.titulo.slice(0, 120), problema: n.problema, proposta, evidencias: j.evidencias, clientes: j.clientes });
     novos++;
   }

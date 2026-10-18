@@ -6,6 +6,7 @@ import { ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { gerarObjeto } from "./cliente";
 import { anonimizar, diaDaLoja } from "./analista-regras";
+import { acaoDeCodigo, ehTextoDoSistema } from "./texto-do-sistema";
 
 /* ============================================================
    O VENDEDOR AVALIA A RESPOSTA DO MILTINHO (dono, 18/10/2026: "no chat de atendimento uma parte aonde o vendedor
@@ -38,7 +39,7 @@ export async function avaliarRespostaDaIa(u: Quem, mensagemId: number, nota: Not
   const motivo = motivoBruto?.replace(/\s+/g, " ").trim() || null;
   if (nota === "nao_legal" && (!motivo || motivo.length < 5)) throw new ErroRegra("Conte em poucas palavras por que a resposta não ficou legal.");
   const [m] = await db
-    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, autor: schema.mensagens.autor, direcao: schema.mensagens.direcao, conteudo: schema.mensagens.conteudo, criadoEm: schema.mensagens.criadoEm, contato: schema.conversas.contatoNome })
+    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, autor: schema.mensagens.autor, direcao: schema.mensagens.direcao, conteudo: schema.mensagens.conteudo, metadados: schema.mensagens.metadados, criadoEm: schema.mensagens.criadoEm, contato: schema.conversas.contatoNome })
     .from(schema.mensagens)
     .innerJoin(schema.conversas, eq(schema.conversas.id, schema.mensagens.conversaId))
     .where(eq(schema.mensagens.id, mensagemId))
@@ -68,14 +69,17 @@ export async function avaliarRespostaDaIa(u: Quem, mensagemId: number, nota: Not
       /* sem IA agora: o chamado nasce com o motivo do vendedor, e o dono escreve a regra antes de aprovar */
       proposta = { titulo: motivo!.slice(0, 80), regra: `[PREENCHER: a regra] Evite responder como nesta mensagem: "${resposta.slice(0, 200)}". Motivo do vendedor: ${motivo}` };
     }
+    /* a resposta era um texto pronto do sistema: regra no prompt não muda, é plano de ação para o código */
+    const doSistema = ehTextoDoSistema(m.conteudo, m.metadados);
+    const problema = `${u.nome} marcou "Não legal" numa resposta do Miltinho. Motivo: ${motivo}`;
     const [c] = await db
       .insert(schema.chamadosMelhoria)
       .values({
-        tipo: "regra_ia",
-        area: "ia",
-        titulo: `Avaliação do vendedor: ${proposta.titulo}`.slice(0, 120),
-        problema: `${u.nome} marcou "Não legal" numa resposta do Miltinho. Motivo: ${motivo}`,
-        proposta: { regra: proposta.regra.trim() },
+        tipo: doSistema ? "plano_acao" : "regra_ia",
+        area: doSistema ? "sistema" : "ia",
+        titulo: `${doSistema ? "Mudar no código" : "Avaliação do vendedor"}: ${proposta.titulo}`.slice(0, 120),
+        problema,
+        proposta: doSistema ? { acao: acaoDeCodigo({ problema, trecho: resposta }) } : { regra: proposta.regra.trim() },
         evidencias: [{ conversaId: m.conversaId, dia: diaDaLoja(new Date(m.criadoEm)), mensagemId: m.id, trecho: resposta.slice(0, 300), contato: m.contato }],
         clientes: 1,
       })

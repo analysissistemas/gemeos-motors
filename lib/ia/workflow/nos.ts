@@ -10,6 +10,7 @@ import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/li
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
 import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, textoIndicacao, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
@@ -189,7 +190,10 @@ async function enviar(c: CtxWorkflow, texto: string, citar = false, gravarFalha 
   /* e o texto montado pelo sistema nesta resposta (simulação de parcelas, agenda): cada bloco enviado é conferido sozinho, e os valores
      vêm da conta do sistema (teste real de 06/10/2026: o bloco com "R$ 689,04" era barrado) */
   const fontesExtras = [...(kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : []), ...(c.pipe?.textoCatalogo ? [c.pipe.textoCatalogo] : []), ...(c.qualificacao ? [c.qualificacao.pergunta, c.qualificacao.abertura ?? ""] : [])];
-  return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha, fontesExtras });
+  /* texto pronto do sistema (catálogo da foto, troca, indicação, fora do horário…) ou escrito pela IA: a Sonix usa para saber se a correção é regra ou código */
+  const textoDoSistema =
+    (!!c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo) || [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe?.texto ?? "") || [...VARIANTES_FORA_HORARIO, ...VARIANTES_CONFIRMAR].includes(texto) || ehTextoDoSistema(texto);
+  return enviarRespostaDaIa(db, { conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, texto, origem: c.simulado ? "workflow (teste)" : "workflow", simulado: c.simulado || !!c.conversa?.demo, respostaA, gravarFalha, fontesExtras, textoDoSistema });
 }
 
 /* ---------------- agente: o gerador que o pipeline usa, com memória e fatos ---------------- */
