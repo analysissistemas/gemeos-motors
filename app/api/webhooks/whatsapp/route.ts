@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
 }
 
 type ValorMeta = {
+  /** número da loja que recebeu (a conta tem mais de um desde 18/10/2026) */
+  metadata?: { phone_number_id?: string; display_phone_number?: string };
   contacts?: { profile?: { name?: string }; wa_id?: string }[];
   messages?: {
     id: string;
@@ -81,7 +83,8 @@ export async function POST(req: NextRequest) {
         if (s.status === "sent") continue;
         /* a Meta explica a falha em error_data.details; o título sozinho costuma ser genérico */
         const e = s.errors?.[0];
-        const erro = e ? [e.error_data?.details ?? e.message ?? e.title, e.code ? `código ${e.code}` : null].filter(Boolean).join(" — ") : undefined;
+        const motivo = e?.code === 131047 ? "Faz mais de 24 h que o cliente não escreve para este número da loja. Envie um modelo aprovado" : e?.error_data?.details ?? e?.message ?? e?.title;
+        const erro = e ? [motivo, e.code ? `código ${e.code}` : null].filter(Boolean).join(" — ") : undefined;
         await aplicarStatus(s.id, s.status, erro);
       }
       for (const m of v.messages ?? []) {
@@ -108,7 +111,7 @@ export async function POST(req: NextRequest) {
           conteudo: t.conteudo,
           midia: baixado.midia,
           respostaAExternoId: m.context?.id ?? null,
-          metadados: { mediaId: anexo?.id, mime: anexo?.mime_type, arquivo: m.document?.filename, ...t.metadados, ...(baixado.duracao ? { duracao: baixado.duracao } : {}) },
+          metadados: { numeroId: v.metadata?.phone_number_id, mediaId: anexo?.id, mime: anexo?.mime_type, arquivo: m.document?.filename, ...t.metadados, ...(baixado.duracao ? { duracao: baixado.duracao } : {}) },
         });
       }
     }

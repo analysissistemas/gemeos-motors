@@ -4,6 +4,7 @@ import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 import { lerBytes } from "./midia";
 import { MIME_OGG_OPUS, nomeOgg, paraOggOpus } from "./transcodificar";
+import { numeroDaMensagem, numeroParaResponder } from "./numero-da-conversa";
 import { camposDoTexto, converterModeloMeta, type ModeloMensagem, type ModeloMeta } from "./modelos";
 
 /* ============================================================
@@ -62,18 +63,18 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
     return !!(this.cfg.token && this.cfg.phoneNumberId);
   }
 
-  private async subirMidia(m: NonNullable<PedidoEnvio["midia"]>): Promise<{ id: string } | { erro: string }> {
+  private async subirMidia(m: NonNullable<PedidoEnvio["midia"]>, numero: string): Promise<{ id: string } | { erro: string }> {
     const arq = await lerBytes(m.url);
     if (!arq) return { erro: "Arquivo não encontrado para envio." };
-    return this.subirBytes(arq.bytes, m.mime ?? arq.mime, m.nome ?? "arquivo");
+    return this.subirBytes(arq.bytes, m.mime ?? arq.mime, m.nome ?? "arquivo", numero);
   }
 
-  private async subirBytes(bytes: Uint8Array, mime: string, nome: string): Promise<{ id: string } | { erro: string }> {
+  private async subirBytes(bytes: Uint8Array, mime: string, nome: string, numero: string): Promise<{ id: string } | { erro: string }> {
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
     form.append("type", mime);
     form.append("file", new Blob([new Uint8Array(bytes)], { type: mime }), nome);
-    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/media`, { method: "POST", headers: { Authorization: `Bearer ${this.cfg.token}` }, body: form });
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${numero}/media`, { method: "POST", headers: { Authorization: `Bearer ${this.cfg.token}` }, body: form });
     const j = (await r.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
     if (!r.ok || !j.id) return { erro: j.error?.message ?? `Falha ao enviar o arquivo (HTTP ${r.status})` };
     return { id: j.id };
@@ -93,6 +94,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
 
   async enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio> {
     if (!this.configurado()) return { externoId: null, status: "failed", erro: "WhatsApp Business não configurado" };
+    /* responde pelo número da loja em que o cliente escreveu (a janela de 24 h é por número) */
+    const numero = await numeroParaResponder(pedido.telefone, this.cfg.phoneNumberId);
     const corpo: Record<string, unknown> = { messaging_product: "whatsapp", to: pedido.telefone };
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
     if (pedido.modelo)
@@ -109,13 +112,13 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       } catch (e) {
         return { externoId: null, status: "failed", erro: `Não foi possível preparar o áudio para o WhatsApp: ${(e as Error).message}` };
       }
-      const up = await this.subirBytes(ogg, MIME_OGG_OPUS, nomeOgg(pedido.midia.nome));
+      const up = await this.subirBytes(ogg, MIME_OGG_OPUS, nomeOgg(pedido.midia.nome), numero);
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
       // voice: o cliente vê mensagem de voz (foto da loja com microfone), não arquivo de áudio com fone
       Object.assign(corpo, { type: "audio", audio: { id: up.id, voice: true } });
     }
     else if ((pedido.tipo === "imagem" || pedido.tipo === "documento" || pedido.tipo === "video") && (pedido.midia || pedido.arquivo)) {
-      const up = pedido.arquivo ? await this.subirBytes(pedido.arquivo.bytes, pedido.arquivo.mime, pedido.arquivo.nome) : await this.subirMidia(pedido.midia!);
+      const up = pedido.arquivo ? await this.subirBytes(pedido.arquivo.bytes, pedido.arquivo.mime, pedido.arquivo.nome, numero) : await this.subirMidia(pedido.midia!, numero);
       if ("erro" in up) return { externoId: null, status: "failed", erro: up.erro };
       if (pedido.tipo === "imagem") Object.assign(corpo, { type: "image", image: { id: up.id, caption: pedido.conteudo ?? undefined } });
       /* vídeo: a Meta aceita MP4 (H.264 + AAC) até 16 MB */
@@ -126,7 +129,7 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       Object.assign(corpo, { type: "location", location: { latitude: pedido.localizacao.latitude, longitude: pedido.localizacao.longitude, name: pedido.localizacao.nome, address: pedido.localizacao.endereco } });
     else return { externoId: null, status: "failed", erro: `Tipo ${pedido.tipo} ainda não suportado no envio real` };
 
-    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${numero}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
@@ -140,7 +143,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
       e a mensagem dele fica lida. Melhor esforço: erro aqui não atrapalha a resposta. */
   async digitando(externoIdDoCliente: string) {
     try {
-      await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
+      const numero = (await numeroDaMensagem(externoIdDoCliente)) ?? this.cfg.phoneNumberId;
+      await fetch(`https://graph.facebook.com/${this.versao}/${numero}/messages`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: externoIdDoCliente, typing_indicator: { type: "text" } }),
@@ -172,7 +176,8 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   }
 
   async reagir(telefone: string, externoId: string, emoji: string) {
-    const r = await fetch(`https://graph.facebook.com/${this.versao}/${this.cfg.phoneNumberId}/messages`, {
+    const numero = await numeroParaResponder(telefone, this.cfg.phoneNumberId);
+    const r = await fetch(`https://graph.facebook.com/${this.versao}/${numero}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: telefone, type: "reaction", reaction: { message_id: externoId, emoji } }),
