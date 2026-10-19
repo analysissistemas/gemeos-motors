@@ -5,6 +5,7 @@ import { mensagemDaEquipe } from "@/lib/avisos/whatsapp-equipe";
 import { obterProvedor, ProvedorWhatsAppCloud } from "@/lib/mensageria/provedores";
 import { armazenamentoDisponivel, guardarMidia } from "@/lib/mensageria/midia";
 import { lerConfigWhatsApp } from "@/lib/mensageria/whatsapp-config";
+import { traduzirCodigoMeta } from "@/lib/mensageria/erros-meta";
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { medirDuracao } from "@/lib/mensageria/audio-formatos";
 import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
         if (s.status === "sent") continue;
         /* a Meta explica a falha em error_data.details; o título sozinho costuma ser genérico */
         const e = s.errors?.[0];
-        const motivo = e?.code === 131047 ? "Faz mais de 24 h que o cliente não escreve para este número da loja. Envie um modelo aprovado" : e?.error_data?.details ?? e?.message ?? e?.title;
+        const motivo = traduzirCodigoMeta(e?.code) ?? e?.error_data?.details ?? e?.message ?? e?.title;
         const erro = e ? [motivo, e.code ? `código ${e.code}` : null].filter(Boolean).join(" — ") : undefined;
         await aplicarStatus(s.id, s.status, erro);
       }

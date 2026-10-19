@@ -4,6 +4,7 @@ import type { PedidoEnvio, ProvedorMensagens, ResultadoEnvio } from "./tipos";
 import { lerConfigWhatsApp, type ConfigWhatsApp } from "./whatsapp-config";
 import { lerBytes } from "./midia";
 import { MIME_OGG_OPUS, nomeOgg, paraOggOpus } from "./transcodificar";
+import { traduzirCodigoMeta } from "./erros-meta";
 import { numeroDaMensagem, numeroParaResponder } from "./numero-da-conversa";
 import { camposDoTexto, converterModeloMeta, type ModeloMensagem, type ModeloMeta } from "./modelos";
 
@@ -95,7 +96,7 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   async enviar(pedido: PedidoEnvio): Promise<ResultadoEnvio> {
     if (!this.configurado()) return { externoId: null, status: "failed", erro: "WhatsApp Business não configurado" };
     /* responde pelo número da loja em que o cliente escreveu (a janela de 24 h é por número) */
-    const numero = await numeroParaResponder(pedido.telefone, this.cfg.phoneNumberId);
+    const numero = await numeroParaResponder(pedido.telefone, this.cfg);
     const corpo: Record<string, unknown> = { messaging_product: "whatsapp", to: pedido.telefone };
     if (pedido.respostaAExternoId) corpo.context = { message_id: pedido.respostaAExternoId };
     if (pedido.modelo)
@@ -176,7 +177,7 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
   }
 
   async reagir(telefone: string, externoId: string, emoji: string) {
-    const numero = await numeroParaResponder(telefone, this.cfg.phoneNumberId);
+    const numero = await numeroParaResponder(telefone, this.cfg);
     const r = await fetch(`https://graph.facebook.com/${this.versao}/${numero}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.cfg.token}`, "Content-Type": "application/json" },
@@ -191,10 +192,7 @@ export class ProvedorWhatsAppCloud implements ProvedorMensagens {
 /* Os erros da Meta que a equipe mais vai ver, em português. */
 function explicarErroMeta(e?: { message?: string; code?: number }) {
   if (!e) return null;
-  if (e.code === 131047 || e.code === 470)
-    return "Passaram mais de 24 horas desde a última mensagem do cliente. A Meta só deixa a loja escrever de novo com um modelo de mensagem aprovado, ou depois que o cliente mandar mensagem.";
-  if (e.code === 190) return "A Meta recusou o token (Authentication Error). Confira o token em Configurações → API Oficial.";
-  return e.message ?? null;
+  return traduzirCodigoMeta(e.code) ?? e.message ?? null;
 }
 
 export async function obterProvedor(opcoes: { demo?: boolean } = {}): Promise<ProvedorMensagens> {

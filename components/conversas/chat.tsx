@@ -13,6 +13,7 @@ import { acaoAvaliarIa } from "@/app/sistema/conversas/acoes";
 import { AudioMensagem } from "./audio-mensagem";
 import { Compositor, type EnvioChat, type Resposta } from "./compositor";
 import { comLinks, ETIQUETA_ETAPA, rotuloDia } from "./util";
+import { traduzirErroGravado } from "@/lib/mensageria/erros-meta";
 
 type ItemTimeline = { tipo: "msg"; chave: string; quando: Date; m: MensagemChat } | { tipo: "nota"; chave: string; quando: Date; n: NotaChat } | { tipo: "dia"; chave: string; rotulo: string };
 
@@ -551,7 +552,7 @@ function Bolha({ m, nomeCliente, acoes }: { m: MensagemChat; nomeCliente: string
             {hora(m.criadoEm)}
             {saida && <Tiques status={m.status} />}
           </p>
-          {m.status === "failed" && <p className="mt-1 text-[11.5px] text-critico">Não enviada{meta.erro ? `: ${meta.erro}` : ""}</p>}
+          {m.status === "failed" && <p className="mt-1 text-[11.5px] text-critico">Não enviada{meta.erro ? `: ${traduzirErroGravado(String(meta.erro))}` : ""}</p>}
           {reacoes.length > 0 && (
             <button
               className={cn("absolute -bottom-3.5 flex items-center gap-0.5 rounded-full border border-linha bg-elevado px-1.5 py-0.5 text-[13px] shadow-sm", saida ? "right-2" : "left-2")}
