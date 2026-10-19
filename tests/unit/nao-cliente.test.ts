@@ -54,5 +54,8 @@ test("loop: a mesma mensagem longa volta depois de a IA já ter respondido vári
   // mensagem curta repetida ("ok", "sim") não é loop
   assert.equal(naoEhCliente({ texto: "Sim, quero", anterioresDoCliente: ["Sim, quero"], mensagensDaIaUltimaHora: 10 }), null);
   // freio geral: 30 mensagens da IA em 1 hora
-  assert.equal(naoEhCliente({ texto: "Quanto fica a M6?", anterioresDoCliente: [], mensagensDaIaUltimaHora: 30 }), "loop");
+  /* Elaine (18/10/2026): cliente animada, 31 mensagens da IA em uma hora, cada mensagem dela diferente: não é loop */
+  assert.equal(naoEhCliente({ texto: "Sim si meu valor desse era uma Desa que eu compraria consertesa", anterioresDoCliente: ["Nubk", "Qual valor da qui u rapaz que mora aqui em Itapissuma comprou"], mensagensDaIaUltimaHora: 31 }), null);
+  /* só num exagero a quantidade sozinha para a IA */
+  assert.equal(naoEhCliente({ texto: "Quanto fica a M6?", anterioresDoCliente: [], mensagensDaIaUltimaHora: 90 }), "loop");
 });

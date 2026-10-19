@@ -43,7 +43,10 @@ export const mensagemAutomatica = (texto: string) => RX_AUTOMATICA.test(norm(tex
 /** Freio de loop: o outro lado repete a mesma mensagem longa que já mandou antes (robô) depois de a IA já ter
  *  respondido várias vezes na última hora, ou a IA já mandou mensagens demais na última hora. */
 export function conversaEmLoop(p: { texto: string; anterioresDoCliente: string[]; mensagensDaIaUltimaHora: number }): boolean {
-  if (p.mensagensDaIaUltimaHora >= 30) return true;
+  /* só pela quantidade, só num exagero: cliente de verdade e animado passa fácil de 30 mensagens da IA numa hora (cada
+     resposta sai em 2 a 4 balões, mais foto e vídeo). Elaine, 18/10/2026: com 31 a trava parou a IA no meio da compra.
+     O sinal de loop é a MESMA mensagem voltando (abaixo). */
+  if (p.mensagensDaIaUltimaHora >= 90) return true;
   const t = norm(p.texto);
   if (t.length < 20 || p.mensagensDaIaUltimaHora < 6) return false;
   return p.anterioresDoCliente.some((a) => norm(a) === t);
