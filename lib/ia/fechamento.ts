@@ -14,6 +14,7 @@
 
 import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
 import { artigo, ehACombustao } from "./estoque-tipos.ts";
+import { lerDadosDoCliente } from "./dados-cliente.ts";
 
 export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "negociar" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
 
@@ -26,6 +27,12 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLow
 
 const RX_PEDIU_ESCOLHA = /retir\w*[^?]{0,60}entreg|entreg\w*[^?]{0,60}retir|buscar[^?]{0,40}entreg|delivery/;
 const RX_PEDIU_DADOS = /nome completo/;
+/* sem CPF (19/10/2026) o nome completo fecha a lista; "vou ver ainda" não é nome */
+const RX_NAO_E_NOME = /\b(vou|vai|nao|depois|quero|pode|sim|ok|obrigad\w*|pensar|ver|agora|hoje|amanha|ainda|tudo|bem|certo|beleza)\b/;
+const nomeCompletoDito = (texto: string) => {
+  const n = lerDadosDoCliente(texto).nomeCompleto;
+  return !!n && !RX_NAO_E_NOME.test(semAcento(n));
+};
 /* "entreg\w*" pega entrega, entregar, entregue, entreguem ("quero que entregue", teste de 05/10/2026) */
 const RX_ENTREGA = /(?<![a-z])(entreg\w*|delivery|receber (em casa|aqui|la em casa)|manda(r)? (pra|para) (mim|casa|ca)|leva(r)? (pra mim|ate mim|aqui)|em casa|na minha casa)(?![a-z])/;
 const RX_RETIRADA = /(?<![a-z])(retir\w*|buscar|busco|pegar (ai|na loja|aqui)|vou ai|vou na loja|ir na loja|passo ai|eu pego|eu busco)(?![a-z])/;
@@ -79,9 +86,9 @@ export function ehRemarcacao(texto: string) {
 export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number; jaAgendou?: boolean }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
-  /* respondendo a lista de dados */
-  if (RX_PEDIU_DADOS.test(loja)) {
-    if (RX_CPF.test(t)) return "mandou_dados";
+  /* respondendo a lista de dados (com "•"; a pergunta da visita também fala em nome completo, mas é agenda) */
+  if (RX_PEDIU_DADOS.test(loja) && p.ultimaDaLoja.includes("•")) {
+    if (RX_CPF.test(t) || nomeCompletoDito(p.textoCliente)) return "mandou_dados";
     if (RX_OUTRO_DADO.test(t) || t.split(/\n/).filter((l) => l.trim()).length >= 3) return "dados_parciais";
   }
   /* respondendo "retirar ou entrega?" */
@@ -307,8 +314,9 @@ export function textoSimulacaoConsultar(p: { motivo: "amex_acima_12" | "bandeira
 export const PERGUNTA_TEM_MODELO = "Você já tem algum modelo em mente ou está pesquisando para conhecer as opções? 😊";
 
 export const PERGUNTAS_VISITA = [
-  "Qual dia e horário fica melhor pra você vir? 😊",
-  "Que dia e horário fica bom pra você vir aqui na loja? 🛵",
+  /* dono, 19/10/2026: na visita, só o nome completo e o dia (sem CPF nem endereço). Uma pergunta só */
+  "Me passa seu nome completo e o dia e horário que fica melhor pra você vir? 😊",
+  "Me diz seu nome completo e o dia e horário que fica bom pra você vir aqui na loja? 🛵",
 ];
 export const PERGUNTAS_KM = [
   "Quantos km você roda por dia, mais ou menos? Assim te mostro quanto você vai economizar 💰",
@@ -352,23 +360,19 @@ export function semPerguntaDeFechamento(resposta: string[]) {
 /** Os dados que o Milton pede (lista do dono, P8/P11), sem o que o cliente já informou. */
 export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string | null; pagamento?: string | null }) {
   if (modo === "retirada") {
-    /* o endereço vai no documento da venda (dono, 15/10/2026); sem CEP, que é da entrega */
-    return `Combinado! Para registrar sua compra e a equipe separar a moto pra você, me manda por aqui:\n• Nome completo\n• CPF\n• Endereço (rua, número, bairro e cidade)\n• Que dia e horário você pretende vir?`;
+    /* dono, 19/10/2026: "pergunta só o nome completo e o dia; quando pede CPF não dão, nem endereço". CPF e
+       endereço o vendedor pega na loja, na hora do documento */
+    return `Combinado! Pra deixar tudo separado pra você, me manda só:\n• Seu nome completo\n• Que dia e horário você pretende vir?`;
   }
-  /* os mesmos campos da lista do Milton, agrupados para caber numa mensagem (o validador limita a 12 linhas) */
+  /* entrega: só o que a entrega precisa (sem CPF, nascimento nem referência: o vendedor confirma depois) */
   const campos = [
-    "Nome completo",
-    "CPF",
-    "Número para contato",
-    "Data de nascimento",
-    ja.cidade?.trim() ? "CEP" : "Cidade e CEP",
-    "Rua, número e bairro",
-    "Ponto de referência",
+    "Seu nome completo",
+    ja.cidade?.trim() ? "Endereço (rua, número e bairro)" : "Endereço (rua, número, bairro e cidade)",
     /* dia e hora para a entrega virar tarefa e lembrete (dono, 15/10/2026) */
     "Que dia e horário você pode receber?",
     ...(ja.pagamento?.trim() ? [] : ["Forma de pagamento"]),
   ];
-  return `Show! Para finalizar seu pedido, me manda por aqui:\n${campos.map((c) => `• ${c}`).join("\n")}`;
+  return `Show! Pra combinar a entrega, me manda só:\n${campos.map((c) => `• ${c}`).join("\n")}`;
 }
 
 /** Entrega fora de Goiana: a IA não sabe se atende nem a taxa; avisa que a equipe confirma (balão separado). */
@@ -455,7 +459,7 @@ O cliente quer parcelar. Comece pelo valor da moto (preço de tabela do catálog
 O cliente passou os dados da simulação. O sistema calcula e manda a simulação (ou pergunta o que falta): escreva só uma frase curta, sem valores.`;
     case "quer_visitar":
       return `# MOMENTO DA COMPRA
-O cliente quer vir à loja (visita ou test drive) ou perguntou onde ela fica. Ótimo! Se ele perguntou o endereço, dê o endereço da base de conhecimento. Responda com entusiasmo e pergunte só qual dia e horário fica melhor para ele vir. Não diga que já agendou: o sistema agenda quando ele responder.`;
+O cliente quer vir à loja (visita ou test drive) ou perguntou onde ela fica. Ótimo! Se ele perguntou o endereço, dê o endereço da base de conhecimento. Responda em UMA frase curta e calorosa, sem perguntas: o sistema pergunta o nome completo e o dia logo depois. Nunca peça CPF nem endereço. Não diga que já agendou: o sistema agenda quando ele responder.`;
     case "informou_visita":
       return `# MOMENTO DA COMPRA
 O cliente disse quando vem à loja. O sistema agenda e confirma: escreva só uma frase curta e calorosa, sem perguntas e sem dizer o horário.`;
@@ -471,7 +475,7 @@ O cliente está em dúvida. Com empatia e sem pressionar, entenda o motivo real 
 O cliente escolheu ${momento === "escolheu_entrega" ? "receber por entrega" : "retirar na loja"}. O sistema manda a lista de dados: escreva só uma frase curta de confirmação, sem perguntas.`;
     case "dados_parciais":
       return `# MOMENTO DA COMPRA
-O cliente mandou parte dos dados que você pediu. Agradeça e peça só o que ainda falta da lista (o CPF é obrigatório). Não repita os dados dele.`;
+O cliente mandou parte dos dados que você pediu. Agradeça e peça só o que ainda falta da lista (nome completo e o dia). NUNCA peça CPF, documento nem data de nascimento. Não repita os dados dele.`;
     default:
       return "";
   }

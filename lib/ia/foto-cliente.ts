@@ -16,6 +16,14 @@ export const TEXTO_CATALOGO_FOTO =
   "Recebi a sua foto! 😊 Pela foto eu não consigo confirmar o modelo, mas aqui estão todos os que a gente tem, com foto e preço: gemeosmotors.com.br. Me diz qual te chamou atenção, ou o nome do modelo que você procura, que eu confiro pra você.";
 export const TEXTO_CATALOGO_AUDIO =
   "Recebi o seu áudio! 😊 Pra te atender direitinho, dá uma olhadinha no nosso catálogo com todos os modelos, fotos e preços: gemeosmotors.com.br. Me conta qual te chamou atenção, ou escreve aqui o que você procura que eu te ajudo.";
+/* "O que vocês têm?" e "tem modelo parecido?" (dono, 19/10/2026, com os textos dele de exemplo): o site, não a lista do
+   estoque ("aqui esse estoque pode deixar confuso"). No site o cliente clica na moto e a mensagem chega com o modelo. */
+export const RX_MODELO_PARECIDO = /(?:modelo|moto|algo|alguma|outra|outro)\s+(?:\p{L}+\s+)?(?:parecid[oa]|semelhante|igual|nesse estilo|desse tipo|tipo ess[ae])/iu;
+const comNome = (nome: string | null | undefined, frase: string) => (nome ? `${nome}, ${frase[0].toLowerCase()}${frase.slice(1)}` : frase);
+export const textoSiteOpcoes = (nome?: string | null) =>
+  `${comNome(nome, "Temos uma boa variedade de modelos! 😃")} No nosso site você vê todos, com foto, preço e cores: gemeosmotors.com.br\n\nÉ só clicar na moto que te agradar que ela chega aqui pra mim e eu te passo tudo certinho 😉`;
+export const textoSiteParecido = (nome?: string | null) =>
+  `${comNome(nome, "Temos uma grande variedade de modelos, com opções pra diferentes gostos e necessidades! 🛵")} Dá uma olhada no nosso site e veja se tem algum parecido: gemeosmotors.com.br\n\nAchou um que gostou? É só clicar nele que chega aqui pra mim e eu te ajudo 🤝`;
 export const TEXTO_FOTO_NAO_CONFIRMA =
   "Pela foto eu não consigo confirmar qual é o modelo 😊 Me diz o nome dele, ou qual do catálogo te chamou atenção, que eu confiro pra você se a gente tem.";
 export const TEXTO_AUDIO_NAO_OUVE =

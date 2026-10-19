@@ -51,22 +51,25 @@ test("respondeu 'retirar ou entrega?'", () => {
   assert.notEqual(m("vocês entregam?"), "escolheu_entrega");
 });
 
-test("mandou os dados: com CPF passa ao vendedor; sem CPF, pede o que falta", () => {
+test("mandou os dados: nome completo basta (sem CPF, dono 19/10/2026); sem nome, pede o que falta", () => {
   const lista = listaDeDados("entrega", {});
   assert.equal(m("Carlos Silva\n123.456.789-09\nRua das Flores 120", lista), "mandou_dados");
-  assert.equal(m("Carlos Silva\nRua das Flores 120\nCentro", lista), "dados_parciais");
+  assert.equal(m("Carlos Silva\nRua das Flores 120\nCentro", lista), "mandou_dados");
+  assert.equal(m("Rua das Flores 120\nCentro\nsábado", lista), "dados_parciais");
+  /* "vou ver ainda" não é nome */
+  assert.notEqual(m("vou ver ainda", lista), "mandou_dados");
 });
 
-test("lista de dados: a do Milton, sem o que o cliente já disse; retirada com endereço e sem CEP", () => {
+test("lista de dados: curta, sem CPF, nascimento nem referência; retirada só nome e dia", () => {
   const entrega = listaDeDados("entrega", { cidade: "Goiana", pagamento: "pix" });
-  assert.match(entrega, /• Nome completo[\s\S]*• CPF[\s\S]*• Data de nascimento[\s\S]*• Ponto de referência/);
-  assert.doesNotMatch(entrega, /• Cidade|• Forma de pagamento/);
-  assert.match(listaDeDados("entrega", {}), /• Cidade e CEP/);
+  assert.match(entrega, /• Seu nome completo[\s\S]*• Endereço \(rua, número e bairro\)[\s\S]*• Que dia e horário/);
+  assert.doesNotMatch(entrega, /CPF|nascimento|referência|• Forma de pagamento/);
+  assert.match(listaDeDados("entrega", {}), /bairro e cidade[\s\S]*• Forma de pagamento/);
   assert.equal(notaDeEntrega("Itambé"), "Sobre a entrega em Itambé, a nossa equipe confirma se atende aí e te fala certinho 😊");
   assert.equal(notaDeEntrega("Goiana"), null);
   const retirada = listaDeDados("retirada", {});
-  assert.match(retirada, /• CPF[\s\S]*• Endereço \(rua, número, bairro e cidade\)/);
-  assert.doesNotMatch(retirada, /CEP|Data de nascimento/);
+  assert.match(retirada, /• Seu nome completo\n• Que dia e horário você pretende vir\?/);
+  assert.doesNotMatch(retirada, /CPF|Endereço|CEP|nascimento/);
 });
 
 test("textos prontos: parabéns, dados recebidos sem prometer conclusão", () => {

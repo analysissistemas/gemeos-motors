@@ -51,7 +51,7 @@ import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDado
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarIndicacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { instrucaoDeAudio, instrucaoDeFoto, listaDisponiveis, respostaParaMidia, TEXTO_DA_RESPOSTA, type ItemDisponivel } from "@/lib/ia/foto-cliente";
+import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
@@ -494,6 +494,8 @@ function horarioCurto(h: HorarioLoja) {
    do funcionamento ou ocupado, ele pergunta de novo. */
 /** A IA já marcou (ou remarcou) nas últimas falas da loja. */
 const RX_AGENDADO = /\b(Agendado|Remarcado) ✅ Te esperamos/;
+/* frases de enchimento que só alongam a conversa (dono, 19/10/2026) */
+const RX_ENCHIMENTO = /(?:^|(?<=[.!?]\s))[^.!?\n]*(?:(?:estou|estarei|fico|sigo)\s+(?:aqui\s+)?(?:para|pra|à|a)\s+(?:te\s+)?(?:ajudar|disposi[çc][ãa]o)|qualquer\s+(?:outra\s+)?d[úu]vida|fico\s+no\s+aguardo|é\s+só\s+(?:me\s+)?(?:chamar|falar|avisar)(?:\s+por\s+aqui)?)[^.!?\n]*[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*/giu;
 /** O que a própria IA escreveu ao perguntar ("Quarta, 21/10. E que horas…?", "Perfeito, às 14h! E qual dia…?"): só o
     dia e a hora ditos, sem o "das 8h às 18h" do horário da loja. É a memória do agendamento, escrita na conversa. */
 function diaEHoraDaPergunta(historico: string | null | undefined) {
@@ -1375,6 +1377,9 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
 
 ${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
+# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
+Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
+
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${emDescoberta ? "" : instrucaoDeFechamento(momento, modeloDaConversa)}
 
 ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDeMidia(null)}`,
@@ -1466,6 +1471,15 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
         return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, filaDeEspera: pedido?.nome ?? "aceitou o aviso" } };
       }
     }
+    /* "o que vocês têm?" ou "tem modelo parecido?" (dono, 19/10/2026): o site, não a lista do estoque. No site ele clica na
+       moto e a mensagem chega com o modelo, mais fácil de atender. Uma vez: já foi o site nas últimas falas, a conversa segue */
+    const textoLivre = semAberturaDoSite(c.textoBuffer);
+    if (r.ctx.texto && !r.ctx.humano && intencao === "compra" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3))) {
+      const nomeCli = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const texto = RX_MODELO_PARECIDO.test(textoLivre) ? textoSiteParecido(nomeCli) : textoSiteOpcoes(nomeCli);
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, site: true } };
+    }
     /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
     if (passo?.acao === "indicar" && r.ctx.texto) {
       const indicadas = indicarMotos(necessidade, motosQualif);
@@ -1479,11 +1493,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
     if (r.ctx.texto && paraMidia) {
-      /* catálogo + a lista do que tem disponível, montada pelo estoque (usuário, 12/10/2026) */
-      const lista = paraMidia === "catalogo_foto" || paraMidia === "catalogo_audio" ? listaDisponiveis(await itensDisponiveis(c), c.textoBuffer) : null;
-      const texto = lista ? `${TEXTO_DA_RESPOSTA[paraMidia]}
-
-${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
+      /* só o site (dono, 19/10/2026: "aqui esse estoque pode deixar confuso"; no site ele clica na moto e a IA identifica).
+         A lista do estoque (listaDisponiveis, 12/10/2026) saiu daqui */
+      const texto = TEXTO_DA_RESPOSTA[paraMidia];
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, catalogo: paraMidia } };
     }
@@ -1583,8 +1595,18 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
        da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
     if (momento === "informou_visita") {
       const v = await agendarVisitaPelaIa(c, { modelo: modeloDaConversa, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), horario });
+      /* dono, 19/10/2026: "pergunta o dia, já coloca a IA pra qualificar ele". Marcou e ainda não escolheu a moto: junto
+         da confirmação, UMA pergunta da qualificação, para a equipe receber o cliente com as opções certas */
+      let textoVisita = v.texto;
+      if (v.quando && !modeloDaConversa) {
+        const pq = proximoPasso(necessidade, perguntasFeitas(falasDaLoja(c.memoria.historico)), { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false });
+        if (pq.acao === "perguntar") {
+          const precos = (await motosParaIndicar(c)).map((x) => x.preco ?? 0).filter(Boolean);
+          textoVisita = `${v.texto}\n\n${textoPergunta(pq.chave, { n: necessidade, precos })}`;
+        }
+      }
       /* texto do sistema, com endereço oficial: isento da trava de fatos como o texto do catálogo */
-      const pipe = { ...r.ctx, texto: v.texto, textoCatalogo: v.texto, humano: false, motivo: null };
+      const pipe = { ...r.ctx, texto: textoVisita, textoCatalogo: textoVisita, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, visitaAgendada: v.quando, mandarLocal: !!v.quando, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, visita: v } };
     }
     if (momento === "mandou_dados") {
@@ -1817,13 +1839,16 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
     /* nada de "sem desconto" nem de inventar sobre preço de anúncio (Andressa e Danilo, 08 e 10/10/2026) */
     resposta = tirarFraseProibida(resposta);
+    /* frase de enchimento sai (Genilso, 18/10/2026: "estou aqui para ajudar" e "estarei aqui para ajudar" em dois balões seguidos) */
+    resposta = resposta.map((b) => b.replace(RX_ENCHIMENTO, "").replace(/\s{2,}/g, " ").trim()).filter((b) => /\p{L}{2,}/u.test(b));
     resposta = tirarTriciclo(resposta, await triciclosComEstoque(c));
     /* a lista do estoque só quando o cliente pede (dono, 15/10/2026: "bom dia" recebeu tudo que tinha em estoque) */
     if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = tirarListaSemPedido(resposta, c.textoBuffer, await nomesDoCatalogo());
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
     resposta = resposta.map((b) => b.replace(/\\n/g, "\n").trim()).filter((b) => /\p{L}/u.test(b));
-    /* conversa enxuta: no máximo 3 mensagens de texto por resposta (o resto se junta à última) */
-    if (resposta.length > 3) resposta = [...resposta.slice(0, 2), resposta.slice(2).join("\n\n")];
+    /* conversa enxuta (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente"): no máximo 2
+       mensagens de texto por resposta (o resto se junta à última) */
+    if (resposta.length > 2) resposta = [resposta[0], resposta.slice(1).join("\n\n")];
     if (intencao === "compra") resposta = conduzirFechamento(c, resposta);
     /* "o valor é X, podendo dividir em até 21x" (pedido do usuário, 04/10/2026): sem o preço na resposta, entra o do catálogo */
     if (c.momento === "quer_parcelar" && c.modeloDaConversa && !resposta.some((b) => /R\$/.test(b))) {

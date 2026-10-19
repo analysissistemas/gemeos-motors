@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const aplicar = req.nextUrl.searchParams.get("aplicar") === "1";
 
   const falhas = await db
-    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo, midiaUrl: schema.mensagens.midiaUrl, midiaNome: schema.mensagens.midiaNome, midiaMime: schema.mensagens.midiaMime, midiaTamanho: schema.mensagens.midiaTamanho, metadados: schema.mensagens.metadados, telefone: schema.conversas.contatoTelefone })
+    .select({ id: schema.mensagens.id, conversaId: schema.mensagens.conversaId, tipo: schema.mensagens.tipo, conteudo: schema.mensagens.conteudo, midiaUrl: schema.mensagens.midiaUrl, midiaNome: schema.mensagens.midiaNome, midiaMime: schema.mensagens.midiaMime, midiaTamanho: schema.mensagens.midiaTamanho, metadados: schema.mensagens.metadados, criadoEm: schema.mensagens.criadoEm, telefone: schema.conversas.contatoTelefone })
     .from(schema.mensagens)
     .innerJoin(schema.conversas, eq(schema.conversas.id, schema.mensagens.conversaId))
     .where(and(eq(schema.mensagens.direcao, "outgoing"), eq(schema.mensagens.status, "failed"), eq(schema.conversas.demo, false), gt(schema.mensagens.criadoEm, TROCA_DO_NUMERO), sql`${schema.mensagens.metadados}->>'erro' like '%131047%'`))
@@ -54,15 +54,20 @@ export async function POST(req: NextRequest) {
       relatorio.push({ conversa: conversaId, situacao: "já respondida depois", mensagens: 0 });
       continue;
     }
-    /* só o que respondia à última mensagem; modelo aprovado e texto repetido ficam de fora */
+    /* só a resposta imediata à última mensagem (dono, 19/10/2026: "só a resposta"): o que saiu até 3 min depois da
+       primeira, no máximo 2 balões. Follow-up de horas depois, modelo aprovado e texto repetido ficam de fora. */
     const vistos = new Set<string>();
-    const candidatas = lista.filter((m) => {
-      if (m.id < ultimaDoCliente.id || m.metadados?.modelo) return false;
-      const chave = `${m.tipo}|${m.conteudo ?? ""}|${m.midiaUrl ?? ""}`;
-      if (vistos.has(chave)) return false;
-      vistos.add(chave);
-      return true;
-    });
+    const depois = lista.filter((m) => m.id > ultimaDoCliente.id && !m.metadados?.modelo);
+    const inicio = depois.length ? new Date(depois[0].criadoEm).getTime() : 0;
+    const candidatas = depois
+      .filter((m) => {
+        if (new Date(m.criadoEm).getTime() - inicio > 3 * 60_000) return false;
+        const chave = `${m.tipo}|${m.conteudo ?? ""}|${m.midiaUrl ?? ""}`;
+        if (vistos.has(chave)) return false;
+        vistos.add(chave);
+        return true;
+      })
+      .slice(0, 2);
     if (!candidatas.length) {
       relatorio.push({ conversa: conversaId, situacao: "nada a reenviar", mensagens: 0 });
       continue;
