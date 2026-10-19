@@ -1459,6 +1459,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
         texto = textoEsgotado({ nome: nomeCli, modelo: pedido, parecida: maisParecida(pedido, await motosParaIndicar(c)) });
       }
       if (texto) {
+        /* cliente de verdade entrou na fila: garante o modelo aviso_chegada na Meta (para avisar depois das 24 h); nunca atrasa a resposta */
+        if (!c.conversa?.demo && /lista de espera/.test(texto)) void import("@/lib/servicos/interesses").then((x) => x.garantirModeloAvisoChegada()).catch((e) => console.error("[fila] modelo aviso_chegada", e));
         const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
         return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, filaDeEspera: pedido?.nome ?? "aceitou o aviso" } };
       }
