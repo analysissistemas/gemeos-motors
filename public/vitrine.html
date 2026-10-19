@@ -261,8 +261,14 @@ a{color:inherit;text-decoration:none}
   letter-spacing:.04em;padding:5px 11px;border-radius:980px;background:#fff;color:var(--tinta);
   border:1px solid var(--linha)}
 .selo-disp.pronta{background:#e6f8ee;border-color:#bfe9d0;color:#0f6b3a}
-.selo-disp.esgotado{background:#f2f2f2;border-color:#dcdcdc;color:#6b6b6b}
-.selo-disp.chegando{background:#fdf6da;border-color:#f0e2a8;color:#6b5200}
+/* estoque (18/10/2026): sem estoque, faixa no pé da foto; com estoque, linha discreta embaixo do nome */
+.prod-foto.sem-estoque img{filter:grayscale(1);opacity:.5}
+.faixa-estoque{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:9px 12px;text-align:center;
+  font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+.faixa-estoque.esgotado{background:rgba(20,20,22,.86);color:#fff}
+.faixa-estoque.chegando{background:var(--tinta);color:var(--marca)}
+.estoque-ok{display:inline-flex;align-self:flex-start;align-items:center;gap:7px;margin-top:5px;font-size:12.5px;font-weight:600;color:#137a44}
+.estoque-ok::before{content:"";width:7px;height:7px;border-radius:50%;background:#1aa35a;box-shadow:0 0 0 3px rgba(26,163,90,.16)}
 .selo.lanc{background:var(--tinta);color:var(--marca)}
 .lanc-txt{font-size:12px;font-weight:600;color:#6b5200;margin-top:6px}
 .lanc-reservas{font-size:11.5px;color:var(--tinta-2);margin-top:8px}
@@ -1044,14 +1050,17 @@ function card(a){
   const acao = a.lancamento ? "data-reservar" : "data-consultar";
   const disp = typeof rotuloDisponibilidade === "function" ? rotuloDisponibilidade(a) : null;
   return `<article class="prod" data-id="${a.id}">
-    <div class="prod-foto" ${acao}="${a.id}">
+    <div class="prod-foto${!a.lancamento && a.disponibilidade==="esgotado" ? " sem-estoque" : ""}" ${acao}="${a.id}">
       <span class="selo ${a.lancamento ? "lanc" : zero?"lac":"semi"}">${
         a.lancamento ? "Lançamento" : a.porQuantidade || zero ? "Novo" : condRotulo(e.cond, a.genero)}</span>
-      ${disp && !a.lancamento ? `<span class="selo-disp ${a.disponibilidade==="pronta_entrega"?"pronta":a.disponibilidade==="esgotado"?"esgotado":a.disponibilidade==="chegando"?"chegando":""}">${disp}</span>` : ""}
+      ${a.lancamento ? "" : a.disponibilidade==="esgotado" ? `<span class="faixa-estoque esgotado">Esgotado</span>`
+        : a.disponibilidade==="chegando" ? `<span class="faixa-estoque chegando">${a.chegaEm ? "Chega dia " + a.chegaEm : "Chegando"}</span>`
+        : disp && a.disponibilidade!=="pronta_entrega" ? `<span class="selo-disp">${disp}</span>` : ""}
       ${fotoDupla(a)}
     </div>
     <div class="prod-corpo">
       <h3 class="prod-nome"><a href="#" ${acao}="${a.id}">${a.modelo}</a></h3>
+      ${!a.lancamento && a.disponibilidade==="pronta_entrega" ? `<span class="estoque-ok">Pronta entrega</span>` : ""}
       ${a.lancamento && a.lancamentoTexto ? `<div class="lanc-txt">${a.lancamentoTexto}</div>` : ""}
       ${a.descricao ? `<div class="prod-spec" ${acao}="${a.id}">${a.descricao}</div>` : ""}
       <div class="prod-spec">${[

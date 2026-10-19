@@ -42,3 +42,6 @@ voltou a valer depois de cada uma:
   cadastrada) ou "Esgotado" (cores novas em `.selo-disp`); produto sem estoque troca o botão por "Avise-me quando
   chegar", que abre o WhatsApp com "Quero ser avisado quando a *X* chegar" (a IA põe o cliente na fila de espera);
   `catalogo-sistema.js` sobe para `?v=23`. Autorizado pelo dono ("pode seguir sim").
+- 18/10/2026 (estoque no site, visual) — a pedido do dono ("está com cara de feito por IA, deixa mais profissional"):
+  "Pronta entrega" sai da foto e vira linha discreta com ponto verde embaixo do nome; "Esgotado" vira faixa escura no
+  pé da foto (foto acinzentada); "Chegando" vira faixa preta e amarela "Chega dia dd/mm". Autorizado pelo dono.
