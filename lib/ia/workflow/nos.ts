@@ -1538,6 +1538,7 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
       const d = decidirSimulacao({
         textoCliente: c.textoBuffer,
         recentesCliente: recentes,
+        historicoCliente: leadAntes,
         ultimaDaLoja,
         modelo: modeloDaConversa,
         preco: modeloDaConversa ? await precoDoModelo(modeloDaConversa) : null,

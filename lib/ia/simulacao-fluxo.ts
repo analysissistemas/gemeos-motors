@@ -50,6 +50,8 @@ export function decidirSimulacao(p: {
   textoCliente: string;
   /** as últimas falas do cliente antes desta (parcelas/bandeira ditas antes) */
   recentesCliente: string;
+  /** tudo o que o cliente disse antes: a entrada que ele contou lá atrás ("tenho que completar 2.890") */
+  historicoCliente?: string;
   ultimaDaLoja: string;
   modelo: string | null;
   preco: number | null;
@@ -64,7 +66,15 @@ export function decidirSimulacao(p: {
      depois dessa pergunta (antes: o "em 21" veio numa mensagem e o "visa" na seguinte) */
   const agora = simulacaoPedida(p.textoCliente, RX_LOJA_PERGUNTOU_VEZES.test(loja));
   const antes = simulacaoPedida(p.recentesCliente, /quantas vezes|bandeira/.test(loja));
-  const entrada = entradaDoTexto(p.textoCliente);
+  /* a entrada desta mensagem ou, se não tiver, a última que ele disse na conversa */
+  const entrada =
+    entradaDoTexto(p.textoCliente) ??
+    (p.historicoCliente ?? "")
+      .split("\n")
+      .reverse()
+      .map((l) => entradaDoTexto(l))
+      .find((v): v is number => !!v) ??
+    null;
   const falouEntrada = /entrada/i.test(p.textoCliente);
   const vendedor = (parcelas: number | null, bandeira: string | null, motivo?: "bandeira_sem_tabela"): AcaoSimulacao => ({
     acao: "vendedor",

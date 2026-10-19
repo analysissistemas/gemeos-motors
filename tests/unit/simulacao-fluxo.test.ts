@@ -3,7 +3,7 @@
    engano, este teste quebra. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { errosDasTaxas, FAIXAS, normalizarTaxas, paraCima, simularCartao, tabelaCompleta, TAXAS_PADRAO } from "../../lib/ia/simulacao-cartao.ts";
+import { entradaDoTexto, errosDasTaxas, FAIXAS, normalizarTaxas, paraCima, simularCartao, tabelaCompleta, TAXAS_PADRAO } from "../../lib/ia/simulacao-cartao.ts";
 import { decidirSimulacao } from "../../lib/ia/simulacao-fluxo.ts";
 import { detectarMomento, jaPerguntouSoOQueFalta, PERGUNTA_AMEX_ATE_12, PERGUNTA_PARCELAS, PERGUNTA_QUAL_MOTO, PERGUNTA_SO_BANDEIRA, PERGUNTA_SO_PARCELAS, simulacaoPedida, textoConsultaGerencia, textoPerguntaAmex, textoSimulacaoDebito } from "../../lib/ia/fechamento.ts";
 import { validarResposta } from "../../lib/ia/validador.ts";
@@ -241,4 +241,42 @@ test("'ficou caro' depois da conta do total ainda é recusa da simulação (test
   const sim = d("12x no visa").texto;
   const total = textoTotais(sim)!.texto;
   assert.equal(detectarMomento({ textoCliente: "ficou caro, não dá", ultimaDaLoja: total, conheceModelo: true }), "recusou_simulacao");
+});
+
+test("Elaine (18/10/2026): respondeu o BANCO ('Nubk') e já tinha dito quanto completa; a IA simula em vez de passar ao vendedor", () => {
+  assert.equal(simulacaoPedida("Nubk").bandeira, "Mastercard");
+  assert.equal(simulacaoPedida("é nubank").bandeira, "Mastercard");
+  assert.equal(simulacaoPedida("inter").bandeira, "Mastercard");
+  assert.equal(simulacaoPedida("visa do nubank").bandeira, "Visa");
+  assert.equal(simulacaoPedida("itau").bandeira, null);
+  assert.equal(entradaDoTexto("Meu cartão só tem 3.100 de limite tenho que completar 2.890"), 2890);
+  assert.equal(entradaDoTexto("dou 2 mil no pix"), 2000);
+  assert.equal(entradaDoTexto("meu limite é 3.100"), null);
+  const ultimaDaLoja = "Você pode pagar o valor que tem disponível no seu cartão e completar o restante no Pix, dinheiro ou transferência, que não tem taxa. O saldo no cartão pode ser parcelado em até 21 vezes com uma pequena taxa da maquininha 😊\nAssim, fica mais fácil de conseguir a sua moto. Qual a bandeira do seu cartão?";
+  assert.equal(detectarMomento({ textoCliente: "Nubk", ultimaDaLoja, conheceModelo: true, objecoesAntes: 0, jaAgendou: false }), "pediu_simulacao");
+  const d = decidirSimulacao({
+    textoCliente: "Nubk",
+    recentesCliente: "Lead: Muito boa essa por que sou fortinha também mais u valor qui tenho não dá",
+    historicoCliente: "Lead: Meu cartão só tem 3.100 de limite tenho que completar 2.890\nLead: Muito boa essa por que sou fortinha também mais u valor qui tenho não dá",
+    ultimaDaLoja,
+    modelo: "N2",
+    preco: 5890,
+    nome: "Elaine",
+  });
+  /* não passa ao vendedor: pergunta em quantas vezes (a ordem do Milton) */
+  assert.equal(d.acao, "perguntar");
+  assert.ok(/quantas vezes/.test(d.texto));
+  /* e com as parcelas, calcula só o que vai no cartão: 5.890 - 2.890 de entrada = 3.000 */
+  const d2 = decidirSimulacao({
+    textoCliente: "em 21 vezes",
+    recentesCliente: "Lead: Nubk",
+    historicoCliente: "Lead: Meu cartão só tem 3.100 de limite tenho que completar 2.890\nLead: Nubk",
+    ultimaDaLoja: d.texto,
+    modelo: "N2",
+    preco: 5890,
+    nome: "Elaine",
+  });
+  assert.equal(d2.acao, "enviar");
+  assert.ok(d2.texto.includes("Mastercard"), d2.texto);
+  assert.ok(/Entrada: R\$ 2\.890/.test(d2.texto), d2.texto);
 });

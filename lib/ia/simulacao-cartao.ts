@@ -124,10 +124,17 @@ export function tabelaCompleta(
   return linhas;
 }
 
-/** Valor da entrada que o cliente escreveu ("entrada de 3 mil", "dou R$ 2.500 de entrada"); null se não deu para ler. */
+/** Valor da entrada que o cliente escreveu ("entrada de 3 mil", "dou R$ 2.500 de entrada", "tenho que completar 2.890",
+ *  "2 mil no pix"); null se não deu para ler. O limite do cartão ("só tem 3.100 de limite") não é entrada. */
 export function entradaDoTexto(texto: string): number | null {
-  const t = texto.toLowerCase();
-  const m = /entrada[^\d]{0,20}(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s*(mil)?/.exec(t) ?? /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s*(mil)?\s*(?:reais\s*)?(?:de|na)\s+entrada/.exec(t);
+  const t = texto.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+  const N = String.raw`(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s*(mil)?`;
+  const m =
+    new RegExp(`entrada[^\\d]{0,20}${N}`).exec(t) ??
+    new RegExp(`${N}\\s*(?:reais\\s*)?(?:de|na)\\s+entrada`).exec(t) ??
+    /* Elaine, 18/10/2026: "meu cartão só tem 3.100 de limite, tenho que completar 2.890" */
+    new RegExp(`complet\\w*(?:\\s+(?:com|o resto|o restante|a diferenca|mais))?(?:\\s+(?:de|com))?\\s+${N}`).exec(t) ??
+    new RegExp(`${N}\\s*(?:reais\\s*)?(?:no|em|de|na)\\s+(?:pix|dinheiro|especie|a vista)`).exec(t);
   if (!m) return null;
   let v = Number(m[1].replace(/\./g, "") + (m[2] ? `.${m[2]}` : ""));
   if (m[3]) v *= 1000;

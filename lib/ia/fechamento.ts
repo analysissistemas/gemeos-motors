@@ -157,6 +157,9 @@ const BANDEIRAS: [RegExp, string][] = [
   [/\bhiper(card)?\b/, "Hipercard"],
   [/\bamex\b|american express/, "American Express"],
   [/\bdiners\b/, "Diners"],
+  /* o cliente responde com o BANCO (Elaine, 18/10/2026: "Nubk" travou a simulação e foi para o vendedor). Só os bancos
+     que emitem uma bandeira só: Nubank, Inter, C6 e PicPay são Mastercard. Os outros (Itaú, Caixa...) a IA pergunta. */
+  [/\b(?:nu\s?bank|nubanck|nubak|nubk|nu|roxinho|cartao roxo|banco inter|inter|c6(?:\s?bank)?|pic\s?pay)\b/, "Mastercard"],
 ];
 /* frases dos textos do sistema (sem acento, como detectarMomento compara a fala da loja) */
 export const RX_PERGUNTOU_AMEX = /american express[^?]*seu cartao permite/;
