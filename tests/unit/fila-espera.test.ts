@@ -1,6 +1,7 @@
 /* Fila de espera (dono, 18/10/2026): modelo esgotado, aviso de chegada. Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { EMOJIS_PERMITIDOS } from "../../lib/ia/validador.ts";
 import { citouSemEstoque, maisParecida, MODELO_AVISO_CHEGADA, pediuAviso, perguntouAviso, textoChegou, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "../../lib/ia/fila-espera.ts";
 
 const TANK: ModeloSemEstoque = { id: 1, nome: "TANK AG11", tipo: "moto_eletrica", preco: 12900, chegaEm: null };
@@ -48,4 +49,17 @@ test("na fila e chegou: sem prometer data que não existe", () => {
   assert.ok(textoNaFila({ nome: null, modelo: MM3 }).includes("(a previsão é dia 25/10)"));
   assert.equal(textoChegou({ nome: "Ana", modelo: "TANK AG11" }), "Oi, Ana! Boa notícia: a *TANK AG11* que você pediu chegou na Gêmeos Motors 🛵 Quer que eu separe a sua?");
   assert.equal(MODELO_AVISO_CHEGADA.definicao.components[0].text.match(/\{\{\d\}\}/g)?.length, 2);
+});
+
+test("os textos da fila só usam emoji que o validador aceita (o 😕 barrava a mensagem)", () => {
+  const textos = [
+    textoEsgotado({ nome: "Ana", modelo: MM3, parecida: maisParecida(MM3, COM) }),
+    textoNaFila({ nome: "Ana", modelo: MM3 }),
+    textoChegou({ nome: "Ana", modelo: "MM3" }),
+  ];
+  for (const t of textos) {
+    let resto = t;
+    for (const e of [...EMOJIS_PERMITIDOS].sort((a, b) => b.length - a.length)) resto = resto.split(e).join("");
+    assert.ok(!/\p{Extended_Pictographic}/u.test(resto), t);
+  }
 });

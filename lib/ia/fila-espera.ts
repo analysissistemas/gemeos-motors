@@ -43,7 +43,8 @@ export function maisParecida(m: ModeloSemEstoque, comEstoque: ModeloComEstoque[]
 export function textoEsgotado(p: { nome: string | null; modelo: ModeloSemEstoque; parecida: ModeloComEstoque | null }) {
   const a = artigo(p.modelo.nome);
   const A = a.toUpperCase();
-  const abre = `${p.nome ? `${p.nome}, ${a}` : A} *${p.modelo.nome}* esgotou no momento 😕`;
+  /* sem emoji aqui: o validador só aceita os da lista (lib/ia/validador.ts) e o 😕 barrava a mensagem (Simulador, 18/10/2026) */
+  const abre = `${p.nome ? `${p.nome}, ${a}` : A} *${p.modelo.nome}* esgotou no momento.`;
   const chega = p.modelo.chegaEm ? ` A próxima remessa tem previsão de chegar dia ${p.modelo.chegaEm}.` : "";
   const outra = p.parecida ? ` Enquanto isso, ${artigo(p.parecida.nome) === "o" ? "o mais parecido" : "a mais parecida"} com pronta entrega é ${artigo(p.parecida.nome)} *${p.parecida.nome}*${p.parecida.preco ? `, por ${brl(p.parecida.preco)}` : ""}.` : "";
   return `${abre}${chega}${outra}\n\nQuer que eu te avise aqui assim que ${a} *${p.modelo.nome}* chegar?`;
