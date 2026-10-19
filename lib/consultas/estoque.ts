@@ -131,8 +131,16 @@ export async function listarCatalogo() {
       disponibilidade: m.disponibilidade,
       lancamento: m.lancamento,
       lancamentoTexto: m.lancamentoTexto,
+      reposicaoEm: m.reposicaoEm,
+      reposicaoQtd: m.reposicaoQtd,
+      /* a reposição ainda vale (data de hoje em diante, horário de Recife) */
+      chegando: sql<boolean>`coalesce("modelos"."reposicao_em" >= (now() at time zone 'America/Recife')::date, false)`,
       ordem: m.ordem,
       ativo: m.ativo,
+      /* unidades que dá para vender agora (o "veiculos" conta também as vendidas) */
+      disponiveis: sql<number>`(select count(*)::int from veiculos v where v.status = 'disponivel' and not v.teste and (v.modelo_id = "modelos"."id" or (v.modelo_id is null and lower(trim(v.modelo)) = lower(trim("modelos"."nome")))))`,
+      /* fila de espera: quem pediu e ainda não foi avisado */
+      naFila: sql<number>`(select count(*)::int from interesses_modelo i join conversas c on c.id = i.conversa_id where i.modelo_id = "modelos"."id" and i.avisado_em is null and not c.demo)`,
       veiculos: sql<number>`(select count(*)::int from veiculos v where v.modelo_id = "modelos"."id" and not v.teste)`,
       reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status <> 'cancelada')`,
       reservasNovas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status = 'nova')`,
@@ -141,6 +149,37 @@ export async function listarCatalogo() {
     .orderBy(desc(m.ativo), asc(m.ordem), asc(m.nome));
 }
 export type ItemCatalogo = Awaited<ReturnType<typeof listarCatalogo>>[number];
+
+/** Fila de espera (dono, 18/10/2026): quem pediu uma moto sem estoque, por modelo. Aceitou ser avisado = recebe o
+ *  aviso automático quando chegar; só perguntou = vira tarefa para a equipe. Conversa do Simulador fica de fora. */
+export async function listarFilaEspera() {
+  const i = schema.interessesModelo;
+  const c = schema.conversas;
+  const linhas = await db
+    .select({
+      id: i.id,
+      modeloId: i.modeloId,
+      modelo: schema.modelos.nome,
+      conversaId: i.conversaId,
+      telefone: i.telefone,
+      contato: c.contatoNome,
+      cliente: schema.clientes.nome,
+      origem: i.origem,
+      criadoEm: i.criadoEm,
+      consentiuEm: i.consentiuEm,
+      avisadoEm: i.avisadoEm,
+      mensagemEm: i.mensagemEm,
+    })
+    .from(i)
+    .innerJoin(c, eq(c.id, i.conversaId))
+    .innerJoin(schema.modelos, eq(schema.modelos.id, i.modeloId))
+    .leftJoin(schema.clientes, eq(schema.clientes.id, i.clienteId))
+    .where(eq(c.demo, false))
+    .orderBy(asc(schema.modelos.nome), desc(i.criadoEm))
+    .limit(500);
+  return linhas;
+}
+export type LinhaFila = Awaited<ReturnType<typeof listarFilaEspera>>[number];
 
 /** Veículos que podem entrar num negócio ou venda. */
 /** Veículos que podem entrar numa venda ou negócio. Os de teste só entram no funil do admin

@@ -120,7 +120,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   const v = schema.veiculos;
   const [linhas, cores, unidades, base, chegando] = await Promise.all([
     db
-      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade })
+      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade, reposicaoEm: m.reposicaoEm })
       .from(m)
       .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA, "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
@@ -161,7 +161,9 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     const minhas = unidades.filter((u) => u.modeloId === l.id || (!u.modeloId && u.modelo.trim().toLowerCase() === l.nome.trim().toLowerCase()));
     if (!minhas.length) {
       const vindo = chegando.filter((u) => u.modeloId === l.id || (!u.modeloId && u.modelo.trim().toLowerCase() === l.nome.trim().toLowerCase()));
-      const quando = vindo.map((u) => u.entradaEm).sort()[0];
+      /* reposição cadastrada no catálogo (18/10/2026) ou unidade reservada com entrada no futuro */
+      const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+      const quando = [...vindo.map((u) => u.entradaEm), ...(l.reposicaoEm && l.reposicaoEm >= hoje ? [l.reposicaoEm] : [])].sort()[0];
       semEstoque.push({ nome, apelidos: apelidosDoModelo(l.nome), chega: quando ? quando.split("-").reverse().slice(0, 2).join("/") : null });
       continue;
     }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { exigirPermissao } from "@/lib/auth/dal";
 import { pode } from "@/lib/dominio";
-import { listarCatalogo, listarCoresModelos, listarModelos, listarMovimentacoes, listarVeiculos, resumoEstoque } from "@/lib/consultas/estoque";
+import { listarCatalogo, listarCoresModelos, listarFilaEspera, listarModelos, listarMovimentacoes, listarVeiculos, resumoEstoque } from "@/lib/consultas/estoque";
 import { listarUnidades } from "@/lib/consultas/equipe";
 import { Pagina } from "@/components/ui/pagina";
 import { TelaEstoque } from "./tela";
@@ -12,7 +12,7 @@ export default async function PaginaEstoque({ searchParams }: { searchParams: Pr
   const u = await exigirPermissao("estoque.ver");
   const b = await searchParams;
   const verCusto = pode(u.papel, "custo.ver");
-  const [veiculos, resumo, modelos, unidades, movimentacoes, cores, catalogo] = await Promise.all([
+  const [veiculos, resumo, modelos, unidades, movimentacoes, cores, catalogo, fila] = await Promise.all([
     listarVeiculos({ ...b, verCusto, verTeste: u.papel === "admin" }),
     resumoEstoque(verCusto),
     listarModelos(),
@@ -20,6 +20,7 @@ export default async function PaginaEstoque({ searchParams }: { searchParams: Pr
     listarMovimentacoes(),
     listarCoresModelos(),
     listarCatalogo(),
+    listarFilaEspera(),
   ]);
   return (
     <Pagina larga>
@@ -31,6 +32,7 @@ export default async function PaginaEstoque({ searchParams }: { searchParams: Pr
         movimentacoes={movimentacoes}
         cores={cores}
         catalogo={catalogo}
+        fila={fila}
         filtros={b}
         permissoes={{ editar: pode(u.papel, "estoque.editar"), custo: verCusto, admin: u.papel === "admin" }}
       />

@@ -56,7 +56,7 @@ export async function mensagemDaEquipe(telefone: string): Promise<boolean> {
   return true;
 }
 
-const graph = async (caminho: string, init?: RequestInit) => {
+export const graph = async (caminho: string, init?: RequestInit) => {
   const c = await lerConfigWhatsApp();
   if (!c.token || !c.wabaId) throw new Error("WhatsApp da loja não configurado (token ou WABA) em Configurações → API Oficial.");
   const versao = process.env.WHATSAPP_API_VERSAO || "v21.0";

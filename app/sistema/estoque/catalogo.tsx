@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Eye, EyeOff, Film, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, Film, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2, Truck } from "lucide-react";
 import type { CorModelo, ItemCatalogo } from "@/lib/consultas/estoque";
 import { CAMPOS_FICHA, DISPONIBILIDADES, TIPOS_CATALOGO, type Disponibilidade, type TipoCatalogo } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
@@ -80,11 +80,13 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
                       {m.ativo && !m.mostrarNoSite && <Selo tom="neutro">Fora do site</Selo>}
                       {m.lancamento && <Selo tom="info">Lançamento</Selo>}
                       {m.reservasNovas > 0 && <Selo tom="atencao">{m.reservasNovas} reserva(s) nova(s)</Selo>}
+                      <SituacaoNoSite m={m} />
+                      {m.naFila > 0 && <Selo tom="atencao">{m.naFila} na fila de espera</Selo>}
                     </p>
                     <p className="text-[12px] text-ink-3">
                       {TIPOS_CATALOGO[m.tipo as TipoCatalogo] ?? m.tipo} · {m.precoTabela ? brl(m.precoTabela) : "Consultar preço"} ·{" "}
                       {DISPONIBILIDADES[m.disponibilidade as Disponibilidade] ?? m.disponibilidade}
-                      {m.veiculos ? ` · ${m.veiculos} veículo(s) no estoque` : ""}
+                      {m.tipo !== "acessorio" ? ` · ${m.disponiveis} disponível(is)` : ""}
                       {m.tipo === "acessorio" && m.quantidade != null ? ` · ${m.quantidade} em estoque` : ""}
                     </p>
                     {lista.length > 0 && (
@@ -203,6 +205,8 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>((item?.disponibilidade as Disponibilidade) ?? "consultar");
   const [lancamento, setLancamento] = useState(item?.lancamento ?? false);
   const [lancamentoTexto, setLancamentoTexto] = useState(item?.lancamentoTexto ?? "");
+  const [reposicaoEm, setReposicaoEm] = useState(item?.reposicaoEm ?? "");
+  const [reposicaoQtd, setReposicaoQtd] = useState(item?.reposicaoQtd != null ? String(item.reposicaoQtd) : "");
   const [fotoUrl, setFotoUrl] = useState(item?.fotoUrl ?? null);
   const [enviando, setEnviando] = useState(false);
   const entradaFoto = useRef<HTMLInputElement>(null);
@@ -228,6 +232,8 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       disponibilidade,
       lancamento,
       lancamentoTexto,
+      reposicaoEm,
+      reposicaoQtd,
     });
     if (!r.ok) {
       setErros(r.campos ?? {});
@@ -477,6 +483,22 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
         </Campo>
       </div>
 
+      {/* reposição a caminho (dono, 18/10/2026): o site mostra "Chegando dd/mm", a IA diz a previsão e sai sozinha quando chega */}
+      <div className="flex flex-col gap-2 rounded-2xl border border-linha p-3">
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold">
+          <Truck className="size-4" /> Reposição chegando
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo rotulo="Previsão de chegada" erro={erros.reposicaoEm}>
+            <Entrada type="date" value={reposicaoEm} onChange={(e) => setReposicaoEm(e.target.value)} />
+          </Campo>
+          <Campo rotulo="Quantas vêm (opcional)" erro={erros.reposicaoQtd}>
+            <Entrada value={reposicaoQtd} onChange={(e) => setReposicaoQtd(e.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={3} />
+          </Campo>
+        </div>
+        <p className="text-[12px] text-ink-3">Sem unidade disponível, o site mostra &quot;Chegando&quot; com a data e a IA avisa a previsão. Quando você cadastrar a moto como disponível, a reposição sai sozinha e a fila de espera é avisada.</p>
+      </div>
+
       <div className="flex flex-col gap-2 rounded-2xl border border-linha p-3">
         <Alternar marcado={lancamento} aoMudar={setLancamento} rotulo="Lançamento" descricao="Aparece em destaque no site, com o botão para o cliente reservar." />
         {lancamento && (
@@ -497,4 +519,16 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       </RodapeDialogo>
     </div>
   );
+}
+
+/* Situação no site, pelo estoque (dono, 18/10/2026): o mesmo cálculo de /api/vitrine/catalogo */
+function SituacaoNoSite({ m }: { m: ItemCatalogo }) {
+  if (!m.ativo || !m.mostrarNoSite || m.lancamento) return null;
+  if (m.tipo === "acessorio" && m.quantidade == null) return null;
+  const tem = m.tipo === "acessorio" ? (m.quantidade ?? 0) > 0 : m.disponiveis > 0;
+  if (tem) return <Selo tom="bom">No site: pronta entrega</Selo>;
+  if (m.reposicaoEm && m.chegando)
+    return <Selo tom="atencao">No site: chegando {m.reposicaoEm.split("-").reverse().slice(0, 2).join("/")}{m.reposicaoQtd ? ` (${m.reposicaoQtd})` : ""}</Selo>;
+  if (m.disponibilidade === "sob_encomenda") return <Selo tom="info">No site: sob encomenda</Selo>;
+  return <Selo tom="critico">No site: esgotado</Selo>;
 }

@@ -7,14 +7,14 @@
      - modelo novo aparece mesmo sem nenhuma unidade no estoque;
      - preço, ficha técnica, descrição e foto principal são os do sistema;
      - modelo com "Mostrar no site" desligado some do site;
-     - disponibilidade (pronta entrega / sob encomenda / consulte) e
+     - disponibilidade (pronta entrega / chegando dd/mm / esgotado, calculada pelo estoque; ou sob encomenda) e
        lançamento (com reserva) vêm junto.
    Se o sistema não responder em 3 s, nada muda: fica o estoque.js.
    Nunca vem custo nem quantidade em estoque — a API não entrega isso.
    ============================================================ */
 (function(){
   const TEMPO_LIMITE = 3000;
-  const DISPONIBILIDADES = {pronta_entrega:"Pronta entrega", sob_encomenda:"Sob encomenda", consultar:"Consulte disponibilidade"};
+  const DISPONIBILIDADES = {pronta_entrega:"Pronta entrega", sob_encomenda:"Sob encomenda", consultar:"Consulte disponibilidade", chegando:"Chegando", esgotado:"Esgotado"};
   const TIPOS = {moto_eletrica:"Moto elétrica", patinete:"Patinete elétrico", moto_combustao:"Moto a combustão", carro:"Carro", acessorio:"Acessório"};
   /* Patinete (04/10/2026): linha própria no site, logo depois das motos. Mora aqui, e não no estoque.js,
      porque o patinete só existe no catálogo do sistema: sem patinete cadastrado, a seção nem aparece. */
@@ -48,6 +48,7 @@
       foto: fotoValida(m.foto),
       cores: Array.isArray(m.cores) ? m.cores.map(c => texto(c && c.nome, 40)).filter(Boolean) : [],
       disponibilidade: DISPONIBILIDADES[m.disponibilidade] ? m.disponibilidade : "consultar",
+      chegaEm: typeof m.chegaEm === "string" && /^\d{2}\/\d{2}$/.test(m.chegaEm) ? m.chegaEm : null,
       lancamento: m.lancamento === true,
       lancamentoTexto: texto(m.lancamentoTexto, 80),
       reservas: Number.isInteger(m.reservas) && m.reservas > 0 ? m.reservas : 0,
@@ -79,7 +80,11 @@
   };
 
   /** Rótulo do selo de disponibilidade de um produto (ou null). */
-  window.rotuloDisponibilidade = p => p && p.disponibilidade ? DISPONIBILIDADES[p.disponibilidade] || null : null;
+  window.rotuloDisponibilidade = p => !p || !p.disponibilidade ? null
+    : p.disponibilidade === "chegando" ? (p.chegaEm ? "Chegando " + p.chegaEm : "Chegando")
+    : DISPONIBILIDADES[p.disponibilidade] || null;
+  /** Produto sem estoque agora (esgotado ou chegando): o botão vira "Avise-me quando chegar". */
+  window.semEstoqueNoSite = p => !!p && !p.lancamento && (p.disponibilidade === "esgotado" || p.disponibilidade === "chegando");
 
   /** Produtos marcados como lançamento, na ordem da equipe. */
   window.lancamentosDoSite = () => PRODUTOS.filter(p => p.lancamento && naVitrine(p));
@@ -136,6 +141,7 @@
       if(m.cores.length && !m.cores.includes(p.cor)) p.cor = m.cores[0];
       p.modeloId = m.id;
       p.disponibilidade = m.disponibilidade;
+      p.chegaEm = m.chegaEm;
       p.lancamento = m.lancamento;
       p.lancamentoTexto = m.lancamentoTexto;
       p.reservas = m.reservas;

@@ -38,3 +38,7 @@ voltou a valer depois de cada uma:
 - 05/10/2026 (patinetes) — scripts sobem para `?v=22`; card de patinete com o botão "Quero esse patinete"
   e mensagem do WhatsApp "neste patinete". Autorizado pelo usuário.
 - 05/10/2026 (selo) — card zero km mostra "NOVO" em vez de "ZERO KM", como os acessórios. Autorizado pelo usuário.
+- 18/10/2026 (estoque no site) — selo calculado pelo estoque: "Pronta entrega", "Chegando dd/mm" (reposição
+  cadastrada) ou "Esgotado" (cores novas em `.selo-disp`); produto sem estoque troca o botão por "Avise-me quando
+  chegar", que abre o WhatsApp com "Quero ser avisado quando a *X* chegar" (a IA põe o cliente na fila de espera);
+  `catalogo-sistema.js` sobe para `?v=23`. Autorizado pelo dono ("pode seguir sim").

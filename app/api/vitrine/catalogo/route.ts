@@ -11,6 +11,21 @@ import { CAMPOS_FICHA, DISPONIBILIDADES, valorFichaVazio } from "@/lib/dominio";
                  disponibilidade, lancamento, lancamentoTexto, reservas, ordem }] } */
 export const dynamic = "force-dynamic";
 
+/* Selo do site pelo estoque de verdade (dono, 18/10/2026: "no site tem vários produtos que não estão no estoque...
+   colocar esgotado"): tem unidade disponível (ou acessório com quantidade) → Pronta entrega; reposição cadastrada →
+   Chegando dd/mm; sem nada → Esgotado. "Sob encomenda" escolhido pela equipe vale no lugar do Esgotado. Acessório
+   sem quantidade contada fica com o que a equipe escolheu. */
+function situacaoNoSite(x: { tipo: string; quantidade: number | null; disponibilidade: string; reposicaoEm: string | null }, unidades: number, hoje: string) {
+  const manual = x.disponibilidade in DISPONIBILIDADES ? x.disponibilidade : "consultar";
+  const acessorio = x.tipo === "acessorio";
+  if (acessorio && x.quantidade == null) return { disponibilidade: manual, chegaEm: null };
+  const tem = acessorio ? (x.quantidade ?? 0) > 0 : unidades > 0;
+  if (tem) return { disponibilidade: "pronta_entrega", chegaEm: null };
+  if (x.reposicaoEm && x.reposicaoEm >= hoje) return { disponibilidade: "chegando", chegaEm: x.reposicaoEm.split("-").reverse().slice(0, 2).join("/") };
+  if (manual === "sob_encomenda") return { disponibilidade: manual, chegaEm: null };
+  return { disponibilidade: "esgotado", chegaEm: null };
+}
+
 export async function GET() {
   const m = schema.modelos;
   const c = schema.modeloCores;
@@ -29,6 +44,8 @@ export async function GET() {
         lancamento: m.lancamento,
         lancamentoTexto: m.lancamentoTexto,
         ordem: m.ordem,
+        quantidade: m.quantidade,
+        reposicaoEm: m.reposicaoEm,
         /* só o número de reservas em aberto ("12 pessoas já reservaram"), nunca quem */
         reservas: sql<number>`(select count(*)::int from reservas_lancamento r where r.modelo_id = "modelos"."id" and r.status <> 'cancelada')`,
       })
@@ -37,6 +54,15 @@ export async function GET() {
       .orderBy(asc(m.ordem), asc(m.nome));
 
     const ids = modelos.map((x) => x.id);
+    /* unidades disponíveis por modelo (só para o selo; a quantidade não sai na resposta) */
+    const v = schema.veiculos;
+    const unidades = ids.length
+      ? await db
+          .select({ modeloId: v.modeloId, modelo: v.modelo })
+          .from(v)
+          .where(and(eq(v.status, "disponivel"), eq(v.teste, false)))
+      : [];
+    const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
     const cores = ids.length
       ? await db
           .select({ modeloId: c.modeloId, nome: c.nome, hex: c.hex, foto: c.fotoUrl })
@@ -60,7 +86,7 @@ export async function GET() {
         descricao: x.descricao,
         foto: x.foto?.startsWith("/api/vitrine/foto/") ? x.foto : null,
         cores: cores.filter((k) => k.modeloId === x.id).map((k) => ({ nome: k.nome, hex: k.hex, foto: k.foto })),
-        disponibilidade: x.disponibilidade in DISPONIBILIDADES ? x.disponibilidade : "consultar",
+        ...situacaoNoSite(x, unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())).length, hoje),
         lancamento: x.lancamento,
         lancamentoTexto: x.lancamento ? x.lancamentoTexto : null,
         reservas: x.lancamento ? x.reservas : 0,

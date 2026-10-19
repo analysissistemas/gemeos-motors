@@ -309,6 +309,13 @@
       "when": 1792113778250,
       "tag": "0043_chamados_melhoria",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792367442240,
+      "tag": "0044_fila_espera_reposicao",
+      "breakpoints": true
     }
   ]
 }

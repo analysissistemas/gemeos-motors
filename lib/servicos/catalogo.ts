@@ -69,6 +69,15 @@ export const esquemaModelo = z
     disponibilidade: z.enum(chaves(DISPONIBILIDADES), { message: "Escolha a disponibilidade" }).default("consultar"),
     lancamento: z.boolean().default(false),
     lancamentoTexto: textoOpcional(60),
+    /* reposição a caminho: data prevista (AAAA-MM-DD) e quantas vêm; vazio = sem reposição */
+    reposicaoEm: z
+      .union([z.null(), z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")])
+      .optional()
+      .transform((v) => (v ? v : null)),
+    reposicaoQtd: z
+      .union([z.null(), z.literal(""), z.coerce.number().int("Quantidade sem vírgula").min(1, "Pelo menos 1").max(999, "Quantidade muito alta")])
+      .optional()
+      .transform((v) => (typeof v === "number" ? v : null)),
   })
   .transform((d) => ({
     ...d,
@@ -77,6 +86,7 @@ export const esquemaModelo = z
     /* moto e patinete contam pelas unidades do estoque, não por aqui */
     quantidade: d.tipo === "acessorio" ? d.quantidade : null,
     lancamentoTexto: d.lancamento ? d.lancamentoTexto : null,
+    reposicaoQtd: d.reposicaoEm ? d.reposicaoQtd : null,
     eletrico: ehEletrico(d.tipo),
   }));
 export type DadosModelo = z.infer<typeof esquemaModelo>;

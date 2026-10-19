@@ -3,7 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Bike, ChevronRight, Pencil, Plus, Search } from "lucide-react";
-import type { CorModelo, ItemCatalogo, VeiculoLinha } from "@/lib/consultas/estoque";
+import type { CorModelo, ItemCatalogo, LinhaFila, VeiculoLinha } from "@/lib/consultas/estoque";
 import { CONDICOES, ORIGENS_ENTRADA, STATUS_VEICULO, TIPOS_VEICULO, ehEletrico } from "@/lib/dominio";
 import { brl, data, formatarPlaca, km } from "@/lib/formato";
 import { Abas } from "@/components/ui/abas";
@@ -14,6 +14,7 @@ import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { ajustarGrupoVeiculos, ajustarQuantidadeAcessorio, darEntradaAcessorio, darEntradaEmLote, mudarStatusVeiculo, salvarVeiculo } from "./acoes";
 import { BolinhaCor } from "./cores";
 import { Catalogo } from "./catalogo";
+import { FilaEspera } from "./fila";
 
 type Modelo = { id: number; nome: string; tipo: string; marca: string | null; precoTabela: number | null; ficha: Record<string, string> | null };
 type Mov = {
@@ -292,6 +293,7 @@ export function TelaEstoque({
   movimentacoes,
   cores,
   catalogo,
+  fila,
   filtros,
   permissoes,
 }: {
@@ -302,10 +304,11 @@ export function TelaEstoque({
   movimentacoes: Mov;
   cores: CorModelo[];
   catalogo: ItemCatalogo[];
+  fila: LinhaFila[];
   filtros: { q?: string; status?: string; tipo?: string };
   permissoes: { editar: boolean; custo: boolean; admin: boolean };
 }) {
-  const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov">("veiculos");
+  const [aba, setAba] = useState<"veiculos" | "catalogo" | "mov" | "fila">("veiculos");
   const [editando, setEditando] = useState<Partial<VeiculoLinha> | null>(null);
   const [ajustando, setAjustando] = useState<VeiculoLinha[] | null>(null);
   const [ajustandoAcessorio, setAjustandoAcessorio] = useState<ItemCatalogo | null>(null);
@@ -367,6 +370,7 @@ export function TelaEstoque({
           { id: "veiculos", rotulo: "Veículos", contador: veiculos.length },
           { id: "catalogo", rotulo: "Catálogo e cores", contador: modelos.length },
           { id: "mov", rotulo: "Entradas e saídas" },
+          { id: "fila", rotulo: "Fila de espera", contador: fila.filter((x) => !x.avisadoEm).length },
         ]}
       />
 
@@ -521,6 +525,8 @@ export function TelaEstoque({
       {ajustandoAcessorio && <AjusteAcessorio item={ajustandoAcessorio} aoFechar={() => setAjustandoAcessorio(null)} />}
 
       {aba === "catalogo" && <Catalogo itens={catalogo} cores={cores} editar={permissoes.editar} />}
+
+      {aba === "fila" && <FilaEspera linhas={fila} />}
 
       {aba === "mov" && (
         <div className="grid gap-4 lg:grid-cols-2">

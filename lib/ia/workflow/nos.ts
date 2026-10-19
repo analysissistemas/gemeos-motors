@@ -44,7 +44,9 @@ import {
 } from "@/lib/ia/pipeline";
 import { decidirSimulacao } from "@/lib/ia/simulacao-fluxo";
 import { lerTaxas } from "@/lib/ia/taxas-maquineta";
-import { registrarInteresse } from "@/lib/servicos/interesses";
+import { consentirAviso, registrarInteresse } from "@/lib/servicos/interesses";
+import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "@/lib/ia/fila-espera";
+import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { instrucaoDeMidia, planejarApresentacao, planejarIndicacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
@@ -381,6 +383,26 @@ async function motosParaIndicar(c: CtxWorkflow): Promise<MotoParaIndicar[]> {
       return minhas.length ? moto : null;
     })
     .filter((x): x is MotoParaIndicar => !!x);
+}
+/* Modelos do catálogo sem unidade disponível agora, com a previsão de chegada (reposição cadastrada ou unidade
+   reservada com entrada no futuro). Conversa do Simulador enxerga as unidades de teste. */
+async function modelosSemUnidade(c: CtxWorkflow): Promise<ModeloSemEstoque[]> {
+  const m = schema.modelos;
+  const v = schema.veiculos;
+  const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+  const [modelos, unidades, vindo] = await Promise.all([
+    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, reposicaoEm: m.reposicaoEm }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
+    db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), c.conversa?.demo ? undefined : eq(v.teste, false))),
+    db.select({ modeloId: v.modeloId, entradaEm: v.entradaEm }).from(v).where(and(eq(v.status, "reservado"), sql`${v.entradaEm} > current_date`, c.conversa?.demo ? undefined : eq(v.teste, false))),
+  ]);
+  const ddmm = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
+  return modelos
+    .filter((x) => !unidades.some((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())))
+    .map((x) => {
+      const reservada = vindo.filter((u) => u.modeloId === x.id).map((u) => u.entradaEm).sort()[0];
+      const chega = x.reposicaoEm && x.reposicaoEm >= hoje ? x.reposicaoEm : (reservada ?? null);
+      return { id: x.id, nome: x.nome, tipo: x.tipo, preco: x.preco ? Number(x.preco) : null, chegaEm: chega ? ddmm(chega) : null };
+    });
 }
 /** As falas da loja (IA ou vendedor) no histórico, uma por bloco. */
 const falasDaLoja = (historico: string | null | undefined) => (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^(Agente IA|Vendedor):/.test(b));
@@ -1415,6 +1437,31 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       const motivo = motivoAvaliacao({ ...avaliacao, modeloDeInteresse: modeloDaConversa, relato });
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao: avaliacao.tipo === "troca" ? ("compra" as const) : null, modeloDaConversa, ultimaDaLoja, avaliacao, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, avaliacao } };
+    }
+    /* FILA DE ESPERA (dono, 18/10/2026: "quando o cliente pedir um produto que não está em estoque, a IA pega o interesse e,
+       quando eu cadastrar essa moto, lembra essa pessoa"). Pediu um modelo esgotado: diz que esgotou (com a previsão), sugere
+       a mais parecida que tem e pergunta se quer ser avisado. Disse "sim" (ou já pediu o aviso, como no botão do site): entra
+       na fila do aviso automático. Texto do sistema. */
+    if (r.ctx.texto) {
+      const nomeCli = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const semUnidade = await modelosSemUnidade(c);
+      const pedido = citouSemEstoque(semAberturaDoSite(c.textoBuffer), semUnidade);
+      let texto: string | null = null;
+      if (perguntouAviso(ultimaDaLoja) && !pedido && respostaSimNao(c.textoBuffer) === "sim") {
+        const aceitos = await consentirAviso(c.conversaId);
+        const modelo = semUnidade.find((x) => aceitos.some((a) => a.modeloId === x.id));
+        if (modelo) texto = textoNaFila({ nome: nomeCli, modelo });
+      } else if (pedido && pediuAviso(c.textoBuffer)) {
+        await registrarInteresse({ conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, modeloId: pedido.id, origem: "ia", consentiu: true });
+        texto = textoNaFila({ nome: nomeCli, modelo: pedido });
+      } else if (pedido && !(new RegExp(`esgotou no momento`, "i").test(c.memoria.historico ?? "") && (c.memoria.historico ?? "").includes(pedido.nome))) {
+        await registrarInteresse({ conversaId: c.conversaId, telefone: c.conversa!.contatoTelefone, modeloId: pedido.id, origem: "ia" });
+        texto = textoEsgotado({ nome: nomeCli, modelo: pedido, parecida: maisParecida(pedido, await motosParaIndicar(c)) });
+      }
+      if (texto) {
+        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, filaDeEspera: pedido?.nome ?? "aceitou o aviso" } };
+      }
     }
     /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
     if (passo?.acao === "indicar" && r.ctx.texto) {

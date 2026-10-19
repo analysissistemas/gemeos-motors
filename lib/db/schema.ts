@@ -142,6 +142,10 @@ export const modelos = pgTable(
        0 = acabou (a IA não oferece). Pedido de 05/10/2026: "Baú 28 litros, 7 unidades". */
     quantidade: integer(),
     disponibilidade: text().notNull().default("consultar"), // pronta_entrega | sob_encomenda | consultar
+    /* reposição a caminho (dono, 18/10/2026: "uma opção de colocar na aba estoque quando está chegando a reposição"):
+       o site mostra "Chegando dd/mm" e a IA diz a previsão. Sai sozinha quando chega unidade disponível. */
+    reposicaoEm: date({ mode: "string" }),
+    reposicaoQtd: integer(),
     /* lançamento: destaque no site e formulário de reserva */
     lancamento: boolean().notNull().default(false),
     lancamentoTexto: text(), // frase curta: "Chega em outubro"
@@ -762,6 +766,10 @@ export const interessesModelo = pgTable(
     criadoEm: criadoEm(),
     avisadoEm: quando(),
     followUpId: integer().references(() => followUps.id, { onDelete: "set null" }),
+    /* o cliente aceitou ser avisado (fila de espera, 18/10/2026): só esses recebem o aviso automático da IA */
+    consentiuEm: quando(),
+    /* o aviso de chegada saiu para o cliente (texto livre ou modelo da Meta) */
+    mensagemEm: quando(),
   },
   (t) => [
     /* um interesse aberto por conversa e modelo */

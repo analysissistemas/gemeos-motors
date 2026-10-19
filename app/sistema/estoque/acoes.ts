@@ -10,10 +10,11 @@ import { ehEletrico, ETAPAS_ABERTAS, pode, STATUS_VEICULO } from "@/lib/dominio"
 import { brl } from "@/lib/formato";
 import { dispararFollowUpsDeEstoque } from "@/lib/servicos/interesses";
 
-/* modelo voltou ao estoque: avisa a equipe dos interessados. Falha aqui nunca desfaz o cadastro. */
-async function avisarInteressados(modeloId: number | null | undefined) {
+/* modelo voltou ao estoque: a fila de espera é avisada (quem aceitou, pela IA; o resto, tarefa da equipe). Moto de
+   teste avisa só as conversas do Simulador (para validar sem incomodar cliente). Falha aqui nunca desfaz o cadastro. */
+async function avisarInteressados(modeloId: number | null | undefined, teste = false) {
   try {
-    await dispararFollowUpsDeEstoque(modeloId);
+    await dispararFollowUpsDeEstoque(modeloId, { teste });
   } catch (e) {
     console.error("[estoque] follow-up de estoque falhou", e);
   }
@@ -55,8 +56,8 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
             dados: { campos },
           }, tx);
       });
-      /* veículo de teste nunca avisa cliente de verdade */
-      if (d.status === "disponivel" && !(d.teste ?? antes.teste)) await avisarInteressados(valores.modeloId ?? antes.modeloId);
+      /* veículo de teste nunca avisa cliente de verdade: só a fila do Simulador */
+      if (d.status === "disponivel") await avisarInteressados(valores.modeloId ?? antes.modeloId, !!(d.teste ?? antes.teste));
       revalidatePath("/sistema/estoque");
       return { id };
     }
@@ -69,9 +70,9 @@ export async function salvarVeiculo(entrada: { id?: number } & Record<string, un
       await registrarLog(u, { acao: "veiculo.criado", entidade: "veiculo", entidadeId: novo.id, descricao: `Deu entrada no veículo ${nome}${d.valorAnunciado ? ` (${brl(d.valorAnunciado)})` : ""}` }, tx);
       return novo.id;
     });
-    if (d.status === "disponivel" && !d.teste) {
+    if (d.status === "disponivel") {
       const [novo] = await db.select({ modeloId: schema.veiculos.modeloId }).from(schema.veiculos).where(eq(schema.veiculos.id, id)).limit(1);
-      await avisarInteressados(novo?.modeloId);
+      await avisarInteressados(novo?.modeloId, !!d.teste);
     }
     revalidatePath("/sistema/estoque");
     return { id };
@@ -157,7 +158,7 @@ export async function darEntradaEmLote(entrada: {
         );
       }
     });
-    if (entrada.status === "disponivel" && !teste) await avisarInteressados(m.id);
+    if (entrada.status === "disponivel") await avisarInteressados(m.id, !!teste);
     revalidatePath("/sistema/estoque");
     return { quantidade };
   }, entrada.quantidade > 1 ? `${entrada.quantidade} unidades cadastradas no estoque` : "Unidade cadastrada no estoque");
@@ -238,7 +239,7 @@ export async function ajustarGrupoVeiculos(entrada: { ids: number[]; quantidade:
         await registrarLog(u, { acao: "veiculo.criado", entidade: "veiculo", entidadeId: novo.id, descricao: `Deu entrada no veículo ${nome}${(valor ?? base.valorAnunciado) ? ` (${brl(valor ?? base.valorAnunciado)})` : ""} · quantidade ajustada para ${quantidade}` }, tx);
       }
     });
-    if (entrada.status === "disponivel" && quantidade > 0 && !base.teste) await avisarInteressados(base.modeloId);
+    if (entrada.status === "disponivel" && quantidade > 0) await avisarInteressados(base.modeloId, !!base.teste);
     revalidatePath("/sistema/estoque");
     return { quantidade };
   }, "Estoque atualizado");
@@ -255,7 +256,7 @@ export async function mudarStatusVeiculo(id: number, status: "disponivel" | "res
       await tx.update(schema.veiculos).set({ status, atualizadoEm: new Date() }).where(eq(schema.veiculos.id, id));
       await registrarLog(u, { acao: "veiculo.status", entidade: "veiculo", entidadeId: id, descricao: `Mudou ${v.modelo} de "${STATUS_VEICULO[v.status as keyof typeof STATUS_VEICULO]}" para "${STATUS_VEICULO[status]}"` }, tx);
     });
-    if (status === "disponivel" && !v.teste) await avisarInteressados(v.modeloId);
+    if (status === "disponivel") await avisarInteressados(v.modeloId, !!v.teste);
     revalidatePath("/sistema/estoque");
     return null;
   }, "Situação atualizada");
