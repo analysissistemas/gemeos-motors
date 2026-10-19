@@ -1441,8 +1441,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* FILA DE ESPERA (dono, 18/10/2026: "quando o cliente pedir um produto que não está em estoque, a IA pega o interesse e,
        quando eu cadastrar essa moto, lembra essa pessoa"). Pediu um modelo esgotado: diz que esgotou (com a previsão), sugere
        a mais parecida que tem e pergunta se quer ser avisado. Disse "sim" (ou já pediu o aviso, como no botão do site): entra
-       na fila do aviso automático. Texto do sistema. */
-    if (r.ctx.texto) {
+       na fila do aviso automático. Texto do sistema: vale mesmo que a IA não tenha escrito nada (Simulador, 18/10/2026: "Tem a
+       Tank?" voltou sem texto da IA e o cliente recebeu só "Em que posso te ajudar?"). Conversa já com o vendedor não entra. */
+    if (!r.ctx.humano || !r.ctx.texto) {
       const nomeCli = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
       const semUnidade = await modelosSemUnidade(c);
       const pedido = citouSemEstoque(semAberturaDoSite(c.textoBuffer), semUnidade);
@@ -1804,7 +1805,9 @@ ${lista}` : TEXTO_DA_RESPOSTA[paraMidia];
        economia pronta (moto, semana e mês). E nada de perguntar cor antes de ele escolher a moto. */
     resposta = await garantirEconomia(c, resposta);
     /* o cliente só se apresentou (disse o nome, sem dizer o que procura): antes da pergunta, o que a loja vende */
-    resposta = await entenderPrimeiro(resposta, intencao, c);
+    /* texto pronto do sistema (fila de espera, troca, catálogo da foto…) já é a resposta certa: não passa pela limpeza de
+       quem ainda não disse o que quer ("Tem a Tank?" perdia o "esgotou" e virava "Em que posso te ajudar?", 18/10/2026) */
+    if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = await entenderPrimeiro(resposta, intencao, c);
     /* condução até o fechamento (pedido do dono, 03/10/2026): a proposta automática saiu (P20); no lugar,
        "o que falta?", objeção vira economia ou pergunta aberta, decidido ganha parabéns e "retirar ou entrega?" */
     /* a proposta automática saiu (P20); se a IA ainda escrever uma (prompt antigo), ela sai da resposta */
