@@ -13,7 +13,7 @@ import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoC
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
-import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_CONVIDOU_VISITA, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_CONVIDOU_VISITA, RX_DIA_INCERTO, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
 import { diaPorExtensoDe, STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -1675,6 +1675,14 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       const texto = `Combinado${nome ? `, ${nome}` : ""}! Deixei anotado: ${diaPorExtenso(diaCompra)}, você vem fechar ${modeloDaConversa ? `a sua *${modeloDaConversa}*` : "a sua moto"} ✅ Se quiser adiantar alguma coisa até lá, me fala por aqui 😊`;
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, compraPrevista: diaPorExtenso(diaCompra) } };
+    }
+    /* "talvez sábado", "vou ver se sexta dá": nada vai para a agenda, e a resposta é fixa (Simulador, 20/10/2026: a IA
+       respondeu "Sábado está ótimo!" e o cliente acharia que ficou marcado). Dono: "o mais linear possível" */
+    if (momento === "quer_visitar" && !r.ctx.humano && RX_DIA_INCERTO.test(c.textoBuffer) && dataHoraDaVisita(c.textoBuffer).temDia) {
+      const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const texto = `Sem problema${nome ? `, ${nome}` : ""}! Quando tiver certeza do dia, me avisa por aqui que eu já deixo anotado pra você 😊`;
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento } };
     }
     if (momento === "informou_visita") {
       const v = await agendarVisitaPelaIa(c, { modelo: modeloDaConversa, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), horario });
