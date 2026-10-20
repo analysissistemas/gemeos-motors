@@ -12,7 +12,7 @@
    - escolheu_entrega / escolheu_retirada: respondeu a pergunta "retirar ou entrega?"
    - mandou_dados: mandou os dados pedidos (com CPF); dados_parciais: mandou parte, sem CPF */
 
-import { dataHoraDaVisita, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
+import { dataHoraDaVisita, RX_CONVIDOU_VISITA, RX_DIA_INCERTO, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
 import { artigo, ehACombustao } from "./estoque-tipos.ts";
 import { lerDadosDoCliente } from "./dados-cliente.ts";
 
@@ -122,7 +122,12 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (RX_QUER_PARCELAR.test(t)) return "quer_parcelar";
   /* visita / test drive: respondeu o dia e a hora que a loja perguntou, ou já pediu com dia e hora */
   const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
+  /* na dúvida ("talvez sábado", "vou ver se dá") nada vai para a agenda: a IA pergunta (dono, 20/10/2026) */
+  const incerto = RX_DIA_INCERTO.test(p.textoCliente);
+  if (incerto && (dh.temDia || dh.temHora) && (p.jaAgendou || RX_QUER_VISITAR.test(p.textoCliente) || RX_CONVIDOU_VISITA.test(p.ultimaDaLoja) || RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja))) return "quer_visitar";
   if (RX_PEDIU_HORARIO_VISITA.test(p.ultimaDaLoja) && (dh.temDia || dh.temHora)) return "informou_visita";
+  /* a loja convidou ("quer vir ver amanhã?") e o cliente disse o dia ("só sábado de manhã"): já vai para a agenda */
+  if (RX_CONVIDOU_VISITA.test(p.ultimaDaLoja) && dh.diaDito && !t.includes("?")) return "informou_visita";
   /* já agendado e o cliente manda outro dia ou hora (Elton, 15/10/2026: "quarta feira que vem" depois do agendado na
      sexta; a IA disse "confirmado" e a agenda ficou na sexta): remarca. Pergunta ("abre sábado?") não remarca. */
   if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora) && ehRemarcacao(p.textoCliente)) return "informou_visita";

@@ -13,7 +13,7 @@ import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoC
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
-import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_CONVIDOU_VISITA, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
 import { diaPorExtensoDe, STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
@@ -1401,7 +1401,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     /* acabou de agendar: outro dia ou hora agora é remarcação (Elton, 15/10/2026) */
     /* tem visita marcada na agenda (não só nas últimas mensagens: os follow-ups empurram o "Agendado" para trás) */
     const jaAgendou = RX_AGENDADO.test(ultimasFalasDaLoja(c.memoria.historico, 3)) || !!(await visitaAbertaDaConversa(c.conversaId));
-    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || jaAgendou || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
+    const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || RX_CONVIDOU_VISITA.test(ultimaDaLoja) || jaAgendou || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
     const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes), jaAgendou }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();

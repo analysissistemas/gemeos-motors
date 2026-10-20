@@ -19,6 +19,12 @@ export const RX_QUER_VISITAR =
   /(?<![\p{L}])(test\s?drive|testar a moto|dar uma volta|andar nela|ver (ela |a moto |as motos )?pessoalmente|ver de perto|ir (ai|a[ií]|na loja|ate a loja|ate ai|ate a[ií])|passar (ai|a[ií]|na loja)|dar uma passad\p{L}*|dou uma passad\p{L}*|passo (ai|a[ií]|l[aá]|na loja)|dou um pulo|dar um pulo|visitar|conhecer a loja|vou (ai|a[ií]|na loja|passar ai|passar a[ií])|posso ir|quero ir|da pra ir|agendar (uma )?visita|marcar (uma )?visita)(?![\p{L}])/iu;
 /** A última mensagem da loja perguntou o dia e a hora da visita? */
 export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|test drive|passar)|que horas[^?]{0,40}(vir|passar|visita)|qual dia[^?]{0,40}(vir|passar|visita)|(me |nos )?(fala|diz|informa|manda)\s+(o|qual)\s+dia|que horas fica (melhor|bom)/iu;
+/** A loja convidou para vir ("quer vir ver amanhã?", "pode passar aqui sábado?"): o dia que o cliente responder vai para a
+ *  agenda (Simulador, 20/10/2026: o vendedor convidou, o cliente disse "só sábado de manhã" e a IA perguntou se agendava). */
+export const RX_CONVIDOU_VISITA = /\b(quer|queira|pode|podia|consegue|gostaria de|bora|vem|venha)\b[^?]{0,30}\b(vir|passar|visitar|conhecer|dar uma passada|fazer (um|o) test drive)\b[^?]{0,60}\?/iu;
+/** "Talvez sábado", "vou ver se sexta dá", "se der eu passo": o cliente ainda não decidiu. Nada vai para a agenda; a IA
+ *  pergunta (dono, 20/10/2026: "tem que ser o mais linear possível, para a IA não marcar nada errado"). */
+export const RX_DIA_INCERTO = /(?<![\p{L}])(talvez|acho que|quem sabe|se der|se eu puder|se conseguir|vou ver|vejo|ver se|n[aã]o sei|depende|pode ser que|tento|vou tentar|ainda n[aã]o|te (falo|aviso|digo|confirmo)|depois (te )?(falo|aviso|digo|confirmo|vejo))(?![\p{L}])/iu;
 /** "Onde fica a loja?", "qual o endereço?", "manda a localização": quem pergunta onde fica quer vir (dono, 14/10/2026:
  *  "quando o cliente pergunta aonde fica, a IA já pega o horário que ele vai e coloca como test drive"). */
 export const RX_PERGUNTA_ENDERECO = /(?<![\p{L}])(onde (fica|[ée]|voc[êe]s ficam|ficam|est[aã]o)|aonde (fica|[ée])|qual (o|[ée] o) endere[çc]o|endere[çc]o da loja|me (manda|passa|envia) (o endere[çc]o|a localiza[çc][ãa]o)|localiza[çc][ãa]o( da loja)?\??$)(?![\p{L}])/iu;
@@ -58,16 +64,17 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
   if (hora !== null && hora >= 1 && hora <= 7 && !/(?<!a)manha/.test(t)) hora += 12;
   if (hora !== null && (hora > 23 || min > 59)) hora = null;
 
-  /* dia */
+  /* dia. "amanhã não dá, só sábado": o dia negado não conta (Simulador, 20/10/2026) */
+  const td = t.replace(/\b(depois de amanha|amanha|hoje|domingo|segunda|terca|quarta|quinta|sexta|sabado)(?:[- ]feira)?\s*,?\s*(?:eu\s+)?nao\s+(?:da|posso|consigo|vai dar|rola|vou|vai)\b/g, " ");
   let dia: { ano: number; mes: number; dia: number } | null = null;
-  const d1 = /(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?!\d)/.exec(t);
+  const d1 = /(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?!\d)/.exec(td);
   /* "dia 30 de novembro", "5 de dezembro" (Milton, 19/10/2026: "dia 30 de novembro eu compro") */
-  const d3 = /(?<!\d)(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.exec(t);
-  const d2 = /\bdia\s+(\d{1,2})(?!\d)/.exec(t);
-  const semana = /\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)\b/.exec(t);
-  if (/\bdepois de amanha\b/.test(t)) dia = mais(hoje, 2);
-  else if (/\bamanha\b/.test(t)) dia = mais(hoje, 1);
-  else if (/\bhoje\b/.test(t)) dia = mais(hoje, 0);
+  const d3 = /(?<!\d)(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.exec(td);
+  const d2 = /\bdia\s+(\d{1,2})(?!\d)/.exec(td);
+  const semana = /\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)\b/.exec(td);
+  if (/\bdepois de amanha\b/.test(td)) dia = mais(hoje, 2);
+  else if (/\bamanha\b/.test(td)) dia = mais(hoje, 1);
+  else if (/\bhoje\b/.test(td)) dia = mais(hoje, 0);
   else if (d3) {
     const mes = MESES[d3[2]];
     const passou = mes < hoje.mes || (mes === hoje.mes && Number(d3[1]) < hoje.dia);
@@ -89,7 +96,7 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
     if (n === 0 && hora !== null && (hora < hoje.hora || (hora === hoje.hora && min <= hoje.min))) n = 7;
     /* "quinta que vem" dito numa quinta, ou "quinta" sem hora dito numa quinta já no fim do dia: a próxima
        (Simulador de 15/10/2026, quinta às 22h: "na verdade vou na quinta feira" virou hoje, que já tinha passado) */
-    if (n === 0 && (/\b(que vem|proxim[ao])\b/.test(t) || (hora === null && hoje.hora >= 17))) n = 7;
+    if (n === 0 && (/\b(que vem|proxim[ao])\b/.test(td) || (hora === null && hoje.hora >= 17))) n = 7;
     dia = mais(hoje, n);
   }
   const diaDito = !!dia;
@@ -111,7 +118,7 @@ function mais(h: { ano: number; mes: number; dia: number }, n: number) {
 const RX_COMPRA_PREVISTA = /(?<![a-z])(?:compro|fecho|fechamos|fecharemos|pego ela|pego a moto|vou (?:comprar|fechar|pegar|buscar)|venho (?:comprar|fechar|pegar|buscar)|(?:vou|passo) (?:ai|la|na loja) (?:pra |para )?(?:comprar|fechar|pegar|buscar))(?![a-z])/;
 export function compraPrevista(texto: string, agora: Date = new Date()): { ano: number; mes: number; dia: number } | null {
   const t = semAcento(texto);
-  if (!RX_COMPRA_PREVISTA.test(t) || /\bnao (?:vou |da pra |posso )?(?:compr|fech|peg|busc)/.test(t)) return null;
+  if (!RX_COMPRA_PREVISTA.test(t) || /\bnao (?:vou |da pra |posso )?(?:compr|fech|peg|busc)/.test(t) || RX_DIA_INCERTO.test(texto)) return null;
   const dh = dataHoraDaVisita(texto, agora);
   return dh.diaDito && dh.dia ? dh.dia : null;
 }

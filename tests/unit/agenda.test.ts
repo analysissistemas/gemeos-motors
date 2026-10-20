@@ -110,3 +110,35 @@ test("Milton (19/10/2026): 'dia 30 de novembro eu compro' é compra prevista; 's
   assert.equal(m("Gostei, sexta eu passo aí"), "informou_visita");
   assert.equal(m("vou aí ver de perto"), "quer_visitar");
 });
+
+test("Simulador, 20/10/2026: o vendedor convidou e o cliente disse o dia que pode (dia negado não conta)", async () => {
+  const { detectarMomento } = await import("../../lib/ia/fechamento.ts");
+  const terca = new Date("2026-10-20T08:30:00Z"); // terça, 05:30 em Recife
+  assert.deepEqual(dataHoraDaVisita("Amanhã não dá, só sábado de manhã", terca).dia, { ano: 2026, mes: 9, dia: 24 });
+  assert.deepEqual(dataHoraDaVisita("sexta não posso, pode ser segunda", terca).dia, { ano: 2026, mes: 9, dia: 26 });
+  assert.equal(dataHoraDaVisita("amanhã não dá", terca).diaDito, false);
+  assert.deepEqual(dataHoraDaVisita("amanhã às 10h", terca).dia, { ano: 2026, mes: 9, dia: 21 });
+  const convite = "Edimilson, aqui é o Milton. A N2 tem pronta entrega na cor verde, quer vir ver amanhã?";
+  const m = (t: string, loja = convite) => detectarMomento({ textoCliente: t, ultimaDaLoja: loja, conheceModelo: true, objecoesAntes: 0, jaAgendou: false });
+  assert.equal(m("Amanhã não dá, só sábado de manhã"), "informou_visita");
+  assert.equal(m("pode ser sexta"), "informou_visita");
+  assert.notEqual(m("sábado vocês abrem?"), "informou_visita"); // pergunta não anota
+  assert.notEqual(m("sábado", "Qual delas te agradou mais? 😊"), "informou_visita"); // sem convite, só o dia não anota
+});
+
+test("dono, 20/10/2026: na dúvida nada vai para a agenda (talvez, vou ver, se der)", async () => {
+  const { detectarMomento } = await import("../../lib/ia/fechamento.ts");
+  const { compraPrevista } = await import("../../lib/ia/agenda.ts");
+  const terca = new Date("2026-10-20T08:30:00Z");
+  const convite = "A N2 tem pronta entrega, quer vir ver amanhã?";
+  const m = (t: string, loja = convite, jaAgendou = false) => detectarMomento({ textoCliente: t, ultimaDaLoja: loja, conheceModelo: true, objecoesAntes: 0, jaAgendou, agora: terca });
+  assert.equal(m("talvez sábado"), "quer_visitar");
+  assert.equal(m("vou ver se sábado dá"), "quer_visitar");
+  assert.equal(m("Sexta feira vou aí, se der", ""), "quer_visitar");
+  assert.equal(m("acho que quarta eu passo aí", ""), "quer_visitar");
+  assert.equal(m("talvez quarta", "", true), "quer_visitar"); // já agendado: dúvida não remarca
+  assert.equal(m("sábado"), "informou_visita");
+  assert.equal(m("Sexta feira vou aí", ""), "informou_visita");
+  assert.equal(compraPrevista("talvez dia 30 eu compro", terca), null);
+  assert.equal(compraPrevista("se der, sexta eu fecho", terca), null);
+});
