@@ -92,11 +92,11 @@ test("próximo passo: uma pergunta por vez, só o que falta, e indica quando sab
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
   assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, p), { acao: "perguntar", chave: "uso" });
   const leandro = lerDoCliente("quero usar na cidade, 20km");
-  assert.deepEqual(proximoPasso(leandro, zero, p), { acao: "perguntar", chave: "garupa" });
+  /* Milton (20/10/2026): sabendo o uso, já vai para a faixa (km e garupa não são mais perguntados) */
+  assert.deepEqual(proximoPasso(leandro, zero, p), { acao: "perguntar", chave: "faixa" });
   /* falou de valor: a faixa vem logo depois do uso */
   assert.deepEqual(proximoPasso(lerDoCliente("pro trabalho"), zero, { ...p, falouDeValor: true }), { acao: "perguntar", chave: "faixa" });
-  /* entregas: a carga logo depois do uso */
-  assert.deepEqual(proximoPasso(lerDoCliente("pra entregas"), zero, p), { acao: "perguntar", chave: "garupa" });
+  assert.deepEqual(proximoPasso(lerDoCliente("pra entregas"), zero, p), { acao: "perguntar", chave: "faixa" });
   const pronto = { ...leandro, garupa: false, faixaAte: 10000 };
   assert.deepEqual(proximoPasso(pronto, zero, p), { acao: "indicar" });
   /* perguntou 2 vezes e ele não respondeu: pula */
@@ -110,7 +110,8 @@ test("próximo passo: uma pergunta por vez, só o que falta, e indica quando sab
 test("perguntas: a faixa sai dos preços do estoque", () => {
   assert.deepEqual(faixasDoEstoque(PRECOS), [7000, 11000]);
   const f = textoPergunta("faixa", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 });
-  assert.equal(f, "Pra eu te indicar dentro do seu bolso: você pensa em investir até uns 7 mil, entre 7 e 11 mil, ou acima de 11 mil?");
+  assert.equal(f, "Pra eu te mostrar as opções certas: você pensa em investir até 6 mil, até 8 mil, até 11 mil ou até 13 mil?");
+  assert.equal(perguntaPendente(f), "faixa");
   assert.equal(perguntaPendente(textoPergunta("uso", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 })), "uso");
   assert.equal(perguntaPendente(textoPergunta("km", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0.9 })), "km");
   assert.equal(perguntaPendente(textoPergunta("garupa", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 })), "garupa");
@@ -125,9 +126,9 @@ test("indicação: as 2 que combinam, com o porquê tirado da ficha", () => {
   assert.equal(r[0].moto.nome, "T3 RETRÔ");
   assert.ok(r[0].motivos.some((m) => m.includes("folga pros seus 40 km")));
   assert.ok(r[0].motivos.includes("aceita garupa"));
-  /* até 7 mil, dia a dia na cidade: as mais em conta, N2 primeiro */
+  /* até 7 mil, dia a dia na cidade: primeiro a que fica entre 6 e 7 mil (faixa da loja), depois a N2 */
   const barata = indicarMotos({ ...NECESSIDADE_VAZIA, uso: "cidade", kmDia: 15, faixaAte: 7000 }, ESTOQUE);
-  assert.deepEqual(barata.map((x) => x.moto.nome), ["N2", "UFOFAST F01"]);
+  assert.deepEqual(barata.map((x) => x.moto.nome), ["UFOFAST F01", "N2"]);
   assert.ok(barata[0].motivos.includes("cabe na faixa que você falou"));
   /* patinete: só patinete */
   assert.deepEqual(indicarMotos({ ...NECESSIDADE_VAZIA, tipo: "patinete" }, ESTOQUE).map((x) => x.moto.nome), ["Patinete X"]);
@@ -198,4 +199,26 @@ test("Edimilson (19/10/2026): disse o uso e 'Até 7 mil reais': indica na hora, 
 test("Simulador (19/10/2026): 'me conta pra que você vai usar' sai do comentário (o sistema já faz a pergunta)", () => {
   const r = limparParaQualificacao(["Prazer, Edimilson! Que ótimo saber do seu interesse na moto elétrica. Para eu te indicar a melhor opção, me conta pra que você vai usar a moto no dia a dia."], []);
   assert.deepEqual(r, ["Prazer, Edimilson! Que ótimo saber do seu interesse na moto elétrica."]);
+});
+
+test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Retrô", () => {
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
+  /* Dinho: disse o uso; a próxima é a faixa, nunca km nem garupa */
+  assert.deepEqual(proximoPasso(lerDoCliente("pra passear"), zero, p), { acao: "perguntar", chave: "faixa" });
+  const faixa = textoPergunta("faixa", { n: NECESSIDADE_VAZIA, precos: PRECOS });
+  const nomes = (resposta: string, max = 3) => indicarMotos(lerDoCliente(resposta, lerDoCliente("pra passear"), faixa), ESTOQUE, max).map((x) => x.moto.nome);
+  /* até 6: N2 e patinete */
+  assert.deepEqual(nomes("até 6"), ["N2", "Patinete X"]);
+  /* até 8: as de 6 a 8 (UFO e DF17), sem patinete */
+  assert.deepEqual(nomes("até 8 mil").sort(), ["DF17", "UFOFAST F01"]);
+  /* até 11: Retrô e AG08 */
+  assert.deepEqual(nomes("11").sort(), ["AG08", "T3 RETRÔ", "T5 RETRÔ"]);
+  /* até 13: as topadas */
+  assert.ok(nomes("até 13 mil").every((n) => ["M6", "T1"].includes(n)));
+  /* vespa: indica direto as retrô */
+  const vespa = lerDoCliente("vocês têm aquela vespa?");
+  assert.equal(vespa.estilo, "retro");
+  assert.deepEqual(proximoPasso(vespa, zero, p), { acao: "indicar" });
+  assert.deepEqual(indicarMotos(vespa, ESTOQUE, 3).map((x) => x.moto.nome).sort(), ["T3 RETRÔ", "T5 RETRÔ"]);
 });

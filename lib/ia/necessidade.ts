@@ -19,6 +19,8 @@ export type Necessidade = {
   faixaDe: number | null;
   maisBarata: boolean;
   tipo: "moto" | "triciclo" | "patinete" | null;
+  /** "vespa", "retrô": o cliente já escolheu o estilo (T3 e T5 Retrô) */
+  estilo?: "retro" | null;
 };
 export type ChavePergunta = "uso" | "km" | "garupa" | "faixa";
 
@@ -66,6 +68,8 @@ const RX_PESO = /(\d{2,3})\s*(?:kg|quilos?|kilos?)\b/;
 const RX_PESADO = /\b(?:obes\w*|acima do peso|sou (?:bem |muito )?(?:pesad\w*|gord\w*|grande|fort\w*))\b/;
 const RX_MAIS_BARATA = /\b(?:mais (?:barat\w*|em conta|economic\w*)|baratinh\w*|menor (?:valor|preco)|mais simples)\b/;
 const RX_PATINETE = /\bpatinete/;
+/* Milton (20/10/2026): "T3 Retrô e T5 Retrô são conhecidas como vespa" */
+const RX_RETRO = /\b(?:vespa\w*|retro|classica|estilo antigo)\b/;
 const RX_TRICICLO = /\b(?:triciclo|tres rodas|3 rodas)\b/;
 
 /** "7 mil" → 7000; "7.500" → 7500; "10k" → 10000; "7" sozinho (resposta da faixa) → 7000. */
@@ -162,6 +166,7 @@ export function lerDoCliente(texto: string, anterior: Necessidade = NECESSIDADE_
   }
   if (RX_MAIS_BARATA.test(t)) n.maisBarata = true;
   if (pend === "faixa" && /\b(?:tanto faz|nao sei|qualquer|depende)\b/.test(t)) n.maisBarata = n.maisBarata || false;
+  if (RX_RETRO.test(t)) n.estilo = "retro";
   if (RX_PATINETE.test(t)) n.tipo = "patinete";
   else if (RX_TRICICLO.test(t)) n.tipo = "triciclo";
   else if (/\bmot(?:o|os|inha|oca|ocinha)\b/.test(t) && !n.tipo) n.tipo = "moto";
@@ -194,23 +199,27 @@ export const pediuOpcoes = (texto: string) => RX_QUER_OPCOES.test(norm(texto));
 export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indicar" };
 
 /** Próximo passo da qualificação: a próxima pergunta que falta (uma por vez) ou indicar as motos.
- *  Ordem: uso → km → garupa/carga → faixa; a faixa sobe para 2ª quando o cliente já perguntou de valor.
+ *  Ordem: uso → faixa (só a faixa quando o cliente já perguntou de valor); "vespa"/"retrô" indica direto.
  *  Indica assim que o cliente diz quanto quer investir (Milton, 19/10/2026: "quando o cliente já passa a média de
  *  orçamento, era bom ele já mandar as opções dentro do orçamento... deixa o cliente decidir a moto"; Edimilson disse
  *  "Até 7 mil reais" e a IA ainda perguntou o km), quando tudo já foi perguntado, ou quando o cliente pede as opções
  *  pela 2ª vez (a 1ª vez ele recebe o "a partir de" e a pergunta). */
 export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean }): Passo {
   if (p.pedeOpcoesAgora && p.pediuOpcoesAntes) return { acao: "indicar" };
-  if (sabeFaixa(n)) return { acao: "indicar" };
-  let ordem: ChavePergunta[] = p.falouDeValor ? ["uso", "faixa", "km", "garupa"] : ["uso", "km", "garupa", "faixa"];
-  /* entregas: carga logo depois do uso (é o que decide a moto) */
-  if (n.uso === "entregas") ordem = ["uso", "garupa", ...ordem.filter((k) => k !== "uso" && k !== "garupa")];
+  if (sabeFaixa(n) || n.estilo === "retro") return { acao: "indicar" };
+  /* Milton (20/10/2026): "muita pergunta faz o cliente fugir. Pergunta a média de orçamento" (Dinho: uso, km, garupa duas
+     vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */
+  const ordem: ChavePergunta[] = p.falouDeValor ? ["faixa"] : ["uso", "faixa"];
   const falta = ordem.find((k) => !sabe[k](n) && feitas[k] < 2);
   return falta ? { acao: "perguntar", chave: falta } : { acao: "indicar" };
 }
 
 /* ---------------- as perguntas ---------------- */
 const mil = (x: number) => `${Math.round(x / 1000)} mil`;
+/* As faixas da loja (Milton, 20/10/2026): até 6 (N2 e patinete), até 8 (DF17 e UFO), até 11 (Retrô e AG08), até 13 (as
+   topadas, o valor máximo). Quem diz "até 8" quer ver as de 6 a 8, não as de 5. */
+export const FAIXAS_DA_LOJA = [6000, 8000, 11000, 13000];
+const pisoDaFaixa = (ate: number) => Math.max(0, ...FAIXAS_DA_LOJA.filter((f) => f < ate));
 /** Faixas montadas com os preços do estoque (terços, arredondados para o mil): "até uns 7 mil, entre 7 e 10 mil, ou acima de 10 mil". */
 export function faixasDoEstoque(precos: number[]): [number, number] | null {
   const ps = precos.filter((x) => x > 0).sort((a, b) => a - b);
@@ -236,8 +245,8 @@ export function textoPergunta(chave: ChavePergunta, p: { n: Necessidade; precos:
         ? "Você vai usar baú ou levar carga nas entregas?"
         : escolher(["Você costuma levar alguém na garupa ou alguma carga, tipo compras?", "E vai levar alguém na garupa ou carga com você?"]);
     case "faixa": {
-      const f = faixasDoEstoque(p.precos);
-      return f ? `Pra eu te indicar dentro do seu bolso: você pensa em investir até uns ${mil(f[0])}, entre ${Math.round(f[0] / 1000)} e ${mil(f[1])}, ou acima de ${mil(f[1])}?` : "Pra eu te indicar dentro do seu bolso: tem uma faixa de valor que você pensa em investir?";
+      const [a, b, c, d] = FAIXAS_DA_LOJA.map(mil);
+      return `Pra eu te mostrar as opções certas: você pensa em investir até ${a}, até ${b}, até ${c} ou até ${d}?`;
     }
   }
 }
@@ -249,6 +258,7 @@ const numeros = (s: string | null) => (s ?? "").match(/\d{2,3}/g)?.map(Number) ?
 const RX_GARUPA_MOTO = /garupa|passageir|duas pessoas|2 pessoas|banco duplo/i;
 const RX_CESTA = /\b(ba[uú]|cesta|bagageiro|porta[- ]?objetos?|suporte de carga)\b/i;
 const RX_TRICICLO_MOTO = /triciclo|tr[eê]s rodas|3 rodas/i;
+const RX_MOTO_RETRO = /retr[oô]/i;
 
 type Indicada = { moto: MotoParaIndicar; motivos: string[]; pontos: number };
 
@@ -309,7 +319,12 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
       } else if (m.preco! <= n.faixaAte * 1.15) pontos -= 1;
       else pontos -= 5;
     }
+    if (n.faixaAte && m.preco! > pisoDaFaixa(n.faixaAte) && m.preco! <= n.faixaAte) pontos += 3;
     if (n.faixaDe && m.preco! < n.faixaDe * 0.85) pontos -= 1;
+    if (n.estilo === "retro" && RX_MOTO_RETRO.test(m.nome)) {
+      pontos += 8;
+      motivos.push("é a que chamam de vespa, com o visual retrô");
+    }
     if (n.maisBarata || (!n.faixaAte && !n.faixaDe)) pontos += m.preco === maisBarata ? 1 : 0;
     if (m.preco === maisBarata && (n.maisBarata || n.faixaAte)) motivos.push("a mais em conta");
     return { moto: m, motivos, pontos };
@@ -318,14 +333,20 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     .sort((a, b) => b.pontos - a.pontos || (n.faixaDe ? b.moto.preco! - a.moto.preco! : a.moto.preco! - b.moto.preco!))
     .slice(0, max)
     .filter((x, i) => i === 0 || x.pontos >= -2);
-  if (n.faixaAte) {
-    /* com 2 ou mais dentro do orçamento, a que passa dele sai (Milton, 19/10/2026: "as opções dentro do orçamento do lead") */
-    const dentro = escolhidas.filter((x) => x.moto.preco! <= n.faixaAte!);
-    if (dentro.length >= 2) escolhidas = dentro;
-    /* e sobrando lugar, o patinete que cabe no orçamento entra como opção ("DF17, Z2, Patinete"), menos para quem roda muito,
-       trabalha com ela ou leva garupa */
+  /* pediu vespa e tem retrô no estoque: só as retrô */
+  if (n.estilo === "retro" && escolhidas.some((x) => RX_MOTO_RETRO.test(x.moto.nome))) escolhidas = escolhidas.filter((x) => RX_MOTO_RETRO.test(x.moto.nome));
+  else if (n.faixaAte) {
+    /* o patinete que cabe no orçamento entra como opção ("DF17, Z2, Patinete"; "abaixo de 6: N2 e patinete"), menos para
+       quem roda muito, trabalha com ela ou leva garupa */
     const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= n.faixaAte!).sort((a, b) => a.preco! - b.preco!)[0];
-    const servePatinete = !n.tipo && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    const servePatinete = !!patinete && n.faixaAte < 8000 && !n.tipo && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    /* com 2 ou mais opções dentro do orçamento (o patinete conta), a que passa dele sai (Milton, 19/10/2026: "as opções
+       dentro do orçamento do lead") */
+    const dentro = escolhidas.filter((x) => x.moto.preco! <= n.faixaAte!);
+    if (dentro.length + (servePatinete ? 1 : 0) >= 2) escolhidas = dentro;
+    /* e com 2 ou mais na faixa da loja ("até 8" = de 6 a 8), as mais baratas que ela saem (Milton, 20/10/2026) */
+    const naFaixa = escolhidas.filter((x) => x.moto.preco! > pisoDaFaixa(n.faixaAte!) && x.moto.preco! <= n.faixaAte!);
+    if (naFaixa.length >= 2) escolhidas = naFaixa;
     if (patinete && servePatinete && escolhidas.length < max) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
   }
   return escolhidas;
