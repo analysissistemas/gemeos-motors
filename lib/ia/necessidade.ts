@@ -58,7 +58,8 @@ const RX_USO: [Uso, RegExp][] = [
   ["passeio", /\b(?:passe(?:io|ar)|lazer|fim de semana|final de semana|curtir|dar uma volta|dar um role)\b/],
   ["cidade", /\b(?:dia a dia|na cidade|pela cidade|mercado|feira|faculdade|escola|colegio|resolver (?:as )?coisas|uso pessoal|locomo\w*|me locomover)\b/],
 ];
-const RX_GARUPA_SIM = /\bgarupa\b(?!\s*n)|\blev(?:ar|o|a|amos) (?:o |a |meu |minha |minhas |meus |um |uma )?(?:filh\w*|espos\w*|mulher|marido|namorad\w*|crianc\w*|menin\w*|mae|pai|alguem|pessoa|carona)|\bduas pessoas\b|\b2 pessoas\b|\bpassageir\w*|\bcom (?:minha|meu) (?:espos\w*|mulher|marido|filh\w*)\b/;
+/* "ir pegar criança na escola" (Edimilson, 19/10/2026) e "meu filho anda comigo" (Elaine, 18/10/2026) também são garupa */
+const RX_GARUPA_SIM = /\bgarupa\b(?!\s*n)|\b(?:lev(?:ar|o|a|amos)|peg(?:ar|o|a)|busc(?:ar|o|a)|deix(?:ar|o|a)) (?:o |a |os |as |meu |minha |minhas |meus |um |uma )?(?:filh\w*|espos\w*|mulher|marido|namorad\w*|crianc\w*|menin\w*|mae|pai|alguem|pessoa|carona)|\b(?:filh\w*|crianc\w*|espos\w*|mulher|marido|namorad\w*) (?:anda|vai|sai) comigo\b|\bduas pessoas\b|\b2 pessoas\b|\bpassageir\w*|\bcom (?:minha|meu) (?:espos\w*|mulher|marido|filh\w*)\b/;
 const RX_GARUPA_NAO = /\b(?:so eu|sozinh\w*|nao levo (?:ninguem|garupa)|sem garupa|ninguem na garupa|apenas eu|somente eu)\b/;
 const RX_CARGA = /\b(?:ba[uú]|bagageiro|carga|mercadoria|compras|botij\w*|gas|caixas?|isopor|encomendas?)\b/;
 const RX_PESO = /(\d{2,3})\s*(?:kg|quilos?|kilos?)\b/;
@@ -194,11 +195,13 @@ export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indic
 
 /** Próximo passo da qualificação: a próxima pergunta que falta (uma por vez) ou indicar as motos.
  *  Ordem: uso → km → garupa/carga → faixa; a faixa sobe para 2ª quando o cliente já perguntou de valor.
- *  Indica quando sabe uso + faixa + (km ou garupa), quando tudo já foi perguntado, ou quando o cliente pede as opções
+ *  Indica assim que o cliente diz quanto quer investir (Milton, 19/10/2026: "quando o cliente já passa a média de
+ *  orçamento, era bom ele já mandar as opções dentro do orçamento... deixa o cliente decidir a moto"; Edimilson disse
+ *  "Até 7 mil reais" e a IA ainda perguntou o km), quando tudo já foi perguntado, ou quando o cliente pede as opções
  *  pela 2ª vez (a 1ª vez ele recebe o "a partir de" e a pergunta). */
 export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean }): Passo {
   if (p.pedeOpcoesAgora && p.pediuOpcoesAntes) return { acao: "indicar" };
-  if (n.uso && sabeFaixa(n) && (n.kmDia || n.garupa !== null || n.carga !== null)) return { acao: "indicar" };
+  if (sabeFaixa(n)) return { acao: "indicar" };
   let ordem: ChavePergunta[] = p.falouDeValor ? ["uso", "faixa", "km", "garupa"] : ["uso", "km", "garupa", "faixa"];
   /* entregas: carga logo depois do uso (é o que decide a moto) */
   if (n.uso === "entregas") ordem = ["uso", "garupa", ...ordem.filter((k) => k !== "uso" && k !== "garupa")];
@@ -311,10 +314,21 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     if (m.preco === maisBarata && (n.maisBarata || n.faixaAte)) motivos.push("a mais em conta");
     return { moto: m, motivos, pontos };
   });
-  return avaliadas
+  let escolhidas = avaliadas
     .sort((a, b) => b.pontos - a.pontos || (n.faixaDe ? b.moto.preco! - a.moto.preco! : a.moto.preco! - b.moto.preco!))
     .slice(0, max)
     .filter((x, i) => i === 0 || x.pontos >= -2);
+  if (n.faixaAte) {
+    /* com 2 ou mais dentro do orçamento, a que passa dele sai (Milton, 19/10/2026: "as opções dentro do orçamento do lead") */
+    const dentro = escolhidas.filter((x) => x.moto.preco! <= n.faixaAte!);
+    if (dentro.length >= 2) escolhidas = dentro;
+    /* e sobrando lugar, o patinete que cabe no orçamento entra como opção ("DF17, Z2, Patinete"), menos para quem roda muito,
+       trabalha com ela ou leva garupa */
+    const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= n.faixaAte!).sort((a, b) => a.preco! - b.preco!)[0];
+    const servePatinete = !n.tipo && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    if (patinete && servePatinete && escolhidas.length < max) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
+  }
+  return escolhidas;
 }
 
 const brl = (x: number) => `R$ ${x.toLocaleString("pt-BR", Number.isInteger(x) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -344,6 +358,47 @@ export function textoIndicacao(p: { nome: string | null; n: Necessidade; indicad
   const acimaDaFaixa = p.n.faixaAte && p.indicadas.every((x) => x.moto.preco! > p.n.faixaAte!);
   const aviso = acimaDaFaixa ? "\nFicam um pouco acima da faixa que você falou, mas dá pra parcelar no cartão em até 21x." : "";
   return `${abre}\n${linhas.join("\n")}${aviso}\n\n${uma ? "Quer conhecer melhor? Te mando a foto e o vídeo 😊" : "Qual delas você quer conhecer melhor? 😊"}`;
+}
+
+export type CartaoIndicacao = { nome: string; legenda: string };
+
+/** A indicação em cartões (Milton, 19/10/2026: "manda só a foto da DF, descrição e valor; manda a foto da Z2, descrição e
+ *  valor; patinete mesma coisa"): uma abertura curta, um cartão por moto (vai como legenda da foto) e a pergunta no fim. */
+export function cartoesIndicacao(p: { nome: string | null; n: Necessidade; indicadas: Indicada[] }): { abertura: string; cartoes: CartaoIndicacao[]; pergunta: string } | null {
+  if (!p.indicadas.length) return null;
+  const resumo = resumoDaNecessidade(p.n);
+  const uma = p.indicadas.length === 1;
+  const quem = p.nome ? `${p.nome}, p` : "P";
+  const abertura = resumo
+    ? `${quem}elo que você me contou (${resumo}), separei ${uma ? "a que mais combina com você" : "as que mais combinam com você"} 👇`
+    : `${p.nome ? `${p.nome}, ` : ""}${uma ? "a que eu te indico é esta" : "as que eu te indico são estas"} 👇`;
+  const cartoes = p.indicadas.map((x) => {
+    const ficha = [x.moto.autonomia ? `autonomia de ${x.moto.autonomia.trim()}` : null, x.moto.velocidade ? `até ${x.moto.velocidade.trim()}` : null].filter(Boolean);
+    /* a descrição é da moto (cadastro e ficha); "cabe na faixa" e "a mais em conta" vão junto do preço */
+    const uteis = x.motivos.filter((m) => !/faixa que voc[eê] falou|a mais em conta/.test(m)).slice(0, 3);
+    const detalhes = uteis.length ? uteis : ficha;
+    const frase = (x.moto.descricao ?? "").split(/(?<=[.!])\s/)[0].trim();
+    const descricao = [frase, detalhes.length ? `${detalhes.join(", ").replace(/^./, (l) => l.toUpperCase())}.` : null].filter(Boolean).join(" ");
+    const maisEmConta = x.motivos.includes("a mais em conta") ? " (a mais em conta)" : "";
+    return { nome: x.moto.nome, legenda: [`*${x.moto.nome}*`, descricao, `💰 *${brl(x.moto.preco!)}*${maisEmConta}`].filter(Boolean).join("\n") };
+  });
+  const acimaDaFaixa = p.n.faixaAte && p.indicadas.every((x) => x.moto.preco! > p.n.faixaAte!);
+  const pergunta = `${acimaDaFaixa ? "Ficam um pouco acima da faixa que você falou, mas dá pra parcelar no cartão em até 21x. " : ""}${uma ? "Gostou dela? Quer que eu te mande o vídeo? 😊" : "Qual delas te agradou mais? 😊"}`;
+  return { abertura, cartoes, pergunta };
+}
+
+const milhar = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+/** O orçamento que o próprio cliente disse, escrito dos jeitos que a IA costuma repetir ("R$ 7.000", "7 mil reais"):
+ *  vira fonte para o validador. Edimilson (19/10/2026): "Até 7 mil reais" e a resposta "até R$ 7.000" foi barrada e
+ *  transferida para o vendedor. Só a faixa que ele falou, não qualquer número da conversa. */
+export function fonteDaFaixa(n: Necessidade): string {
+  return [n.faixaAte, n.faixaDe]
+    .filter((v): v is number => !!v && v >= 500)
+    .flatMap((v) => {
+      const m = v % 1000 === 0 ? `${v / 1000} mil` : null;
+      return [`R$ ${milhar(v)}`, `R$ ${milhar(v)},00`, `${milhar(v)} reais`, ...(m ? [m, `${m} reais`, `R$ ${m}`] : [])];
+    })
+    .join(" · ");
 }
 
 /** A loja já indicou as motos nesta conversa (o sistema não indica de novo). */

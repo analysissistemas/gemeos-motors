@@ -14,7 +14,7 @@ export type TipoMidiaIa = "foto" | "video";
 export type FotoDaMoto = { url: string; cor: string | null };
 export type ModeloComMidia = { id: number; nome: string; fotos: FotoDaMoto[]; videoUrl: string | null };
 export type ItemMidia = { tipo: TipoMidiaIa; url: string; legenda: string };
-export type PlanoMidia = { modelo: ModeloComMidia | null; pedido: TipoMidiaIa[]; itens: ItemMidia[]; /** quantos arquivos podem ir (padrão 3) */ maxItens?: number };
+export type PlanoMidia = { modelo: ModeloComMidia | null; pedido: TipoMidiaIa[]; itens: ItemMidia[]; /** quantos arquivos podem ir (padrão 3) */ maxItens?: number; /** texto que vai DEPOIS das fotos (a pergunta da indicação) */ depois?: string };
 
 const RX_FOTO = /(?<![\p{L}\p{N}])(?:fotos?|imagens?|imagem|fotinhas?)(?![\p{L}\p{N}])/iu;
 const RX_VIDEO = /(?<![\p{L}\p{N}])v[ií]deos?(?![\p{L}\p{N}])/iu;

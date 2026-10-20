@@ -182,3 +182,23 @@ export function validarResposta(texto: string | null | undefined, opcoes: Opcoes
   }
   return { aprovada: violacoes.length === 0, violacoes };
 }
+
+/* Resposta barrada só por valor, parcela, desconto ou link sem fonte: tenta de novo sem as frases que traziam o trecho, antes
+   de passar o cliente ao vendedor (Edimilson, 19/10/2026: "Até 7 mil reais" → a IA repetiu "R$ 7.000" e a conversa foi para
+   o humano sem ninguém responder). Só aceita se sobra a maior parte da resposta e ela passa inteira no validador. */
+const RECUPERAVEIS = new Set(["preco", "parcelamento", "desconto", "link"]);
+/* fim de frase: ponto (não o de "7.000") ou emoji, seguido de espaço e maiúscula ("...elétrica 👍 Dá pra...") */
+const RX_FIM_DE_FRASE = /(?<=[.!?](?!\d)|\p{Extended_Pictographic}️?)\s+(?=\p{Lu})/u;
+
+/** A resposta sem as frases barradas, ou null quando não dá para salvar (outra regra, ou cortaria demais). */
+export function semFrasesBarradas(texto: string, opcoes: OpcoesValidacao = {}): string | null {
+  const v = validarResposta(texto, opcoes);
+  if (v.aprovada || v.violacoes.some((x) => !RECUPERAVEIS.has(x.regra))) return null;
+  const linhas = texto.split("\n").map((linha) => {
+    const frases = linha.split(RX_FIM_DE_FRASE);
+    return frases.filter((f) => validarResposta(f, { fontesAutorizadas: opcoes.fontesAutorizadas }).violacoes.every((x) => !RECUPERAVEIS.has(x.regra))).join(" ").trim();
+  });
+  const sobra = linhas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!/\p{L}{3}/u.test(sobra) || sobra.length < texto.trim().length * 0.4) return null;
+  return validarResposta(sobra, opcoes).aprovada ? sobra : null;
+}

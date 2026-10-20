@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validarResposta } from "../../lib/ia/validador.ts";
+import { semFrasesBarradas, validarResposta } from "../../lib/ia/validador.ts";
 
 const regras = (t: string, prompt?: string) => validarResposta(t, { promptSistema: prompt }).violacoes.map((v) => v.regra);
 
@@ -114,4 +114,17 @@ test("emoji fora da lista sai do texto em vez de reprovar a resposta (05/10/2026
   assert.equal(limparEmojis("Show 😊 olha ela 🛵 e mais ✅ aqui 🎉"), "Show 😊 olha ela 🛵 e mais aqui");
   assert.equal(limparEmojis("Obrigado 🙏🏻"), "Obrigado 🙏🏻");
   assert.ok(validarResposta(limparEmojis("Tem caixa de som 🔊!")).aprovada);
+});
+
+test("Edimilson (19/10/2026): o orçamento dito pelo cliente não derruba a resposta", () => {
+  const t = "Beleza, Edimilson! Com até R$ 7.000 dá pra pegar uma moto muito boa pra passear 👍";
+  assert.equal(validarResposta(t).aprovada, false);
+  assert.equal(validarResposta(t, { fontesAutorizadas: ["R$ 7.000 · 7 mil reais"] }).aprovada, true);
+  /* sem a fonte: sai a frase do valor, fica o resto */
+  const r = "Passear e buscar a criança na escola é um uso bem tranquilo pra moto elétrica 👍 Dá pra fazer por R$ 6.500 no Pix. Você roda quantos km por dia?";
+  assert.equal(semFrasesBarradas(r), "Passear e buscar a criança na escola é um uso bem tranquilo pra moto elétrica 👍 Você roda quantos km por dia?");
+  /* sobra pouco: não salva (vai para o vendedor como antes) */
+  assert.equal(semFrasesBarradas("A T1 sai por R$ 9.000 no Pix com R$ 500 de entrada."), null);
+  /* outra regra (dado de cartão): não salva */
+  assert.equal(semFrasesBarradas("Me passa o código de segurança do cartão. Fica R$ 9.000."), null);
 });

@@ -16,6 +16,8 @@ import {
   perguntaPendente,
   perguntasFeitas,
   proximoPasso,
+  cartoesIndicacao,
+  fonteDaFaixa,
   textoIndicacao,
   textoPergunta,
   type MotoParaIndicar,
@@ -154,4 +156,37 @@ test("texto da indicação: o que ele contou, as motos e uma pergunta", () => {
   const caro = { ...NECESSIDADE_VAZIA, uso: "trabalho" as const, kmDia: 60, faixaAte: 5000 };
   const tc = textoIndicacao({ nome: null, n: caro, indicadas: indicarMotos(caro, ESTOQUE) })!;
   assert.ok(tc.includes("um pouco acima da faixa"));
+});
+
+test("Edimilson (19/10/2026): disse o uso e 'Até 7 mil reais': indica na hora, com foto, descrição e preço de cada", () => {
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
+  const faixa = "Pra eu te indicar dentro do seu bolso: você pensa em investir até uns 7 mil, entre 7 e 11 mil, ou acima de 11 mil?";
+  const n = lerDoCliente("Até 7 mil reais", lerDoCliente("Passeio, e ir pegar criança na escola."), faixa);
+  assert.equal(n.faixaAte, 7000);
+  /* ir pegar criança na escola = garupa */
+  assert.equal(n.garupa, true);
+  assert.equal(lerDoCliente("meu filho anda comigo").garupa, true);
+  assert.deepEqual(proximoPasso(n, { ...zero, uso: 1, faixa: 1 }, p), { acao: "indicar" });
+  /* só o orçamento, logo de cara: também indica */
+  assert.deepEqual(proximoPasso(lerDoCliente("tenho até 8 mil"), zero, p), { acao: "indicar" });
+  /* até 3 opções: as motos que cabem e o patinete que cabe */
+  const ind = indicarMotos(n, ESTOQUE, 3);
+  /* com criança na garupa: as motos que cabem e levam garupa, sem patinete */
+  assert.deepEqual(ind.map((x) => x.moto.nome).slice(0, 1), ["N2"]);
+  assert.ok(!ind.some((x) => x.moto.tipo === "patinete"));
+  /* só passeio, sem garupa: o patinete que cabe entra como opção */
+  assert.ok(indicarMotos({ ...NECESSIDADE_VAZIA, uso: "passeio", faixaAte: 7000 }, ESTOQUE, 3).some((x) => x.moto.nome === "Patinete X"));
+  const c = cartoesIndicacao({ nome: "Edimilson", n, indicadas: ind })!;
+  assert.ok(c.abertura.startsWith("Edimilson, pelo que você me contou (pra passear, levando alguém na garupa, até uns 7 mil), separei as que mais combinam com você"));
+  assert.ok(jaIndicou(c.abertura));
+  assert.ok(c.cartoes.length >= 2);
+  assert.equal(c.cartoes[0].legenda.split(String.fromCharCode(10))[0], "*N2*");
+  assert.ok(c.cartoes[0].legenda.includes("💰 *R$ 5.890*"));
+  assert.ok(c.cartoes.every((k) => k.legenda.split(String.fromCharCode(10)).length === 3), "nome, descrição e preço");
+  assert.equal(c.pergunta, "Qual delas te agradou mais? 😊");
+  /* o valor que ele disse pode ser repetido pela IA */
+  const fonte = fonteDaFaixa(n);
+  for (const v of ["R$ 7.000", "7 mil reais", "7 mil"]) assert.ok(fonte.includes(v), v);
+  assert.equal(fonteDaFaixa(lerDoCliente("pro trabalho")), "");
 });

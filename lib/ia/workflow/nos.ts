@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
-import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, textoIndicacao, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
@@ -17,7 +17,7 @@ import { dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
 import { STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
-import { validarResposta } from "@/lib/ia/validador";
+import { semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { formatarTelefone, hora } from "@/lib/formato";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
@@ -49,7 +49,7 @@ import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotad
 import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarIndicacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -191,7 +191,7 @@ async function enviar(c: CtxWorkflow, texto: string, citar = false, gravarFalha 
   const kmSemana = kmDoCliente(c);
   /* e o texto montado pelo sistema nesta resposta (simulação de parcelas, agenda): cada bloco enviado é conferido sozinho, e os valores
      vêm da conta do sistema (teste real de 06/10/2026: o bloco com "R$ 689,04" era barrado) */
-  const fontesExtras = [...(kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : []), ...(c.pipe?.textoCatalogo ? [c.pipe.textoCatalogo] : []), ...(c.qualificacao ? [c.qualificacao.pergunta, c.qualificacao.abertura ?? ""] : [])];
+  const fontesExtras = [...(kmSemana ? [(await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana, gasolina: await gasolinaDoCliente(c) })).texto] : []), ...(c.pipe?.textoCatalogo ? [c.pipe.textoCatalogo] : []), ...(c.qualificacao ? [c.qualificacao.pergunta, c.qualificacao.abertura ?? ""] : []), faixaDoCliente(c)];
   /* texto pronto do sistema (catálogo da foto, troca, indicação, fora do horário…) ou escrito pela IA: a Sonix usa para saber se a correção é regra ou código */
   const textoDoSistema =
     (!!c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo) || [TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe?.texto ?? "") || [...VARIANTES_FORA_HORARIO, ...VARIANTES_CONFIRMAR].includes(texto) || ehTextoDoSistema(texto);
@@ -1050,6 +1050,10 @@ async function garantirEconomia(c: CtxWorkflow, resposta: string[]): Promise<str
 function textoDoCliente(c: CtxWorkflow) {
   return [...(c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")), c.textoBuffer].join("\n");
 }
+/** O orçamento que o cliente disse, como fonte de valor (a IA pode repetir "até R$ 7.000" sem ser barrada). */
+function faixaDoCliente(c: CtxWorkflow) {
+  return fonteDaFaixa(lerDoCliente(semAberturaDoSite(c.textoBuffer), lerNecessidade(c.memoria.fatos.necessidade), ultimaFalaDaLoja(c.memoria.historico)));
+}
 function kmDoCliente(c: CtxWorkflow) {
   return kmPorSemana(textoDoCliente(c));
 }
@@ -1133,7 +1137,7 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
     /* moto sem unidade não pode aparecer na resposta, a não ser que o CLIENTE tenha perguntado por ela */
     modelosSemEstoque: semEstoqueNaoCitadas(catalogo, [c.memoria.fatos.interesse ?? "", textoDoCliente(c)].join("\n")),
     /* + a conta de economia do uso deste cliente (semana e mês), que a IA pode citar */
-    fontesAutorizadas: [...conhecimento, ...(catalogo.texto ? [catalogo.texto] : [])],
+    fontesAutorizadas: [...conhecimento, ...(catalogo.texto ? [catalogo.texto] : []), faixaDoCliente(c)],
     gerar,
     consultarEstoque: (q) => consultarEstoque(q, { incluirTeste }),
     consultarCatalogo: (t) => consultarCatalogo(t, { incluirTeste }),
@@ -1481,14 +1485,26 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, site: true } };
     }
     /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
-    if (passo?.acao === "indicar" && r.ctx.texto) {
-      const indicadas = indicarMotos(necessidade, motosQualif);
-      const texto = textoIndicacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), n: necessidade, indicadas });
-      if (texto) {
+    /* vale mesmo sem texto da IA (a resposta é do sistema); só não indica quando ela passou ao vendedor sem escrever nada */
+    if (passo?.acao === "indicar" && (r.ctx.texto || !r.ctx.humano)) {
+      const indicadas = indicarMotos(necessidade, motosQualif, 3);
+      const ind = cartoesIndicacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), n: necessidade, indicadas });
+      if (ind) {
+        /* Milton (19/10/2026): cada opção com foto, descrição e preço. O cartão vai como legenda da foto; moto sem foto (ou com
+           a foto já mandada) vai em texto junto da abertura. A pergunta vai depois das fotos; sem foto nenhuma, no fim do texto */
+        const modelos = await motosComMidia(c);
+        const jaEnviadas = await midiasJaEnviadas(c.conversaId);
+        const itens: ItemMidia[] = [];
+        const emTexto: string[] = [];
+        for (const k of ind.cartoes) {
+          const foto = modelos.find((x) => x.nome.trim().toLowerCase() === k.nome.trim().toLowerCase())?.fotos.find((f) => !jaEnviadas.includes(f.url));
+          if (foto) itens.push({ tipo: "foto", url: foto.url, legenda: k.legenda });
+          else emTexto.push(k.legenda);
+        }
+        const texto = [ind.abertura, ...emTexto, ...(itens.length ? [] : [ind.pergunta])].join("\n\n");
         const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
-        /* a foto e o vídeo de cada moto indicada vão logo depois do texto */
-        const midiaIndicacao = planejarIndicacao({ modelos: await motosComMidia(c), nomes: indicadas.map((x) => x.moto.nome), jaEnviadas: await midiasJaEnviadas(c.conversaId) });
-        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaIndicacao, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, qualificacao: { indicou: true, necessidade } } };
+        const midiaIndicacao: PlanoMidia | null = itens.length ? { modelo: null, pedido: [], itens, maxItens: 3, depois: ind.pergunta } : null;
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaIndicacao, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, cartoes: ind.cartoes.map((k) => k.legenda), qualificacao: { indicou: true, necessidade } } };
       }
     }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
@@ -1664,6 +1680,12 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     if (!pipe.texto) return { ctx: { saudacao }, saida: { semTexto: true, saudacao, saudacaoReprovada } };
     const r = await validadorDeResposta.rodar(pipe);
+    /* barrada só por valor/parcela/link sem fonte: sai sem a frase do trecho, em vez de passar o cliente ao vendedor */
+    const salva = r.encerrar ? semFrasesBarradas(pipe.texto, { promptSistema: pipe.deps.promptSistema, fontesAutorizadas: pipe.deps.fontesAutorizadas }) : null;
+    if (salva) {
+      const sistema = pipe.texto === pipe.textoCatalogo;
+      return { ctx: { saudacao, pipe: { ...pipe, texto: salva, ...(sistema ? { textoCatalogo: salva } : {}) } }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { aprovada: true, semFraseBarrada: salva, violacoes: r.ctx?.violacoes, saudacao, saudacaoReprovada } };
+    }
     if (r.encerrar) return { ramo: "reprovada", ctx: { saudacao, pipe: { ...pipe, ...r.ctx, texto: null }, motivoTransferencia: `A resposta foi reprovada pelo validador${r.ctx?.violacoes ? ` (${String(JSON.stringify(r.ctx.violacoes)).slice(0, 300)})` : ""}` }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { violacoes: r.ctx?.violacoes, saudacao, saudacaoReprovada } };
     return { ctx: { saudacao }, entrada: { texto: pipe.texto, saudacao: c.saudacao }, saida: { aprovada: true, saudacao, saudacaoReprovada } };
   },
@@ -1898,6 +1920,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       const itens = midia.itens.filter((i) => !bloqueadas.includes(i.url)).slice(0, midia.maxItens ?? 3);
       if (pedidoAgora) jaForam = midia.itens.filter((i) => bloqueadas.includes(i.url)).map((i) => i.legenda.replace(/\*/g, "").replace(/^Vídeo d[aeo]s?\s+/iu, "").split(" na cor")[0].trim());
       midia = itens.length ? { ...midia, itens } : { ...midia, itens: [] };
+      /* nenhuma foto vai: a pergunta que viria depois delas vai no texto */
+      if (!itens.length && midia.depois) resposta = [...resposta, midia.depois];
     }
     const antesDoFiltro = resposta.length;
     /* nada vai junto: frase que promete foto/vídeo ("segue a foto") sai */
@@ -2030,6 +2054,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
       const falhas = midias.filter((x) => !x.enviada);
       if (falhas.length) await mensagemSistema(db, c.conversaId, `A IA não conseguiu mandar ${falhas.map((x) => (x.tipo === "foto" ? "a foto" : "o vídeo")).join(" e ")} da ${c.midia.modelo?.nome ?? "moto"} (${falhas[0].erro ?? "erro"}). Mande à mão, se o cliente ainda quiser.`);
+      /* a pergunta da indicação vem depois das fotos ("Qual delas te agradou mais?") */
+      if (c.midia.depois) await enviar(c, c.midia.depois, false, info.ultima);
     }
     /* visita marcada: depois do texto, o pino do mapa da loja */
     let local: { enviada: boolean; erro: string | null } | null = null;
