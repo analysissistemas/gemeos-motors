@@ -193,7 +193,7 @@ tem **assistência técnica própria**.
 | | |
 |---|---|
 | Site oficial | gemeosmotors.com.br — desde 26/09/2026 é este sistema (antes era um site do Hostinger Horizons) |
-| WhatsApp | **5511948709625** — (11) 94870-9625 (desde 26/09/2026; antes (81) 99386-9767) |
+| WhatsApp do site | **558183881281** — (81) 8388-1281 (desde 20/10/2026; antes (11) 94870-9625 e (81) 99386-9767) |
 | Instagram | @gemeosmotors_goiana |
 | Logo | amarelo e preto, com os dois memojis: "#A MELHOR DA REGIÃO" |
 
