@@ -124,3 +124,10 @@ test("cliente reclamando do atendimento da IA vai para uma pessoa, com desculpas
   assert.match(textoQueixa({ nome: "Arine", lojaAberta: true }), /^Desculpa pela confusão, Arine 🙏 Vou chamar agora alguém da nossa equipe/);
   assert.match(textoQueixa({ nome: null, lojaAberta: false }), /assim que a loja abrir/);
 });
+
+test("pergunta de quem vai comprar sobre assistência não vira pós-venda (Cyanthya, 19/10/2026)", () => {
+  for (const t of ["T1\nOnde fica a assistência?", "DF17\nSobre a garantia?\nOnde fica a assistência?", "vocês têm assistência? quanto custa a AG08?"])
+    assert.equal(intencaoDoTexto(t, NOMES), "compra", t);
+  for (const t of ["Onde fica a assistência?", "preciso da assistência", "quero levar na assistência a minha T1", "minha moto precisa de assistência"])
+    assert.equal(intencaoDoTexto(t, NOMES), "assistencia", t);
+});

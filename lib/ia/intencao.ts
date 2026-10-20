@@ -13,10 +13,11 @@ export type Intencao = "compra" | "assistencia";
 
 /* pós-venda sem dúvida: defeito, conserto, "comprei", "minha moto"... */
 const RX_ASSISTENCIA =
-  /(?<![\p{L}])(?:assist[êe]ncia|defeito|conserto|consertar|arrumar\s+(?:a\s+|minha\s+)?moto|quebr\p{L}*|problemas?|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|esquentando|vazamento|(?<!nunca\s)comprei(?=[^.!?\n]{0,25}?(?<![\p{L}])(?:a[ií]|aqui|com\s+(?:voc[eê]s|vcs|vc|o\s+milton)|de\s+(?:voc[eê]s|vcs)|na\s+g[eê]meos|nessa\s+loja)(?![\p{L}]))|minha\s+(?:moto|scooter|el[ée]trica|patinete)|(?:mostra|mostrando|aparece|apareceu|aparecendo|marca|marcando|piscando|t[áa]\s+dando|deu|dando)\s+(?:o\s+|um\s+|uma\s+|a\s+)?(?:c[óo]digo|erro|letra|luz|sinal|lc|e\d{1,3})|c[óo]digo\s+de\s+erro|(?:no|o)\s+(?:painel|visor|display)\s+(?:mostra|aparece|apareceu|t[áa]|est[áa]|fica|piscando))(?![\p{L}])/iu;
-/* pode ser pergunta de quem vai comprar ("qual a garantia da T1?", "vem com carregador?"): só vale como
-   assistência quando o cliente não está falando de compra */
-const RX_ASSISTENCIA_TALVEZ = /(?<![\p{L}])(?:garantia|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|carregador)(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:(?:preciso|precisando|precisava|levar|trazer|mandar|chamar|acionar|usar|ir\s+(?:na|pra|para))\s+(?:d[ae]\s+|n[ao]\s+|pr[ao]\s+|para\s+[ao]\s+|[ao]\s+)?(?:sua\s+|tua\s+)?assist[êe]ncia|defeito|conserto|consertar|arrumar\s+(?:a\s+|minha\s+)?moto|quebr\p{L}*|problemas?|n[ãa]o\s+(?:liga|carrega|anda|funciona|acende|segura)|parou|desligando|barulho|travou|travando|furou|furado|reparo|devolu\p{L}*|reclama\p{L}*|esquentando|vazamento|(?<!nunca\s)comprei(?=[^.!?\n]{0,25}?(?<![\p{L}])(?:a[ií]|aqui|com\s+(?:voc[eê]s|vcs|vc|o\s+milton)|de\s+(?:voc[eê]s|vcs)|na\s+g[eê]meos|nessa\s+loja)(?![\p{L}]))|minha\s+(?:moto|scooter|el[ée]trica|patinete)|(?:mostra|mostrando|aparece|apareceu|aparecendo|marca|marcando|piscando|t[áa]\s+dando|deu|dando)\s+(?:o\s+|um\s+|uma\s+|a\s+)?(?:c[óo]digo|erro|letra|luz|sinal|lc|e\d{1,3})|c[óo]digo\s+de\s+erro|(?:no|o)\s+(?:painel|visor|display)\s+(?:mostra|aparece|apareceu|t[áa]|est[áa]|fica|piscando))(?![\p{L}])/iu;
+/* pode ser pergunta de quem vai comprar ("qual a garantia da T1?", "vem com carregador?", "onde fica a assistência?"):
+   só vale como assistência quando o cliente não está falando de compra (Cyanthya, 19/10/2026: perguntou da T3 Retrô e
+   "Onde fica a assistência?" virou pedido de relato de defeito) */
+const RX_ASSISTENCIA_TALVEZ = /(?<![\p{L}])(?:assist[êe]ncia|garantia|revis[ãa]o|manuten[çc][ãa]o|oficina|pe[çc]as?|carregador)(?![\p{L}])/iu;
 /* "sem problema, pode ser terça", "tem problema se eu pagar no cartão?": não é defeito */
 const RX_SEM_PROBLEMA =
   /(?<![\p{L}])(?:sem\s+problemas?|n[ãa]o\s+(?:tem|h[áa]|teria|vai\s+ter)\s+(?:nenhum\s+)?problemas?|nenhum\s+problema|problema\s+nenhum|n[ãa]o\s+[ée]\s+(?:um\s+)?(?:problema|defeito)|tem\s+(?:algum\s+)?problema\s+(?:se|em|de|eu|pagar))(?![\p{L}])/giu;
@@ -44,6 +45,11 @@ export function intencaoDoTexto(texto: string, nomesDeModelos: string[] = []): I
   const compra = RX_COMPRA.test(t) || RX_QUER_VISITAR.test(t) || citaModelo(t, nomesDeModelos);
   if (!compra && RX_ASSISTENCIA_TALVEZ.test(t)) return "assistencia";
   return compra ? "compra" : null;
+}
+
+/** Pós-venda com certeza ("minha moto", defeito, "preciso da assistência"), não só uma palavra que quem compra também usa. */
+export function assistenciaClara(texto: string): boolean {
+  return RX_ASSISTENCIA.test(texto.replace(RX_SEM_PROBLEMA, " "));
 }
 
 /** Pergunta aberta, sem empurrar produto: "Como posso te ajudar?", como o Milton abre (treinamento, fase 2). */
