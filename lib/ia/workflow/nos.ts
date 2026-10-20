@@ -17,7 +17,7 @@ import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, 
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
 import { diaPorExtensoDe, STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
-import { semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
+import { limparEmojis, semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
 import { vendedorRespondeuDepois } from "./devolver";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { formatarTelefone, hora } from "@/lib/formato";
@@ -2061,7 +2061,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     /* sem balão repetido nem a mesma pergunta da mensagem anterior (Arine, 06/10/2026) */
     resposta = semRepeticao(resposta, ultimaFalaDaLoja(c.memoria.historico));
-    const blocos = [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta];
+    /* emoji fora da lista (👇 dos textos do sistema) sai do balão, em vez de o validador barrar a resposta inteira e passar o
+       cliente ao vendedor (Simulador, 19/10/2026: a indicação do Edimilson caiu por um 👇) */
+    const blocos = [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta].map(limparEmojis).filter((b) => /\p{L}/u.test(b));
     /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
     const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;
     const vaiMidia = midia?.itens.length ? midia : null;

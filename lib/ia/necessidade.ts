@@ -362,6 +362,7 @@ export function textoIndicacao(p: { nome: string | null; n: Necessidade; indicad
 
 export type CartaoIndicacao = { nome: string; legenda: string };
 
+/* sem 👇: fora da lista de emojis do validador, barrava a resposta inteira (Simulador, 19/10/2026) */
 /** A indicação em cartões (Milton, 19/10/2026: "manda só a foto da DF, descrição e valor; manda a foto da Z2, descrição e
  *  valor; patinete mesma coisa"): uma abertura curta, um cartão por moto (vai como legenda da foto) e a pergunta no fim. */
 export function cartoesIndicacao(p: { nome: string | null; n: Necessidade; indicadas: Indicada[] }): { abertura: string; cartoes: CartaoIndicacao[]; pergunta: string } | null {
@@ -370,8 +371,8 @@ export function cartoesIndicacao(p: { nome: string | null; n: Necessidade; indic
   const uma = p.indicadas.length === 1;
   const quem = p.nome ? `${p.nome}, p` : "P";
   const abertura = resumo
-    ? `${quem}elo que você me contou (${resumo}), separei ${uma ? "a que mais combina com você" : "as que mais combinam com você"} 👇`
-    : `${p.nome ? `${p.nome}, ` : ""}${uma ? "a que eu te indico é esta" : "as que eu te indico são estas"} 👇`;
+    ? `${quem}elo que você me contou (${resumo}), separei ${uma ? "a que mais combina com você" : "as que mais combinam com você"}:`
+    : `${p.nome ? `${p.nome}, ` : ""}${uma ? "a que eu te indico é esta" : "as que eu te indico são estas"}:`;
   const cartoes = p.indicadas.map((x) => {
     const ficha = [x.moto.autonomia ? `autonomia de ${x.moto.autonomia.trim()}` : null, x.moto.velocidade ? `até ${x.moto.velocidade.trim()}` : null].filter(Boolean);
     /* a descrição é da moto (cadastro e ficha); "cabe na faixa" e "a mais em conta" vão junto do preço */
@@ -427,7 +428,8 @@ export function limparParaQualificacao(blocos: string[], nomesDeModelos: string[
   const modelos = nomesDeModelos.filter((n) => n.trim().length >= 2).map((n) => new RegExp(`(?<![\\p{L}\\p{N}])${escapar(norm(n))}(?![\\p{L}\\p{N}])`, "u"));
   const proibida = (f: string) => {
     const t = norm(f);
-    return /\?/.test(f) || /r\$/.test(t) || /^\s*[•\-*]/.test(f) || /\b(?:estoque|catalogo|pronta entrega|disponive(?:l|is)|temos (?:estas|essas|estes|esses|as seguintes)|a partir de)\b/.test(t) || modelos.some((rx) => rx.test(t));
+    /* "me conta pra que você vai usar" também é pergunta, mesmo sem "?" (Simulador, 19/10/2026: saiu junto da pergunta do sistema) */
+    return /\?/.test(f) || /\bme (?:conta|conte|diz|diga|fala|fale)\b/.test(t) || /r\$/.test(t) || /^\s*[•\-*]/.test(f) || /\b(?:estoque|catalogo|pronta entrega|disponive(?:l|is)|temos (?:estas|essas|estes|esses|as seguintes)|a partir de)\b/.test(t) || modelos.some((rx) => rx.test(t));
   };
   return blocos
     .map((b) => b.split("\n").filter((l) => !/^\s*[•\-*]/.test(l)).join("\n"))

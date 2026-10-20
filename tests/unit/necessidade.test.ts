@@ -1,6 +1,7 @@
 /* Qualificação consultiva (dono, 18/10/2026). Frases das conversas reais (61 conversas lidas em 18/10/2026).
    Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
+import { validarResposta } from "../../lib/ia/validador.ts";
 import { test } from "node:test";
 import {
   faixaDoTexto,
@@ -185,8 +186,16 @@ test("Edimilson (19/10/2026): disse o uso e 'Até 7 mil reais': indica na hora, 
   assert.ok(c.cartoes[0].legenda.includes("💰 *R$ 5.890*"));
   assert.ok(c.cartoes.every((k) => k.legenda.split(String.fromCharCode(10)).length === 3), "nome, descrição e preço");
   assert.equal(c.pergunta, "Qual delas te agradou mais? 😊");
+  /* tudo que vai em texto passa no validador (o 👇 da 1ª versão barrava a resposta) */
+  const fontes = [c.cartoes.map((k) => k.legenda).join(" "), fonteDaFaixa(n)];
+  for (const t of [c.abertura, c.pergunta, ...c.cartoes.map((k) => k.legenda)]) assert.ok(validarResposta(t, { fontesAutorizadas: fontes }).aprovada, t);
   /* o valor que ele disse pode ser repetido pela IA */
   const fonte = fonteDaFaixa(n);
   for (const v of ["R$ 7.000", "7 mil reais", "7 mil"]) assert.ok(fonte.includes(v), v);
   assert.equal(fonteDaFaixa(lerDoCliente("pro trabalho")), "");
+});
+
+test("Simulador (19/10/2026): 'me conta pra que você vai usar' sai do comentário (o sistema já faz a pergunta)", () => {
+  const r = limparParaQualificacao(["Prazer, Edimilson! Que ótimo saber do seu interesse na moto elétrica. Para eu te indicar a melhor opção, me conta pra que você vai usar a moto no dia a dia."], []);
+  assert.deepEqual(r, ["Prazer, Edimilson! Que ótimo saber do seu interesse na moto elétrica."]);
 });
