@@ -57,10 +57,11 @@ export function textoPerguntaPeriodo(p: { nome: string | null; diaExtenso: strin
 /** A última fala da loja foi a pergunta do período? */
 export const RX_PERGUNTOU_PERIODO = /mais de manh[ãa] ou [àa] tarde/iu;
 
-/** Período combinado: a IA confirma que chama no dia (sem anotar visita). */
+/** Período combinado: a IA confirma que chama no dia (sem anotar visita). Sem "é só me chamar": o filtro de enchimento
+ *  (nos.ts) tiraria a frase inteira (Simulador, 20/10/2026: saiu só "Fechado!"). */
 export function textoContatoCombinado(p: { nome: string | null; diaExtenso: string; periodo: Periodo | null }): string {
   const quando = [p.diaExtenso.split(",")[0], periodoPorExtenso(p.periodo)].filter(Boolean).join(" ");
-  return `Fechado${p.nome ? `, ${p.nome}` : ""}! ${maiuscula(quando)} eu te chamo por aqui pra confirmar ✅ Qualquer coisa antes, é só me chamar 😊`;
+  return `Fechado${p.nome ? `, ${p.nome}` : ""}! ${maiuscula(quando)} eu te chamo por aqui pra confirmar ✅`;
 }
 
 /** A mensagem do dia, dentro da janela de 24 h ("talvez" ou visita avisada sem hora). */

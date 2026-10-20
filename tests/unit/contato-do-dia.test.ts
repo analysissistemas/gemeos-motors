@@ -46,7 +46,7 @@ test("textos da IA: pergunta o período, confirma sem dizer que anotou, e passam
   assert.equal(pergunta, "Fica à vontade, Edimilson! Sábado você pensa em vir mais de manhã ou à tarde? Assim no dia eu te chamo por aqui pra confirmar 😊");
   assert.ok(RX_PERGUNTOU_PERIODO.test(pergunta));
   const ok = textoContatoCombinado({ nome: null, diaExtenso: "sábado, 24/10", periodo: "tarde" });
-  assert.equal(ok, "Fechado! Sábado à tarde eu te chamo por aqui pra confirmar ✅ Qualquer coisa antes, é só me chamar 😊");
+  assert.equal(ok, "Fechado! Sábado à tarde eu te chamo por aqui pra confirmar ✅");
   assert.doesNotMatch(ok, /anotad|agendad|marcad/iu);
   const dia = textoDoDia({ nome: "Edimilson", modelo: "N2", periodo: "tarde" });
   assert.equal(dia, "Oi, Edimilson! Hoje é o dia de ver a *N2* de perto 😊 Ainda dá pra você passar aqui à tarde? Me fala que horas fica melhor pra você que eu deixo tudo pronto.");
