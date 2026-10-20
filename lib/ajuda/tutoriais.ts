@@ -269,8 +269,8 @@ export const TUTORIAIS: Tutorial[] = [
       { texto: "Abra \"Estoque\" e toque na aba \"Catálogo\". Cada linha é um card do site, na mesma ordem.", imagem: img("catalogo", 1), legenda: "Aba Catálogo do estoque" },
       { texto: "Para um modelo novo, toque em \"Novo modelo\": nome, tipo, marca, preço (vazio = \"Consultar preço\"), descrição e a ficha técnica (motor, autonomia, velocidade, bateria, pneu, peso, recarga). Toque em \"Criar modelo\"." },
       { texto: "Para trocar a foto principal ou mudar qualquer dado, toque em \"Editar\". A foto só aparece depois que o modelo existe.", imagem: img("catalogo", 2), legenda: "Janela de edição do modelo" },
-      { texto: "Escolha o selo de disponibilidade: \"Pronta entrega\", \"Sob encomenda\" ou \"Consulte disponibilidade\". Use as setas para mudar a ordem no site e o olho para tirar ou pôr no site." },
-      { texto: "Marque \"Lançamento\" (com uma frase curta, ex.: \"Chega em outubro\") para o modelo aparecer em destaque com o botão de reserva." },
+      { texto: "O selo do site sai do estoque sozinho (com unidade disponível: Pronta entrega). Em \"Quando não tiver no estoque, mostrar\", escolha Esgotado, Sob encomenda ou Lançamento (reserva). Use as setas para mudar a ordem no site e o olho para tirar ou pôr no site." },
+      { texto: "Lançamento (com uma frase curta, ex.: \"Chega em outubro\") aparece em destaque com o botão de reserva até a primeira unidade entrar no estoque; aí vira Pronta entrega sozinho." },
       { texto: "Em \"Cores\" cadastre cada cor com a foto da moto naquela cor." },
     ],
     regras: [

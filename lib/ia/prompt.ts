@@ -120,7 +120,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   const v = schema.veiculos;
   const [linhas, cores, unidades, base, chegando] = await Promise.all([
     db
-      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade, reposicaoEm: m.reposicaoEm })
+      .select({ id: m.id, nome: m.nome, marca: m.marca, tipo: m.tipo, preco: m.precoTabela, ficha: m.ficha, disponibilidade: m.disponibilidade, descricao: m.descricao, quantidade: m.quantidade, reposicaoEm: m.reposicaoEm, lancamento: m.lancamento, lancamentoTexto: m.lancamentoTexto })
       .from(m)
       .where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA, "acessorio"])))
       .orderBy(asc(m.ordem), asc(m.nome)),
@@ -144,7 +144,7 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
   if (!linhas.length) return { texto: "", nomes: [] as string[], comEstoque: [] as string[], semEstoque: [] as string[][] };
   const brl = (x: number | null) => (x ? reais(Number(x)) : "preço sob consulta");
   const comEstoque: string[] = [];
-  const semEstoque: { nome: string; apelidos: string[]; chega?: string | null }[] = [];
+  const semEstoque: { nome: string; apelidos: string[]; chega?: string | null; lancamento?: string | null }[] = [];
   const itens: string[] = [];
   for (const l of linhas) {
     const nome = [l.marca, l.nome].filter(Boolean).join(" ");
@@ -164,7 +164,13 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
       /* reposição cadastrada no catálogo (18/10/2026) ou unidade reservada com entrada no futuro */
       const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
       const quando = [...vindo.map((u) => u.entradaEm), ...(l.reposicaoEm && l.reposicaoEm >= hoje ? [l.reposicaoEm] : [])].sort()[0];
-      semEstoque.push({ nome, apelidos: apelidosDoModelo(l.nome), chega: quando ? quando.split("-").reverse().slice(0, 2).join("/") : null });
+      semEstoque.push({
+        nome,
+        apelidos: apelidosDoModelo(l.nome),
+        chega: quando ? quando.split("-").reverse().slice(0, 2).join("/") : null,
+        /* lançamento sem unidade ainda: aceita reserva (dono, 20/10/2026) */
+        lancamento: l.lancamento ? (l.lancamentoTexto?.trim() || "") : null,
+      });
       continue;
     }
     comEstoque.push(l.nome, ...(l.marca ? [l.marca] : []));
@@ -179,9 +185,13 @@ export async function catalogoParaIa(opcoes: { incluirTeste?: boolean; kmSemana?
     const detalhes = l.descricao?.trim() ? ` | detalhes: ${l.descricao.trim()}` : "";
     itens.push(`• ${nome}${l.tipo === "patinete" ? " (patinete elétrico)" : combustao ? " (moto a combustão seminova: precisa de CNH, placa e IPVA)" : ""}: ${brl(l.preco as number | null)}${ficha ? ` | ${ficha}` : ""}${detalhes}${coresDoModelo.length ? ` | ${rotuloCores}: ${coresDoModelo.join(", ")}` : ""} | EM ESTOQUE: ${minhas.length} unidade(s) — pode dizer que tem a pronta entrega${conta}`);
   }
-  const vindo = semEstoque.filter((x) => x.chega);
+  const vindo = semEstoque.filter((x) => x.chega && x.lancamento == null);
+  const lancamentos = semEstoque.filter((x) => x.lancamento != null);
+  const avisoLanc = lancamentos.length
+    ? `\nLANÇAMENTO (ainda não chegou, aceita reserva): ${lancamentos.map((x) => `${x.nome}${x.lancamento ? ` (${x.lancamento})` : ""}${x.chega ? `, previsão ${x.chega}` : ""}`).join("; ")}. Não ofereça por conta própria. Se o cliente perguntar por esse modelo, diga que é lançamento e ainda não chegou e que ele pode RESERVAR sem compromisso: pelo site gemeosmotors.com.br, no botão "Quero reservar", ou você anota o interesse e a equipe confirma a reserva com ele. Nunca diga que já está reservado nem dê preço ou ficha que não estejam aqui.`
+    : "";
   const avisoSem = semEstoque.length
-    ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.${vindo.length ? `\nENCOMENDA A CAMINHO (a loja já fez o pedido): ${vindo.map((x) => `${x.nome} chega em ${x.chega}`).join("; ")}. Se o cliente perguntar por esse modelo, diga que no momento não tem disponível, que a próxima remessa chega em ${vindo.length === 1 ? vindo[0].chega : "a data acima"} e ofereça anotar o interesse para a equipe avisar assim que chegar. Não prometa reserva nem preço.` : ""}`
+    ? `\nSEM UNIDADE NO ESTOQUE AGORA (NÃO ofereça, não liste, não dê preço, ficha nem cor): ${semEstoque.map((x) => x.nome).join(", ")}. Se o cliente perguntar por uma delas pelo nome, diga que no momento não tem unidade disponível, ofereça anotar o interesse para avisar quando chegar e apresente as que estão EM ESTOQUE.${vindo.length ? `\nENCOMENDA A CAMINHO (a loja já fez o pedido): ${vindo.map((x) => `${x.nome} chega em ${x.chega}`).join("; ")}. Se o cliente perguntar por esse modelo, diga que no momento não tem disponível, que a próxima remessa chega em ${vindo.length === 1 ? vindo[0].chega : "a data acima"} e ofereça anotar o interesse para a equipe avisar assim que chegar. Não prometa reserva nem preço.` : ""}${avisoLanc}`
     : "";
   const nenhuma = comEstoque.length ? "" : "\nNENHUMA moto com unidade disponível agora: não ofereça modelo; diga que a equipe confirma o que chegou e já te retorna.";
   const texto = `# CATÁLOGO DA LOJA E ESTOQUE AGORA

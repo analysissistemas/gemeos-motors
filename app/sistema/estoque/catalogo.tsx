@@ -85,8 +85,9 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
                     </p>
                     <p className="text-[12px] text-ink-3">
                       {TIPOS_CATALOGO[m.tipo as TipoCatalogo] ?? m.tipo} · {m.precoTabela ? brl(m.precoTabela) : "Consultar preço"} ·{" "}
-                      {DISPONIBILIDADES[m.disponibilidade as Disponibilidade] ?? m.disponibilidade}
-                      {m.tipo !== "acessorio" ? ` · ${m.disponiveis} disponível(is)` : ""}
+                      {m.tipo === "acessorio"
+                        ? DISPONIBILIDADES[m.disponibilidade as Disponibilidade] ?? m.disponibilidade
+                        : `${m.disponiveis} disponível(is) no estoque · sem estoque: ${SEM_ESTOQUE[m.lancamento ? "lancamento" : m.disponibilidade === "sob_encomenda" ? "sob_encomenda" : "esgotado"]}`}
                       {m.tipo === "acessorio" && m.quantidade != null ? ` · ${m.quantidade} em estoque` : ""}
                     </p>
                     {lista.length > 0 && (
@@ -204,6 +205,8 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   const [quantidade, setQuantidade] = useState(item?.quantidade != null ? String(item.quantidade) : "");
   const [disponibilidade, setDisponibilidade] = useState<Disponibilidade>((item?.disponibilidade as Disponibilidade) ?? "consultar");
   const [lancamento, setLancamento] = useState(item?.lancamento ?? false);
+  /* moto, patinete, carro: o estoque decide o selo; aqui só o que mostrar quando não tiver unidade (dono, 20/10/2026) */
+  const [semEstoque, setSemEstoque] = useState<SemEstoque>(item?.lancamento ? "lancamento" : item?.disponibilidade === "sob_encomenda" ? "sob_encomenda" : "esgotado");
   const [lancamentoTexto, setLancamentoTexto] = useState(item?.lancamentoTexto ?? "");
   const [reposicaoEm, setReposicaoEm] = useState(item?.reposicaoEm ?? "");
   const [reposicaoQtd, setReposicaoQtd] = useState(item?.reposicaoQtd != null ? String(item.reposicaoQtd) : "");
@@ -229,8 +232,8 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
       ficha,
       mostrarNoSite,
       quantidade: acessorio ? quantidade : null,
-      disponibilidade,
-      lancamento,
+      disponibilidade: acessorio ? disponibilidade : semEstoque === "sob_encomenda" ? "sob_encomenda" : "consultar",
+      lancamento: acessorio ? lancamento : semEstoque === "lancamento",
       lancamentoTexto,
       reposicaoEm,
       reposicaoQtd,
@@ -472,15 +475,27 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Alternar marcado={mostrarNoSite} aoMudar={setMostrarNoSite} rotulo="Mostrar no site" descricao="Desligado, o card some do site." />
-        <Campo rotulo="Disponibilidade (selo do card)">
-          <Selecao value={disponibilidade} onChange={(e) => setDisponibilidade(e.target.value as Disponibilidade)}>
-            {(Object.keys(DISPONIBILIDADES) as Disponibilidade[]).map((k) => (
-              <option key={k} value={k}>
-                {DISPONIBILIDADES[k]}
-              </option>
-            ))}
-          </Selecao>
-        </Campo>
+        {acessorio ? (
+          <Campo rotulo="Disponibilidade (selo do card)" dica="Vale só com a quantidade vazia (não contada).">
+            <Selecao value={disponibilidade} onChange={(e) => setDisponibilidade(e.target.value as Disponibilidade)}>
+              {(Object.keys(DISPONIBILIDADES) as Disponibilidade[]).map((k) => (
+                <option key={k} value={k}>
+                  {DISPONIBILIDADES[k]}
+                </option>
+              ))}
+            </Selecao>
+          </Campo>
+        ) : (
+          <Campo rotulo="Quando não tiver no estoque, mostrar" dica="Com unidade disponível no estoque, o site mostra Pronta entrega sozinho.">
+            <Selecao value={semEstoque} onChange={(e) => setSemEstoque(e.target.value as SemEstoque)}>
+              {(Object.keys(SEM_ESTOQUE) as SemEstoque[]).map((k) => (
+                <option key={k} value={k}>
+                  {SEM_ESTOQUE[k]}
+                </option>
+              ))}
+            </Selecao>
+          </Campo>
+        )}
       </div>
 
       {/* reposição a caminho (dono, 18/10/2026): o site mostra "Chegando dd/mm", a IA diz a previsão e sai sozinha quando chega */}
@@ -499,15 +514,23 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
         <p className="text-[12px] text-ink-3">Sem unidade disponível, o site mostra &quot;Chegando&quot; com a data e a IA avisa a previsão. Quando você cadastrar a moto como disponível, a reposição sai sozinha e a fila de espera é avisada.</p>
       </div>
 
+      {acessorio || semEstoque === "lancamento" ? (
       <div className="flex flex-col gap-2 rounded-2xl border border-linha p-3">
-        <Alternar marcado={lancamento} aoMudar={setLancamento} rotulo="Lançamento" descricao="Aparece em destaque no site, com o botão para o cliente reservar." />
-        {lancamento && (
+        {acessorio ? (
+          <Alternar marcado={lancamento} aoMudar={setLancamento} rotulo="Lançamento" descricao="Aparece em destaque no site, com o botão para o cliente reservar." />
+        ) : (
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <Rocket className="size-4" /> Lançamento: destaque no site com &quot;Quero reservar&quot; até a primeira unidade entrar no estoque
+          </p>
+        )}
+        {(!acessorio || lancamento) && (
           <Campo rotulo="Frase curta do lançamento" dica='Ex.: "Chega em outubro"' erro={erros.lancamentoTexto}>
             <Entrada value={lancamentoTexto} onChange={(e) => setLancamentoTexto(e.target.value)} maxLength={60} />
           </Campo>
         )}
-        {lancamento && <p className="flex items-center gap-1.5 text-[12px] text-ink-3"><Rocket className="size-3.5" /> As reservas chegam em Operação → Reservas e já abrem um negócio no funil.</p>}
+        {(!acessorio || lancamento) && <p className="flex items-center gap-1.5 text-[12px] text-ink-3"><Rocket className="size-3.5" /> As reservas chegam em Operação → Reservas e já abrem um negócio no funil.</p>}
       </div>
+      ) : null}
 
       <RodapeDialogo>
         <Botao variante="fantasma" onClick={aoTerminar}>
@@ -520,6 +543,9 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     </div>
   );
 }
+
+const SEM_ESTOQUE = { esgotado: "Esgotado", sob_encomenda: "Sob encomenda", lancamento: "Lançamento (reserva)" } as const;
+type SemEstoque = keyof typeof SEM_ESTOQUE;
 
 /* lançamento com unidade disponível já é pronta entrega no site (dono, 20/10/2026); o mesmo de /api/vitrine/catalogo */
 const lancamentoNoSite = (m: ItemCatalogo) => m.lancamento && !(m.tipo === "acessorio" ? (m.quantidade ?? 0) > 0 : m.disponiveis > 0);
