@@ -289,10 +289,14 @@ export async function reagendarTestDrive(u: Quem | null, testDriveId: number, qu
     if (horaDefinida) await conferirConflito(tx, { agendadoPara: quando, veiculoId: td.veiculoId, modeloId: td.modeloId, ignorarId: td.id });
     /* horário novo precisa de confirmação nova */
     await tx.update(schema.testDrives).set({ agendadoPara: quando, horaDefinida, status: "agendado", atualizadoEm: new Date() }).where(eq(schema.testDrives.id, td.id));
-    await anotar(tx, td, u, `Test drive remarcado de ${dataHora(td.agendadoPara)} para ${dataHora(quando)}`);
+    /* anotado só com o dia: "de 23/10 às 12:00" não existia (Simulador, 19/10/2026) */
+    const de = td.horaDefinida ? dataHora(td.agendadoPara) : data(td.agendadoPara);
+    const para = horaDefinida ? dataHora(quando) : `${data(quando)} (horário a combinar)`;
+    const nome = { test_drive: "Test drive", visita: "Visita", compra: "Compra prevista" }[td.tipo as "test_drive" | "visita" | "compra"] ?? "Test drive";
+    await anotar(tx, td, u, !td.horaDefinida && horaDefinida && data(td.agendadoPara) === data(quando) ? `${nome} com horário definido: ${dataHora(quando)}` : `${nome} ${td.tipo === "test_drive" ? "remarcado" : "remarcada"} de ${de} para ${para}`);
     await registrarLog(
       u,
-      { acao: "testdrive.remarcado", entidade: "test_drive", entidadeId: td.id, descricao: `Remarcou o test drive de ${td.nomeCliente} de ${dataHora(td.agendadoPara)} para ${dataHora(quando)}`, dados: { de: td.agendadoPara, para: quando } },
+      { acao: "testdrive.remarcado", entidade: "test_drive", entidadeId: td.id, descricao: `Remarcou ${td.tipo === "test_drive" ? "o test drive" : td.tipo === "compra" ? "a compra prevista" : "a visita"} de ${td.nomeCliente} de ${de} para ${para}`, dados: { de: td.agendadoPara, para: quando } },
       tx,
     );
     return { id: td.id, conversaId: td.conversaId, quando };
