@@ -61,6 +61,14 @@ export async function agendarAquecimento(p: {
     .set({ status: "cancelado", concluidoEm: agora })
     .where(and(eq(F.conversaId, p.conversaId), eq(F.status, "pendente"), sql`(${F.contexto}->>'aquecimento' = 'true' or ${F.contexto}->>'semResposta' = 'true')`));
   if (!p.qualifica || !(await lerConfigWorkflow()).followUpAquecimento) return null;
+  /* visita, test drive ou compra marcada (Milton, 19/10/2026: "eles estavam caindo em follow-up"): quem avisou o dia não é
+     cobrado; a agenda cuida dele (lembrete no dia) */
+  const [agenda] = await db
+    .select({ id: schema.testDrives.id })
+    .from(schema.testDrives)
+    .where(and(eq(schema.testDrives.conversaId, p.conversaId), inArray(schema.testDrives.status, ["agendado", "confirmado"]), gt(schema.testDrives.agendadoPara, new Date(Date.now() - 12 * 60 * 60 * 1000))))
+    .limit(1);
+  if (agenda) return { agendados: 0 };
   const [ultima] = await db
     .select({ id: M.id, em: M.criadoEm, conteudo: M.conteudo })
     .from(M)

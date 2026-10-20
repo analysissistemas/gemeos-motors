@@ -316,6 +316,13 @@
       "when": 1792367442240,
       "tag": "0044_fila_espera_reposicao",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792457988799,
+      "tag": "0045_visitas_negociacao",
+      "breakpoints": true
     }
   ]
 }

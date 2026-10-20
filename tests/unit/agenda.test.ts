@@ -92,3 +92,21 @@ test("com visita marcada: outro dia ou hora remarca só se fala de ir à loja ou
   assert.equal(detectarMomento({ textoCliente: "Na verdade vou na quinta feira", ultimaDaLoja: "O que está faltando para concluirmos a sua compra? 😊", conheceModelo: true, agora: AGORA16, jaAgendou: true }), "informou_visita");
   assert.notEqual(detectarMomento({ textoCliente: "amanhã te mando o comprovante", ultimaDaLoja: "Qualquer coisa estou por aqui", conheceModelo: true, agora: AGORA16, jaAgendou: true }), "informou_visita");
 });
+
+test("Milton (19/10/2026): 'dia 30 de novembro eu compro' é compra prevista; 'sexta vou aí' já é visita informada", async () => {
+  const { compraPrevista, dataHoraDaVisita } = await import("../../lib/ia/agenda.ts");
+  const { detectarMomento } = await import("../../lib/ia/fechamento.ts");
+  const segunda = new Date("2026-10-19T13:00:00Z"); // segunda, 10h em Recife
+  assert.deepEqual(dataHoraDaVisita("dia 30 de novembro", segunda).dia, { ano: 2026, mes: 10, dia: 30 });
+  assert.deepEqual(dataHoraDaVisita("5 de janeiro", segunda).dia, { ano: 2027, mes: 0, dia: 5 });
+  assert.deepEqual(compraPrevista("Ou dia 30 de novembro eu compro", segunda), { ano: 2026, mes: 10, dia: 30 });
+  assert.deepEqual(compraPrevista("sexta eu fecho com você", segunda), { ano: 2026, mes: 9, dia: 23 });
+  assert.deepEqual(compraPrevista("semana que vem não, sábado venho buscar", segunda), { ano: 2026, mes: 9, dia: 24 });
+  assert.equal(compraPrevista("vou comprar", segunda), null); // sem o dia
+  assert.equal(compraPrevista("sexta não vou comprar", segunda), null);
+  assert.equal(compraPrevista("quanto fica a DF17?", segunda), null);
+  const m = (t: string) => detectarMomento({ textoCliente: t, ultimaDaLoja: "Qual delas te agradou mais? 😊", conheceModelo: true, objecoesAntes: 0, jaAgendou: false });
+  assert.equal(m("Sexta feira vou aí"), "informou_visita");
+  assert.equal(m("Gostei, sexta eu passo aí"), "informou_visita");
+  assert.equal(m("vou aí ver de perto"), "quer_visitar");
+});

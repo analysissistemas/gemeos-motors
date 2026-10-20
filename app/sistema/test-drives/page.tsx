@@ -3,18 +3,20 @@ import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { exigirPermissao } from "@/lib/auth/dal";
 import { listarEquipe } from "@/lib/consultas/equipe";
-import { chaveDia, chaveHoje, dataHora, diaPorExtenso, formatarTelefone, hora } from "@/lib/formato";
+import { chaveDia, chaveHoje, data, dataHora, diaPorExtenso, formatarTelefone, hora } from "@/lib/formato";
 import { cn } from "@/lib/cn";
 import { listarTestDrives, type ItemTestDrive } from "@/lib/servicos/test-drive";
-import { ENDERECO_LOJA, STATUS_ABERTOS, STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
+import { ENDERECO_LOJA, STATUS_ABERTOS, STATUS_TEST_DRIVE, TIPOS_AGENDA, type StatusTestDrive, type TipoAgenda } from "@/lib/test-drive";
 import { Pagina } from "@/components/ui/pagina";
 import { CabecalhoPagina, EstadoVazio, Painel, Selo } from "@/components/ui/basicos";
 import { Filtros } from "@/components/ui/filtros";
 import { AcoesItem, NovoTestDrive } from "./tela";
 
-export const metadata: Metadata = { title: "Test drives" };
+export const metadata: Metadata = { title: "Visitas e negociação" };
 
-const PERIODOS = { hoje: "Hoje", "7dias": "Próximos 7 dias", todos: "Todos" } as const;
+/* Milton (19/10/2026): "na aba fiquem em primeiro os mais próximos". Abre em Todos (a compra prevista para o fim do mês
+   também aparece), do mais próximo para o mais longe */
+const PERIODOS = { todos: "Todos", hoje: "Hoje", "7dias": "Próximos 7 dias" } as const;
 type Periodo = keyof typeof PERIODOS;
 
 /** Dia de hoje + n, no fuso da loja ("2026-09-27"). */
@@ -25,7 +27,7 @@ const inicioDoDia = (n: number) => new Date(`${chaveDaqui(n)}T00:00:00-03:00`);
 export default async function PaginaTestDrives({ searchParams }: { searchParams: Promise<{ periodo?: string }> }) {
   await exigirPermissao("testdrives.ver");
   const { periodo: p } = await searchParams;
-  const periodo: Periodo = p && p in PERIODOS ? (p as Periodo) : "7dias";
+  const periodo: Periodo = p && p in PERIODOS ? (p as Periodo) : "todos";
   const agora = new Date();
   const ate = periodo === "hoje" ? inicioDoDia(1) : periodo === "7dias" ? inicioDoDia(8) : null;
   const [atrasados, proximos, encerrados, equipe] = await Promise.all([
@@ -47,10 +49,10 @@ export default async function PaginaTestDrives({ searchParams }: { searchParams:
 
   return (
     <Pagina>
-      <CabecalhoPagina titulo="Test drives" subtitulo={`Agenda de test drives na loja de Goiana (${ENDERECO_LOJA}).`} acoes={<NovoTestDrive equipe={equipe} />} />
+      <CabecalhoPagina titulo="Visitas e negociação" subtitulo={`Test drives, visitas avisadas e compras com dia marcado, dos mais próximos aos mais distantes. Loja de Goiana (${ENDERECO_LOJA}).`} acoes={<NovoTestDrive equipe={equipe} />} />
       <Filtros className="mb-5 flex flex-wrap gap-1.5">
         {(Object.keys(PERIODOS) as Periodo[]).map((k) => (
-          <Link key={k} href={k === "7dias" ? "/sistema/test-drives" : `/sistema/test-drives?periodo=${k}`} className={cn("rounded-full border px-3 py-1.5 text-[12.5px]", periodo === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2")}>
+          <Link key={k} href={k === "todos" ? "/sistema/test-drives" : `/sistema/test-drives?periodo=${k}`} className={cn("rounded-full border px-3 py-1.5 text-[12.5px]", periodo === k ? "border-ink bg-ink text-contra-ink" : "border-linha text-ink-2")}>
             {PERIODOS[k]}
           </Link>
         ))}
@@ -62,7 +64,7 @@ export default async function PaginaTestDrives({ searchParams }: { searchParams:
           <Painel className="overflow-hidden">
             <ul>
               {atrasados.map((t) => (
-                <Linha key={t.id} t={t} quando={dataHora(t.agendadoPara)} alerta />
+                <Linha key={t.id} t={t} quando={t.horaDefinida ? dataHora(t.agendadoPara) : data(t.agendadoPara)} alerta />
               ))}
             </ul>
           </Painel>
@@ -73,8 +75,8 @@ export default async function PaginaTestDrives({ searchParams }: { searchParams:
         <Painel>
           <EstadoVazio
             icone={<KeyRound />}
-            titulo={periodo === "hoje" ? "Nenhum test drive hoje" : periodo === "7dias" ? "Nenhum test drive nos próximos 7 dias" : "Nenhum test drive marcado"}
-            texto="Agende pela conversa com o cliente (painel da direita) ou pelo botão Novo test drive."
+            titulo={periodo === "hoje" ? "Nenhuma visita hoje" : periodo === "7dias" ? "Nenhuma visita nos próximos 7 dias" : "Nenhuma visita ou compra marcada"}
+            texto="A IA anota sozinha quando o cliente diz o dia (“sexta vou aí”, “dia 30 eu compro”). Também dá para agendar pela conversa (painel da direita) ou pelo botão Novo test drive."
           />
         </Painel>
       ) : (
@@ -87,7 +89,7 @@ export default async function PaginaTestDrives({ searchParams }: { searchParams:
               <Painel className="overflow-hidden">
                 <ul>
                   {itens.map((t) => (
-                    <Linha key={t.id} t={t} quando={hora(t.agendadoPara)} />
+                    <Linha key={t.id} t={t} quando={t.horaDefinida ? hora(t.agendadoPara) : "A combinar"} />
                   ))}
                 </ul>
               </Painel>
@@ -108,7 +110,7 @@ export default async function PaginaTestDrives({ searchParams }: { searchParams:
                       {t.cliente ?? formatarTelefone(t.telefone)} · <span className="font-normal text-ink-2">{t.veiculo ?? "—"}</span>
                     </span>
                     <span className="shrink-0 text-ink-3">
-                      {STATUS_TEST_DRIVE[t.status as StatusTestDrive] ?? t.status} · {dataHora(t.agendadoPara)}
+                      {TIPOS_AGENDA[t.tipo as TipoAgenda] ?? "Test drive"} · {STATUS_TEST_DRIVE[t.status as StatusTestDrive] ?? t.status} · {t.horaDefinida ? dataHora(t.agendadoPara) : data(t.agendadoPara)}
                     </span>
                   </span>
                   {t.resultado && <span className="text-[12px] text-ink-2">{t.resultado}</span>}
@@ -135,7 +137,11 @@ function Linha({ t, quando, alerta }: { t: ItemTestDrive; quando: string; alerta
           ) : (
             <span className="truncate font-semibold">{t.cliente ?? formatarTelefone(t.telefone)}</span>
           )}
+          <Selo tom={t.tipo === "compra" ? "marca" : t.tipo === "visita" ? "info" : "neutro"} ponto={false}>
+            {TIPOS_AGENDA[t.tipo as TipoAgenda] ?? "Test drive"}
+          </Selo>
           <Selo tom={t.status === "confirmado" ? "bom" : "neutro"}>{STATUS_TEST_DRIVE[t.status as StatusTestDrive] ?? t.status}</Selo>
+          {!t.horaDefinida && <Selo tom="atencao">Horário a combinar</Selo>}
         </span>
         <span className="block truncate text-[12.5px] text-ink-2">
           {t.veiculo ?? "—"} · {formatarTelefone(t.telefone)}

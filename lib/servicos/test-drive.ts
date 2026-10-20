@@ -8,7 +8,7 @@ import { registrarLog } from "@/lib/logs";
 import { ETAPAS_ABERTAS } from "@/lib/dominio";
 import { data, dataHora, formatarTelefone, hora, soDigitos, telefoneWhatsapp } from "@/lib/formato";
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
-import { DURACAO_TEST_DRIVE_MIN, STATUS_ABERTOS, STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
+import { DURACAO_TEST_DRIVE_MIN, paraCampoLocal, STATUS_ABERTOS, STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
 import { planoRetirada, textoLembreteVisita } from "@/lib/ia/retirada";
 
 type Quem = { id: number; nome: string };
@@ -44,6 +44,9 @@ export const esquemaTestDrive = z.object({
   agendadoPara: z.coerce.date({ error: "Escolha a data e a hora" }),
   responsavelId: idOpcional,
   observacoes: textoOpcional(1000),
+  tipo: z.enum(["test_drive", "visita", "compra"]).optional(),
+  /** false: só o dia ("sexta vou aí"); a hora fica a combinar e o veículo não é reservado */
+  horaDefinida: z.boolean().optional(),
 });
 
 const esquemaStatus = z.object({
@@ -167,9 +170,14 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
   }
   if (!descricao) throw new ErroRegra("Escolha o veículo ou modelo do test drive.");
 
+  const tipo = d.tipo ?? "test_drive";
+  const horaDefinida = d.horaDefinida ?? true;
+  const rotulo = { test_drive: "Test drive agendado", visita: "Visita anotada", compra: "Compra prevista anotada" }[tipo];
+  const quandoTexto = horaDefinida ? dataHora(d.agendadoPara) : `${data(d.agendadoPara)} (horário a combinar)`;
   const criado = await db.transaction(async (tx) => {
     await travarAgenda(tx);
-    await conferirConflito(tx, { agendadoPara: d.agendadoPara, veiculoId: d.veiculoId, modeloId });
+    /* sem hora não ocupa o veículo: a equipe combina o horário */
+    if (horaDefinida) await conferirConflito(tx, { agendadoPara: d.agendadoPara, veiculoId: d.veiculoId, modeloId });
     const [td] = await tx
       .insert(schema.testDrives)
       .values({
@@ -185,17 +193,19 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
         responsavelId: responsavelId ?? u?.id ?? null,
         observacoes: d.observacoes,
         criadoPor: u?.id ?? null,
+        tipo,
+        horaDefinida,
       })
       .returning({ id: schema.testDrives.id });
-    await anotar(tx, { conversaId: d.conversaId, negocioId }, u, `Test drive agendado: ${descricao}, ${dataHora(d.agendadoPara)}`);
+    await anotar(tx, { conversaId: d.conversaId, negocioId }, u, `${rotulo}: ${descricao}, ${quandoTexto}`);
     await registrarLog(
       u,
       {
         acao: "testdrive.criado",
         entidade: "test_drive",
         entidadeId: td.id,
-        descricao: `Agendou test drive de ${nomeContato ?? formatarTelefone(telefone)} (${descricao}) para ${dataHora(d.agendadoPara)}`,
-        dados: { conversaId: d.conversaId, clienteId, negocioId, modeloId, veiculoId: d.veiculoId },
+        descricao: `${rotulo} de ${nomeContato ?? formatarTelefone(telefone)} (${descricao}) para ${quandoTexto}`,
+        dados: { conversaId: d.conversaId, clienteId, negocioId, modeloId, veiculoId: d.veiculoId, tipo, horaDefinida },
       },
       tx,
     );
@@ -203,7 +213,7 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
   });
   await agendarLembreteTestDrive(criado.id).catch((e) => console.error("[lembrete test drive]", e));
   /* marcado pela IA: aviso no celular do Milton (o que a equipe marca, ela já sabe) */
-  if (!u) void import("@/lib/avisos/gatilhos").then((g) => g.avisarVisitaMarcada({ conversaId: d.conversaId ?? null, nome: nomeContato ?? null, descricao, quando: d.agendadoPara })).catch(() => null);
+  if (!u && horaDefinida) void import("@/lib/avisos/gatilhos").then((g) => g.avisarVisitaMarcada({ conversaId: d.conversaId ?? null, nome: nomeContato ?? null, descricao, quando: d.agendadoPara })).catch(() => null);
   return criado;
 }
 
@@ -219,6 +229,28 @@ export async function agendarLembreteTestDrive(testDriveId: number) {
     .set({ status: "cancelado", concluidoEm: new Date() })
     .where(and(eq(F.status, "pendente"), eq(F.tipo, "lembrete_visita"), sql`(${F.contexto}->>'testDriveId')::int = ${td.id}`));
   if (!td.conversaId || !STATUS_ABERTOS.includes(td.status as StatusTestDrive)) return null;
+  /* só o dia (visita avisada, compra prevista): no dia, às 8h, a equipe recebe a tarefa de confirmar com o cliente */
+  if (!td.horaDefinida) {
+    await db
+      .update(F)
+      .set({ status: "cancelado", concluidoEm: new Date() })
+      .where(and(eq(F.status, "pendente"), eq(F.tipo, "retorno_cliente"), sql`(${F.contexto}->>'agendaId')::int = ${td.id}`));
+    const oito = new Date(`${paraCampoLocal(td.agendadoPara).slice(0, 10)}T08:00:00-03:00`);
+    const oQue = td.tipo === "compra" ? `disse que fecha a compra (${td.veiculoDescricao ?? "moto"}) hoje` : `disse que vem à loja hoje (${td.veiculoDescricao ?? "visita"})`;
+    await db.insert(F).values({
+      conversaId: td.conversaId,
+      clienteId: td.clienteId,
+      negocioId: td.negocioId,
+      usuarioId: td.responsavelId,
+      agendadoPara: oito.getTime() > Date.now() ? oito : new Date(),
+      tipo: "retorno_cliente",
+      motivo: td.tipo === "compra" ? "Compra prevista para hoje" : "Visita avisada para hoje",
+      origem: "ia",
+      notas: `${td.nomeContato ?? "O cliente"} ${oQue}. Chame ele para combinar o horário.`,
+      contexto: { agendaId: td.id, detectadoPor: "ia" },
+    });
+    return null;
+  }
   const [ultima] = await db
     .select({ em: schema.mensagens.criadoEm })
     .from(schema.mensagens)
@@ -247,15 +279,16 @@ export async function agendarLembreteTestDrive(testDriveId: number) {
   return plano.lembreteEm;
 }
 
-export async function reagendarTestDrive(u: Quem | null, testDriveId: number, quando: Date) {
+export async function reagendarTestDrive(u: Quem | null, testDriveId: number, quando: Date, o: { horaDefinida?: boolean } = {}) {
   conferirFuturo(quando);
   return db.transaction(async (tx) => {
     await travarAgenda(tx);
     const td = await buscar(tx, testDriveId);
     if (!STATUS_ABERTOS.includes(td.status as StatusTestDrive)) throw new ErroRegra(`Este test drive já está como "${STATUS_TEST_DRIVE[td.status as StatusTestDrive] ?? td.status}".`);
-    await conferirConflito(tx, { agendadoPara: quando, veiculoId: td.veiculoId, modeloId: td.modeloId, ignorarId: td.id });
+    const horaDefinida = o.horaDefinida ?? true;
+    if (horaDefinida) await conferirConflito(tx, { agendadoPara: quando, veiculoId: td.veiculoId, modeloId: td.modeloId, ignorarId: td.id });
     /* horário novo precisa de confirmação nova */
-    await tx.update(schema.testDrives).set({ agendadoPara: quando, status: "agendado", atualizadoEm: new Date() }).where(eq(schema.testDrives.id, td.id));
+    await tx.update(schema.testDrives).set({ agendadoPara: quando, horaDefinida, status: "agendado", atualizadoEm: new Date() }).where(eq(schema.testDrives.id, td.id));
     await anotar(tx, td, u, `Test drive remarcado de ${dataHora(td.agendadoPara)} para ${dataHora(quando)}`);
     await registrarLog(
       u,
@@ -313,6 +346,8 @@ export async function listarTestDrives(f: {
     .select({
       id: t.id,
       agendadoPara: t.agendadoPara,
+      tipo: t.tipo,
+      horaDefinida: t.horaDefinida,
       status: t.status,
       veiculo: t.veiculoDescricao,
       modeloId: t.modeloId,

@@ -181,7 +181,7 @@ export default async function PaginaRelatorio() {
       </Area>
 
       {/* 5. hoje na loja */}
-      <Area icone={<CalendarClock className="size-4.5" />} titulo="Hoje na loja" href="/sistema/test-drives" link="Test drives">
+      <Area icone={<CalendarClock className="size-4.5" />} titulo="Hoje na loja" href="/sistema/test-drives" link="Visitas e negociação">
         {r.hojeNaLoja.retiradas.length + r.hojeNaLoja.testDrives.length === 0 ? (
           <Vazio>Nenhuma retirada nem test drive marcado para hoje.</Vazio>
         ) : (

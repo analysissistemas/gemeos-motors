@@ -126,7 +126,8 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   /* já agendado e o cliente manda outro dia ou hora (Elton, 15/10/2026: "quarta feira que vem" depois do agendado na
      sexta; a IA disse "confirmado" e a agenda ficou na sexta): remarca. Pergunta ("abre sábado?") não remarca. */
   if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora) && ehRemarcacao(p.textoCliente)) return "informou_visita";
-  if (RX_QUER_VISITAR.test(p.textoCliente)) return dh.temDia && dh.temHora ? "informou_visita" : "quer_visitar";
+  /* "sexta vou aí" (Milton, 19/10/2026): com o dia dito, já vai para a agenda (horário a combinar) */
+  if (RX_QUER_VISITAR.test(p.textoCliente)) return (dh.temDia && dh.temHora) || dh.diaDito ? "informou_visita" : "quer_visitar";
   /* perguntou onde fica: responde o endereço e já pergunta o dia e o horário (dono, 14/10/2026) */
   if (RX_PERGUNTA_ENDERECO.test(p.textoCliente)) return "quer_visitar";
   /* respondeu quantos km roda, depois do "me fala os km que eu faço a conta da economia" */

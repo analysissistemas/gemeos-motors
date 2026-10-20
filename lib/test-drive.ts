@@ -13,6 +13,11 @@ export const STATUS_TEST_DRIVE = {
   cancelado: "Cancelado",
 } as const;
 export type StatusTestDrive = keyof typeof STATUS_TEST_DRIVE;
+/** Visitas e negociação (Milton, 19/10/2026): além do test drive, a visita avisada ("sexta vou aí") e a compra com dia
+ *  marcado ("dia 30 eu compro"). */
+export const TIPOS_AGENDA = { test_drive: "Test drive", visita: "Visita", compra: "Compra prevista" } as const;
+export type TipoAgenda = keyof typeof TIPOS_AGENDA;
+
 /** Ainda vai acontecer (ou aconteceu e falta registrar o resultado). */
 export const STATUS_ABERTOS: StatusTestDrive[] = ["agendado", "confirmado"];
 
@@ -28,6 +33,12 @@ export function paraCampoLocal(d: Date) {
       .map((x) => [x.type, x.value]),
   );
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+/** "sexta, 23/10" (só o dia: o que foi anotado sem hora). */
+export function diaPorExtensoDe(d: Date) {
+  const f = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, ...o }).format(d);
+  return `${f({ weekday: "long" }).replace("-feira", "")}, ${f({ day: "2-digit", month: "2-digit" })}`;
 }
 
 /** "sábado, 27/09, às 10h" (ou "às 10h30"). */

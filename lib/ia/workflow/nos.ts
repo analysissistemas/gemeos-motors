@@ -13,9 +13,9 @@ import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoC
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
-import { dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
+import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
-import { STATUS_ABERTOS } from "@/lib/test-drive";
+import { diaPorExtensoDe, STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
 import { vendedorRespondeuDepois } from "./devolver";
@@ -514,7 +514,7 @@ const maiuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 async function visitaAbertaDaConversa(conversaId: number) {
   const t = schema.testDrives;
   const [v] = await db
-    .select({ id: t.id, agendadoPara: t.agendadoPara })
+    .select({ id: t.id, agendadoPara: t.agendadoPara, horaDefinida: t.horaDefinida, tipo: t.tipo })
     .from(t)
     .where(and(eq(t.conversaId, conversaId), inArray(t.status, STATUS_ABERTOS), gt(t.agendadoPara, new Date())))
     .orderBy(t.agendadoPara)
@@ -533,6 +533,16 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
 
   /* já tem visita marcada: o que ele disse agora muda só o que ele disse (dia ou hora) */
   const marcada = await visitaAbertaDaConversa(c.conversaId);
+  /* anotada só com o dia ("sexta vou aí"): a hora que ele disser completa a mesma; outro dia sem hora muda o dia */
+  if (marcada && !marcada.horaDefinida) {
+    const dh = dataHoraDaVisita(c.textoBuffer);
+    if (!dh.temHora) {
+      const dia = dh.diaDito && dh.dia ? dh.dia : null;
+      const novoDia = dia ? meioDiaDe(dia) : null;
+      if (novoDia && novoDia.getTime() !== marcada.agendadoPara.getTime()) await reagendarTestDrive(null, marcada.id, novoDia, { horaDefinida: false });
+      return { texto: `Anotado ✅ ${maiuscula(diaPorExtensoDe(novoDia ?? marcada.agendadoPara))}. E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
+    }
+  }
   if (marcada) {
     const novo = remarcarPara(dataHoraDaVisita(c.textoBuffer), marcada.agendadoPara);
     if (!novo || novo.getTime() === marcada.agendadoPara.getTime())
@@ -540,12 +550,12 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
     if (novo.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou. Qual outro dia e horário fica bom pra você? 😊", quando: null };
     if (!lojaFunciona(novo)) return { texto: `Nesse horário a loja está fechada. Funcionamos ${funciona}. Qual outro horário fica bom pra você? 😊`, quando: null };
     try {
-      await reagendarTestDrive(null, marcada.id, novo);
+      await reagendarTestDrive(null, marcada.id, novo, { horaDefinida: true });
     } catch (e) {
       if (e instanceof ErroRegra) return { texto: "Esse horário já está reservado. Pode ser um pouco antes ou depois? 🙏", quando: null, erro: e.message };
       throw e;
     }
-    return { texto: `Remarcado ✅ Te esperamos ${quandoPorExtenso(novo)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: novo };
+    return { texto: `${marcada.horaDefinida ? "Remarcado" : "Agendado"} ✅ Te esperamos ${quandoPorExtenso(novo)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.`, quando: novo };
   }
 
   let dh = dataHoraDaVisita(c.textoBuffer);
@@ -565,7 +575,11 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
   if (!dh.temDia || !diaClaro(dh, textoDh))
     return { texto: dh.hora ? `Perfeito, às ${horaCurta(dh.hora)}! E qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊` : `Perfeito! Qual dia fica melhor pra você vir? Funcionamos ${funciona} 😊`, quando: null };
   /* dia sem hora: repete o dia com a data, que fica escrita para a próxima mensagem */
-  if (!dh.temHora || !dh.quando) return { texto: `Show! ${dh.dia ? `${maiuscula(diaPorExtenso(dh.dia))}. ` : ""}E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
+  if (!dh.temHora || !dh.quando) {
+    /* Milton (19/10/2026): "sexta vou aí" já entra em Visitas e negociação, com horário a combinar, e sai do follow-up */
+    const anotou = dh.dia ? await anotarNaAgenda(c, { tipo: "visita", dia: dh.dia, modelo: p.modelo }) : false;
+    return { texto: `${anotou ? "Anotado ✅" : "Show!"} ${dh.dia ? `${maiuscula(diaPorExtenso(dh.dia))}. ` : ""}E que horas fica melhor pra você? Funcionamos ${funciona} 😊`, quando: null };
+  }
   const quando = dh.quando;
   if (quando.getTime() < Date.now() + 15 * 60_000) return { texto: "Esse horário já passou. Qual outro dia e horário fica bom pra você? 😊", quando: null };
   if (!lojaFunciona(quando))
@@ -592,6 +606,45 @@ async function agendarVisitaPelaIa(c: CtxWorkflow, p: { modelo: string | null; n
   /* o lembrete do dia sai sozinho (servicos/test-drive.ts): só promete quando ele vai sair (dono, 15/10/2026) */
   const lembrete = planoRetirada(quando, new Date(), new Date()).lembreteEm ? " No dia eu te mando um lembrete por aqui." : "";
   return { texto: `Agendado ✅ Te esperamos ${quandoPorExtenso(quando)}${quem}, aqui na loja: ${LOCAL_LOJA.endereco}.${moto}${lembrete}`, quando };
+}
+
+/** Meio-dia do dia (Recife): o que foi anotado sem hora fica no meio do dia, para a lista ordenar pela data. */
+function meioDiaDe(d: { ano: number; mes: number; dia: number }) {
+  const meio = new Date(Date.UTC(d.ano, d.mes, d.dia, 15, 0));
+  return meio.getTime() > Date.now() + 15 * 60_000 ? meio : new Date(Date.now() + 60 * 60_000);
+}
+
+/** Anota na agenda (Visitas e negociação) só com o dia: visita avisada ou compra prevista. Já tem uma aberta nesta
+ *  conversa: muda o dia dela. Falhou: false (a conversa segue, a equipe vê na conversa). */
+async function anotarNaAgenda(c: CtxWorkflow, p: { tipo: "visita" | "compra"; dia: { ano: number; mes: number; dia: number }; modelo: string | null }) {
+  const quando = meioDiaDe(p.dia);
+  try {
+    const aberta = await visitaAbertaDaConversa(c.conversaId);
+    if (aberta) {
+      if (aberta.horaDefinida) return true;
+      await reagendarTestDrive(null, aberta.id, quando, { horaDefinida: false });
+      if (aberta.tipo !== p.tipo) await db.update(schema.testDrives).set({ tipo: p.tipo }).where(eq(schema.testDrives.id, aberta.id));
+      return true;
+    }
+    let modeloId: number | null = null;
+    if (p.modelo) {
+      const [m] = await db.select({ id: schema.modelos.id }).from(schema.modelos).where(sql`lower(${schema.modelos.nome}) = ${p.modelo.toLowerCase()}`).limit(1);
+      modeloId = m?.id ?? null;
+    }
+    await criarTestDrive(null, {
+      conversaId: c.conversaId,
+      modeloId,
+      veiculoDescricao: modeloId ? undefined : p.modelo ?? (p.tipo === "compra" ? "Compra" : "Visita à loja"),
+      agendadoPara: quando,
+      tipo: p.tipo,
+      horaDefinida: false,
+      observacoes: `Anotado pela IA no WhatsApp: "${c.textoBuffer.slice(0, 200)}". Horário a combinar.`,
+    });
+    return true;
+  } catch (e) {
+    console.error("[agenda] anotar sem hora", e);
+    return false;
+  }
 }
 
 /* Dados do pedido no CRM (pedido do dono, 03/10/2026: "o objetivo da IA é pegar essas informações e
@@ -1611,6 +1664,15 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     /* o cliente disse quando vem à loja: o sistema marca na agenda de test drive (mesma regra de conflito
        da equipe), confere o horário da loja e confirma com o endereço; depois vai o pino do mapa */
+    /* "dia 30 de novembro eu compro" (Milton, 19/10/2026): vai para Visitas e negociação como compra prevista e sai do
+       follow-up; no dia, a equipe recebe a tarefa de chamar o cliente */
+    const diaCompra = intencao === "compra" && !r.ctx.humano ? compraPrevista(semAberturaDoSite(c.textoBuffer)) : null;
+    if (diaCompra && (await anotarNaAgenda(c, { tipo: "compra", dia: diaCompra, modelo: modeloDaConversa }))) {
+      const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const texto = `Combinado${nome ? `, ${nome}` : ""}! Deixei anotado: ${diaPorExtenso(diaCompra)}, você vem fechar ${modeloDaConversa ? `a sua *${modeloDaConversa}*` : "a sua moto"} ✅ Se quiser adiantar alguma coisa até lá, me fala por aqui 😊`;
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, compraPrevista: diaPorExtenso(diaCompra) } };
+    }
     if (momento === "informou_visita") {
       const v = await agendarVisitaPelaIa(c, { modelo: modeloDaConversa, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), horario });
       /* dono, 19/10/2026: "pergunta o dia, já coloca a IA pra qualificar ele". Marcou e ainda não escolheu a moto: junto

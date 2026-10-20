@@ -24,6 +24,7 @@ export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|t
 export const RX_PERGUNTA_ENDERECO = /(?<![\p{L}])(onde (fica|[ée]|voc[êe]s ficam|ficam|est[aã]o)|aonde (fica|[ée])|qual (o|[ée] o) endere[çc]o|endere[çc]o da loja|me (manda|passa|envia) (o endere[çc]o|a localiza[çc][ãa]o)|localiza[çc][ãa]o( da loja)?\??$)(?![\p{L}])/iu;
 
 const DIAS_SEMANA: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+const MESES: Record<string, number> = { janeiro: 0, fevereiro: 1, marco: 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
 
 /** diaDito: o cliente escreveu o dia; sem ele, "às 10h" sozinho vira hoje ou amanhã (temDia) */
 export type DataHoraVisita = {
@@ -60,12 +61,18 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
   /* dia */
   let dia: { ano: number; mes: number; dia: number } | null = null;
   const d1 = /(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?!\d)/.exec(t);
+  /* "dia 30 de novembro", "5 de dezembro" (Milton, 19/10/2026: "dia 30 de novembro eu compro") */
+  const d3 = /(?<!\d)(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.exec(t);
   const d2 = /\bdia\s+(\d{1,2})(?!\d)/.exec(t);
   const semana = /\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)\b/.exec(t);
   if (/\bdepois de amanha\b/.test(t)) dia = mais(hoje, 2);
   else if (/\bamanha\b/.test(t)) dia = mais(hoje, 1);
   else if (/\bhoje\b/.test(t)) dia = mais(hoje, 0);
-  else if (d1) {
+  else if (d3) {
+    const mes = MESES[d3[2]];
+    const passou = mes < hoje.mes || (mes === hoje.mes && Number(d3[1]) < hoje.dia);
+    dia = { ano: hoje.ano + (passou ? 1 : 0), mes, dia: Number(d3[1]) };
+  } else if (d1) {
     const mes = Number(d1[2]) - 1;
     let ano = d1[3] ? Number(d1[3]) : hoje.ano;
     if (ano < 100) ano += 2000;
@@ -96,6 +103,17 @@ export function dataHoraDaVisita(texto: string, agora: Date = new Date()): DataH
 function mais(h: { ano: number; mes: number; dia: number }, n: number) {
   const d = new Date(Date.UTC(h.ano, h.mes, h.dia + n));
   return { ano: d.getUTCFullYear(), mes: d.getUTCMonth(), dia: d.getUTCDate() };
+}
+
+/** "Dia 30 de novembro eu compro", "sexta eu fecho", "semana que vem venho buscar": o cliente marcou o dia da compra.
+ *  Milton, 19/10/2026: "ele entende e já joga no test drive, e na aba fiquem em primeiro os mais próximos". Só com o dia
+ *  dito; "não vou comprar agora" não conta. */
+const RX_COMPRA_PREVISTA = /(?<![a-z])(?:compro|fecho|fechamos|fecharemos|pego ela|pego a moto|vou (?:comprar|fechar|pegar|buscar)|venho (?:comprar|fechar|pegar|buscar)|(?:vou|passo) (?:ai|la|na loja) (?:pra |para )?(?:comprar|fechar|pegar|buscar))(?![a-z])/;
+export function compraPrevista(texto: string, agora: Date = new Date()): { ano: number; mes: number; dia: number } | null {
+  const t = semAcento(texto);
+  if (!RX_COMPRA_PREVISTA.test(t) || /\bnao (?:vou |da pra |posso )?(?:compr|fech|peg|busc)/.test(t)) return null;
+  const dh = dataHoraDaVisita(texto, agora);
+  return dh.diaDito && dh.dia ? dh.dia : null;
 }
 
 /** O dia ficou claro? Dito pelo cliente ("quarta", "amanhã", "21/10") ou "hoje"/"agora"/"mais tarde". Só a hora

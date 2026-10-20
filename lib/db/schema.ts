@@ -897,6 +897,9 @@ export const testDrives = pgTable(
     agendadoPara: quando().notNull(),
     responsavelId: integer().references(() => usuarios.id, { onDelete: "set null" }),
     status: text().notNull().default("agendado"), // agendado | confirmado | realizado | nao_compareceu | cancelado
+    /* Visitas e negociação (Milton, 19/10/2026): "sexta vou aí" e "dia 30 eu compro" também entram, mesmo sem hora */
+    tipo: text().notNull().default("test_drive"), // test_drive | visita | compra
+    horaDefinida: boolean().notNull().default(true), // false = só o dia ("horário a combinar")
     observacoes: text(),
     resultado: text(), // o que aconteceu (obrigatório em realizado e não compareceu)
     encerradoEm: quando(),
