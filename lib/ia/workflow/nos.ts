@@ -56,6 +56,7 @@ import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECID
 import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
+import { horaDoContato, MODELO_CONFIRMAR_VISITA, periodoDoTexto, RX_PERGUNTOU_PERIODO, textoContatoCombinado, textoDoDia, textoPerguntaPeriodo, valoresConfirmar, type Dia, type Periodo } from "@/lib/ia/contato-do-dia";
 import { planoRetirada, quandoRetirar, textoEntregaMarcada, textoLembreteEntrega, textoLembreteRetirada, textoRetiradaMarcada, trechoDeQuando } from "@/lib/ia/retirada";
 import { registrarLog } from "@/lib/logs";
 import { variantesTelefone } from "@/lib/mensageria/servico";
@@ -645,6 +646,34 @@ async function anotarNaAgenda(c: CtxWorkflow, p: { tipo: "visita" | "compra"; di
     console.error("[agenda] anotar sem hora", e);
     return false;
   }
+}
+
+/* "Talvez sábado eu passo aí" (dono, 20/10/2026): nada vai para a agenda; a IA programa uma mensagem para o cliente no
+   dia (lib/ia/contato-do-dia.ts) e o "Cliente combinou de voltar" das regras sai (a IA cuida). Período dito depois: a
+   mesma mensagem muda de hora. Devolve a hora do contato, ou null quando não dá mais (o dia já passou). */
+async function programarContatoDoDia(c: CtxWorkflow, p: { dia: Dia; periodo: Periodo | null; modelo: string | null; nome: string | null }) {
+  const F = schema.followUps;
+  const quando = horaDoContato(p.dia, p.periodo);
+  if (quando.getTime() < Date.now() + 30 * 60_000) return null;
+  const cv = await carregarConversa(c.conversaId);
+  await db
+    .update(F)
+    .set({ status: "cancelado", concluidoEm: new Date() })
+    .where(and(eq(F.conversaId, c.conversaId), eq(F.status, "pendente"), sql`((${F.tipo} = 'lembrete_visita' and ${F.contexto}->>'talvez' = 'true') or (${F.tipo} = 'retorno_cliente' and ${F.contexto}->>'detectadoPor' = 'regras'))`));
+  await db.insert(F).values({
+    conversaId: c.conversaId,
+    clienteId: cv.clienteId,
+    negocioId: cv.negocioId,
+    usuarioId: cv.responsavelId,
+    agendadoPara: quando,
+    tipo: "lembrete_visita",
+    motivo: "Cliente talvez venha hoje",
+    origem: "ia",
+    notas: `O cliente disse que talvez venha ${diaPorExtenso(p.dia)}: a IA chama ele no dia para confirmar. Cancele se não quiser que saia.`,
+    contexto: { talvez: true, dia: p.dia, periodo: p.periodo, doQue: "da visita combinada", texto: textoDoDia({ nome: p.nome, modelo: p.modelo, periodo: p.periodo }), modelo: { nome: MODELO_CONFIRMAR_VISITA.nome, valores: valoresConfirmar({ nome: p.nome, modelo: p.modelo }) } },
+  });
+  await mensagemSistema(db, c.conversaId, `Contato do dia programado: a IA chama o cliente ${quandoPorExtenso(quando)} para confirmar a visita (nada anotado na agenda).`, { triagem: true });
+  return quando;
 }
 
 /* Dados do pedido no CRM (pedido do dono, 03/10/2026: "o objetivo da IA é pegar essas informações e
@@ -1680,11 +1709,38 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     /* "talvez sábado", "vou ver se sexta dá": nada vai para a agenda, e a resposta é fixa (Simulador, 20/10/2026: a IA
        respondeu "Sábado está ótimo!" e o cliente acharia que ficou marcado). Dono: "o mais linear possível" */
-    if (momento === "quer_visitar" && !r.ctx.humano && RX_DIA_INCERTO.test(c.textoBuffer) && dataHoraDaVisita(c.textoBuffer).temDia) {
+    /* dono, 20/10/2026: "a IA tem que perguntar o horário ou o período para fazer o follow-up e disparar automaticamente".
+       Sem período, pergunta "de manhã ou à tarde?"; com ele, confirma que chama no dia. A mensagem do dia já fica
+       programada (sem resposta, às 9h) */
+    const dhTalvez = dataHoraDaVisita(c.textoBuffer);
+    if (momento === "quer_visitar" && !r.ctx.humano && RX_DIA_INCERTO.test(c.textoBuffer) && dhTalvez.temDia && dhTalvez.dia) {
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
-      const texto = `Sem problema${nome ? `, ${nome}` : ""}! Quando tiver certeza do dia, me avisa por aqui que eu já deixo anotado pra você 😊`;
+      const periodo = periodoDoTexto(c.textoBuffer);
+      const contato = await programarContatoDoDia(c, { dia: dhTalvez.dia, periodo, modelo: modeloDaConversa, nome }).catch((e) => (console.error("[contato do dia]", e), null));
+      const diaExtenso = diaPorExtenso(dhTalvez.dia);
+      const texto = !contato
+        ? `Sem problema${nome ? `, ${nome}` : ""}! Quando tiver certeza do dia, me avisa por aqui que eu já deixo anotado pra você 😊`
+        : periodo
+          ? textoContatoCombinado({ nome, diaExtenso, periodo })
+          : textoPerguntaPeriodo({ nome, diaExtenso });
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento } };
+    }
+    /* respondeu o período ("de tarde", "lá pras 15h") à pergunta do "talvez": a mensagem do dia muda de hora; nada na agenda */
+    const periodoDito = !r.ctx.humano && RX_PERGUNTOU_PERIODO.test(ultimaDaLoja) && !RX_DIA_INCERTO.test(c.textoBuffer) ? periodoDoTexto(c.textoBuffer) : null;
+    if (periodoDito) {
+      const [talvez] = await db
+        .select({ contexto: schema.followUps.contexto })
+        .from(schema.followUps)
+        .where(and(eq(schema.followUps.conversaId, c.conversaId), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "lembrete_visita"), sql`${schema.followUps.contexto}->>'talvez' = 'true'`))
+        .limit(1);
+      const dia = (talvez?.contexto as { dia?: Dia } | null)?.dia;
+      const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      if (dia && (await programarContatoDoDia(c, { dia, periodo: periodoDito, modelo: modeloDaConversa, nome }).catch(() => null))) {
+        const texto = textoContatoCombinado({ nome, diaExtenso: diaPorExtenso(dia), periodo: periodoDito });
+        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento: null } };
+      }
     }
     if (momento === "informou_visita") {
       const v = await agendarVisitaPelaIa(c, { modelo: modeloDaConversa, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), horario });

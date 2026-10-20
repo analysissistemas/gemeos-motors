@@ -109,3 +109,32 @@ export async function acaoEnviarRelatorioAgora() {
     return r.como;
   });
 }
+
+/* ---------- modelos da Meta para o contato do dia com o cliente (só administrador) ---------- */
+
+export async function acaoModelosCliente() {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    const { situacaoModelosCliente } = await import("@/lib/avisos/modelos-cliente");
+    try {
+      return { modelos: await situacaoModelosCliente(), erro: null as string | null };
+    } catch (x) {
+      return { modelos: [], erro: x instanceof Error ? x.message : String(x) };
+    }
+  });
+}
+
+export async function acaoCriarModelosCliente() {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const { criarModelosCliente } = await import("@/lib/avisos/modelos-cliente");
+    let r;
+    try {
+      r = await criarModelosCliente();
+    } catch (x) {
+      throw new ErroRegra(`A Meta recusou: ${x instanceof Error ? x.message : String(x)}`);
+    }
+    await registrarLog(u, { acao: "avisos.modelo", entidade: "configuracao", entidadeId: 0, descricao: `Criou os modelos de lembrete ao cliente na Meta (${r.map((m) => `${m.nome}: ${m.status ?? "não criado"}`).join(", ")})` });
+    return r;
+  });
+}

@@ -18,7 +18,7 @@ function instante(ano: number, mes: number, dia: number, hora: number, min: numb
 export const RX_QUER_VISITAR =
   /(?<![\p{L}])(test\s?drive|testar a moto|dar uma volta|andar nela|ver (ela |a moto |as motos )?pessoalmente|ver de perto|ir (ai|a[ií]|na loja|ate a loja|ate ai|ate a[ií])|passar (ai|a[ií]|na loja)|dar uma passad\p{L}*|dou uma passad\p{L}*|passo (ai|a[ií]|l[aá]|na loja)|dou um pulo|dar um pulo|visitar|conhecer a loja|vou (ai|a[ií]|na loja|passar ai|passar a[ií])|posso ir|quero ir|da pra ir|agendar (uma )?visita|marcar (uma )?visita)(?![\p{L}])/iu;
 /** A última mensagem da loja perguntou o dia e a hora da visita? */
-export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|test drive|passar)|que horas[^?]{0,40}(vir|passar|visita)|qual dia[^?]{0,40}(vir|passar|visita)|(me |nos )?(fala|diz|informa|manda)\s+(o|qual)\s+dia|que horas fica (melhor|bom)/iu;
+export const RX_PEDIU_HORARIO_VISITA = /dia e hor[aá]rio[^?]{0,60}(vir|visita|test drive|passar)|que horas[^?]{0,40}(vir|passar|visita)|qual dia[^?]{0,40}(vir|passar|visita)|(me |nos )?(fala|diz|informa|manda)\s+(o|qual)\s+dia|que horas fica (melhor|bom)|hor[aá]rio que fica (melhor|bom)/iu;
 /** A loja convidou para vir ("quer vir ver amanhã?", "pode passar aqui sábado?"): o dia que o cliente responder vai para a
  *  agenda (Simulador, 20/10/2026: o vendedor convidou, o cliente disse "só sábado de manhã" e a IA perguntou se agendava). */
 export const RX_CONVIDOU_VISITA = /\b(quer|queira|pode|podia|consegue|gostaria de|bora|vem|venha)\b[^?]{0,30}\b(vir|passar|visitar|conhecer|dar uma passada|fazer (um|o) test drive)\b[^?]{0,60}\?/iu;

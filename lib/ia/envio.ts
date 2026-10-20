@@ -21,7 +21,7 @@ export type ResultadoEnvioIa = { enviada: boolean; motivo: "sem_permissao" | "va
    bloqueada, fica registrada em ia_execucoes para consulta na Central de IA.
    Nenhum outro código deve chamar o provedor com texto escrito pela IA.
    ============================================================ */
-export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean; /** fontes a mais só deste envio (ex.: a conta de economia feita pelo sistema para o uso do cliente) */ fontesExtras?: string[]; /** texto pronto do sistema (o código escreveu), não da IA: a Sonix sabe que corrigir é no código */ textoDoSistema?: boolean }): Promise<ResultadoEnvioIa> {
+export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: number; telefone: string; texto: string; origem: string; /** teste do painel: grava na conversa, nada sai para o WhatsApp */ simulado?: boolean; /** cita esta mensagem do cliente (resposta no WhatsApp) */ respostaA?: { id: number; externoId: string | null }; /** false = recusa do WhatsApp não vira mensagem na conversa (tentativa que ainda vai se repetir) */ gravarFalha?: boolean; /** fontes a mais só deste envio (ex.: a conta de economia feita pelo sistema para o uso do cliente) */ fontesExtras?: string[]; /** texto pronto do sistema (o código escreveu), não da IA: a Sonix sabe que corrigir é no código */ textoDoSistema?: boolean; /** fora da janela de 24 h: vai o modelo aprovado pela Meta; `texto` é o modelo já preenchido (fica no chat) */ modelo?: { nome: string; idioma: string; componentes: unknown[] } }): Promise<ResultadoEnvioIa> {
   /* formato organizado para o WhatsApp (título, **negrito**, lista com hífen, espaços) */
   /* e o cumprimento certo para o horário de Recife (de madrugada nunca "bom dia"), em TODO envio da IA */
   p = { ...p, texto: corrigirCumprimento(organizarTexto(p.texto)) };
@@ -43,7 +43,7 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
     motivo = "validador";
     explicacao = `o validador reprovou (${validacao.violacoes.map((v) => v.rotulo.toLowerCase()).join("; ")})`;
   } else {
-    const env: { externoId: string | null; status: "sent" | "failed"; erro?: string } = simulado ? { externoId: null, status: "sent" } : await (await obterProvedor()).enviar({ telefone: p.telefone, tipo: "texto", conteudo: p.texto, respostaAExternoId: p.respostaA?.externoId ?? null });
+    const env: { externoId: string | null; status: "sent" | "failed"; erro?: string } = simulado ? { externoId: null, status: "sent" } : await (await obterProvedor()).enviar(p.modelo ? { telefone: p.telefone, tipo: "texto", conteudo: p.texto, modelo: p.modelo } : { telefone: p.telefone, tipo: "texto", conteudo: p.texto, respostaAExternoId: p.respostaA?.externoId ?? null });
     externoId = env.externoId;
     statusEnvio = env.status;
     if (env.status === "failed") {
@@ -52,7 +52,7 @@ export async function enviarRespostaDaIa(tx: Tx | typeof db, p: { conversaId: nu
     }
     /* tentativa que o workflow ainda vai repetir: a recusa fica só no registro da IA, não vira mensagem na conversa */
     if (statusEnvio === "sent" || p.gravarFalha !== false) {
-      await tx.insert(schema.mensagens).values({ conversaId: p.conversaId, respostaA: p.respostaA?.id ?? null, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: p.texto, status: statusEnvio, externoId, metadados: { ...(env.erro ? { erro: env.erro } : {}), ...(p.textoDoSistema !== undefined ? { textoDoSistema: p.textoDoSistema } : {}) } });
+      await tx.insert(schema.mensagens).values({ conversaId: p.conversaId, respostaA: p.respostaA?.id ?? null, direcao: "outgoing", autor: "ia", tipo: "texto", conteudo: p.texto, status: statusEnvio, externoId, metadados: { ...(env.erro ? { erro: env.erro } : {}), ...(p.textoDoSistema !== undefined ? { textoDoSistema: p.textoDoSistema } : {}), ...(p.modelo ? { modelo: p.modelo.nome } : {}) } });
       await tx
         .update(schema.conversas)
         .set({ ultimaMensagemEm: new Date(), ultimaMensagemTexto: p.texto.slice(0, 160), ultimaMensagemDirecao: "outgoing" })

@@ -23,6 +23,7 @@ import {
   ROTULO_PULAR,
   textoDeAquecimentoAceito,
 } from "@/lib/ia/aquecimento";
+import { MODELOS_DO_CLIENTE, textoDoModelo } from "@/lib/ia/contato-do-dia";
 import { lerConfigWorkflow } from "./config";
 
 /* ============================================================
@@ -69,6 +70,14 @@ export async function agendarAquecimento(p: {
     .where(and(eq(schema.testDrives.conversaId, p.conversaId), inArray(schema.testDrives.status, ["agendado", "confirmado"]), gt(schema.testDrives.agendadoPara, new Date(Date.now() - 12 * 60 * 60 * 1000))))
     .limit(1);
   if (agenda) return { agendados: 0 };
+  /* "talvez sábado": a IA já combinou de chamar no dia (lib/ia/contato-do-dia.ts); cobrar antes contradiz o combinado
+     (dono, 20/10/2026) */
+  const [noDia] = await db
+    .select({ id: F.id })
+    .from(F)
+    .where(and(eq(F.conversaId, p.conversaId), eq(F.status, "pendente"), eq(F.tipo, "lembrete_visita"), sql`${F.contexto}->>'talvez' = 'true'`))
+    .limit(1);
+  if (noDia) return { agendados: 0 };
   const [ultima] = await db
     .select({ id: M.id, em: M.criadoEm, conteudo: M.conteudo })
     .from(M)
@@ -233,7 +242,19 @@ export async function enviarLembretesRetirada(agora = new Date()) {
     const [meu] = await db.update(F).set({ status: "concluido", concluidoEm: agora }).where(and(eq(F.id, f.id), eq(F.status, "pendente"))).returning({ id: F.id });
     if (!meu || !f.conversaId) continue;
     try {
-      const ctx = (f.contexto ?? {}) as { texto?: string; testDriveId?: number; quando?: string; doQue?: string };
+      const ctx = (f.contexto ?? {}) as { texto?: string; testDriveId?: number; quando?: string; doQue?: string; talvez?: boolean; modelo?: { nome: string; valores: string[] } };
+      /* "talvez sábado" e o cliente já marcou a visita depois: a agenda cuida dele (o lembrete dela) */
+      if (ctx.talvez) {
+        const [marcou] = await db
+          .select({ id: schema.testDrives.id })
+          .from(schema.testDrives)
+          .where(and(eq(schema.testDrives.conversaId, f.conversaId), inArray(schema.testDrives.status, ["agendado", "confirmado"]), gt(schema.testDrives.agendadoPara, new Date(agora.getTime() - 12 * 3_600_000))))
+          .limit(1);
+        if (marcou) {
+          await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: o cliente marcou a visita.`.slice(0, 1000) }).where(eq(F.id, f.id));
+          continue;
+        }
+      }
       /* test drive cancelado, realizado ou remarcado depois de agendar o lembrete: não sai (o remarcado tem o dele) */
       if (ctx.testDriveId) {
         const [td] = await db.select({ status: schema.testDrives.status, agendadoPara: schema.testDrives.agendadoPara }).from(schema.testDrives).where(eq(schema.testDrives.id, ctx.testDriveId)).limit(1);
@@ -248,9 +269,26 @@ export async function enviarLembretesRetirada(agora = new Date()) {
         await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: conversa encerrada.`.slice(0, 1000) }).where(eq(F.id, f.id));
         continue;
       }
-      const env = await enviarRespostaDaIa(db, { conversaId: f.conversaId, telefone: cv.telefone, texto: ctx.texto, origem: `lembrete ${doQue}`, simulado: cv.demo });
+      /* passou das 24 h desde a última mensagem do cliente: texto livre a Meta recusa; vai o modelo aprovado (dono,
+         20/10/2026: "disparar automaticamente"). Sem modelo, cai na tarefa da equipe abaixo */
+      const [ultimaDoCliente] = await db.select({ em: schema.mensagens.criadoEm }).from(schema.mensagens).where(and(eq(schema.mensagens.conversaId, f.conversaId), eq(schema.mensagens.direcao, "incoming"))).orderBy(desc(schema.mensagens.id)).limit(1);
+      const foraDaJanela = !ultimaDoCliente || agora.getTime() - new Date(ultimaDoCliente.em).getTime() >= LIMITE_JANELA_MIN * 60_000;
+      const def = foraDaJanela && ctx.modelo ? MODELOS_DO_CLIENTE.find((m) => m.nome === ctx.modelo!.nome) : undefined;
+      const texto = def ? textoDoModelo(def, ctx.modelo!.valores) : ctx.texto;
+      const env =
+        foraDaJanela && !def
+          ? { enviada: false, motivo: "falha_envio" as const, explicacao: "passou das 24 h do WhatsApp e não há modelo aprovado para esta mensagem" }
+          : await enviarRespostaDaIa(db, {
+              conversaId: f.conversaId,
+              telefone: cv.telefone,
+              texto,
+              origem: `lembrete ${doQue}`,
+              simulado: cv.demo,
+              textoDoSistema: true,
+              ...(def ? { modelo: { nome: def.nome, idioma: def.idioma, componentes: [{ type: "body", parameters: ctx.modelo!.valores.map((text) => ({ type: "text", text })) }] } } : {}),
+            });
       if (env.enviada) {
-        await db.update(F).set({ notas: `Lembrete ${doQue} enviado pela IA: "${ctx.texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
+        await db.update(F).set({ notas: `Lembrete ${doQue} enviado pela IA${def ? ` (modelo ${def.nome}, fora das 24 h)` : ""}: "${texto}"`.slice(0, 1000) }).where(eq(F.id, f.id));
         await mensagemSistema(db, f.conversaId, `Lembrete ${doQue} enviado ao cliente.`, { triagem: true });
         r.enviados++;
       } else {

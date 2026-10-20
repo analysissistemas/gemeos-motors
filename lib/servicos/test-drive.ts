@@ -10,6 +10,7 @@ import { data, dataHora, formatarTelefone, hora, soDigitos, telefoneWhatsapp } f
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { DURACAO_TEST_DRIVE_MIN, paraCampoLocal, STATUS_ABERTOS, STATUS_TEST_DRIVE, type StatusTestDrive } from "@/lib/test-drive";
 import { planoRetirada, textoLembreteVisita } from "@/lib/ia/retirada";
+import { MODELO_CONFIRMAR_VISITA, MODELO_LEMBRETE_VISITA, textoDoDia, valoresConfirmar, valoresLembrete } from "@/lib/ia/contato-do-dia";
 
 type Quem = { id: number; nome: string };
 
@@ -218,8 +219,9 @@ export async function criarTestDrive(u: Quem | null, entrada: unknown) {
 }
 
 /* Lembrete do test drive / visita no dia (dono, 15/10/2026: "lembrete de visita e test drive"): 2 h antes, nunca
-   antes das 8 h, só dentro da janela de 24 h do WhatsApp (contada da última mensagem do cliente). Vale para o que a IA
-   marca e para o que a equipe marca. Remarcou: o lembrete acompanha; cancelou: o envio confere e não sai. */
+   antes das 8 h. Vale para o que a IA marca e para o que a equipe marca. Remarcou: o lembrete acompanha; cancelou: o envio
+   confere e não sai. Desde 20/10/2026 (dono: "disparar automaticamente") sai também fora da janela de 24 h do WhatsApp,
+   pelo modelo aprovado da Meta (lib/ia/contato-do-dia.ts); sem modelo aprovado, vira tarefa da equipe na hora. */
 export async function agendarLembreteTestDrive(testDriveId: number) {
   const F = schema.followUps;
   const [td] = await db.select().from(schema.testDrives).where(eq(schema.testDrives.id, testDriveId)).limit(1);
@@ -229,54 +231,71 @@ export async function agendarLembreteTestDrive(testDriveId: number) {
     .set({ status: "cancelado", concluidoEm: new Date() })
     .where(and(eq(F.status, "pendente"), eq(F.tipo, "lembrete_visita"), sql`(${F.contexto}->>'testDriveId')::int = ${td.id}`));
   if (!td.conversaId || !STATUS_ABERTOS.includes(td.status as StatusTestDrive)) return null;
-  /* só o dia (visita avisada, compra prevista): no dia, às 8h, a equipe recebe a tarefa de confirmar com o cliente */
+  /* marcou de verdade: o contato do "talvez", o "Cliente combinou de voltar" das regras (intencoes.ts) e a tarefa do dia
+     que esta agenda já tinha saem; a agenda cuida dele daqui para a frente (sem tarefa em dobro) */
+  await db
+    .update(F)
+    .set({ status: "cancelado", concluidoEm: new Date() })
+    .where(and(eq(F.conversaId, td.conversaId), eq(F.status, "pendente"), sql`((${F.tipo} = 'lembrete_visita' and ${F.contexto}->>'talvez' = 'true') or (${F.tipo} = 'retorno_cliente' and (${F.contexto}->>'detectadoPor' = 'regras' or (${F.contexto}->>'agendaId')::int = ${td.id})))`));
+  const [cli] = td.clienteId ? await db.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, td.clienteId)).limit(1) : [];
+  const primeiro = (cli?.nome ?? td.nomeContato ?? "").trim().split(/\s+/)[0] || null;
+  const nome = primeiro && /\p{L}{2}/u.test(primeiro) ? primeiro : null;
+  const agora = new Date();
+  /* só o dia (visita avisada, compra prevista): no dia a equipe recebe a tarefa de confirmar com o cliente. Na visita, às
+     8h a IA já pergunta o horário ao cliente, e a tarefa da equipe fica para as 10h (se ele não respondeu) */
   if (!td.horaDefinida) {
-    await db
-      .update(F)
-      .set({ status: "cancelado", concluidoEm: new Date() })
-      .where(and(eq(F.status, "pendente"), eq(F.tipo, "retorno_cliente"), sql`(${F.contexto}->>'agendaId')::int = ${td.id}`));
-    const oito = new Date(`${paraCampoLocal(td.agendadoPara).slice(0, 10)}T08:00:00-03:00`);
+    const diaLocal = paraCampoLocal(td.agendadoPara).slice(0, 10);
+    const oito = new Date(`${diaLocal}T08:00:00-03:00`);
+    const dez = new Date(`${diaLocal}T10:00:00-03:00`);
+    const iaChama = td.tipo !== "compra" && oito.getTime() > agora.getTime() + 60 * 60_000;
+    if (iaChama) {
+      const modelo = /^visita/iu.test(td.veiculoDescricao ?? "") ? null : td.veiculoDescricao;
+      await db.insert(F).values({
+        conversaId: td.conversaId,
+        clienteId: td.clienteId,
+        negocioId: td.negocioId,
+        usuarioId: td.responsavelId,
+        agendadoPara: oito,
+        tipo: "lembrete_visita",
+        motivo: "Perguntar o horário da visita",
+        origem: "ia",
+        notas: "A IA pergunta ao cliente o horário da visita de hoje. Cancele se não quiser que saia.",
+        contexto: { texto: textoDoDia({ nome, modelo, periodo: null }), testDriveId: td.id, quando: td.agendadoPara.toISOString(), doQue: "da visita", modelo: { nome: MODELO_CONFIRMAR_VISITA.nome, valores: valoresConfirmar({ nome, modelo }) } },
+      });
+    }
     const oQue = td.tipo === "compra" ? `disse que fecha a compra (${td.veiculoDescricao ?? "moto"}) hoje` : `disse que vem à loja hoje (${td.veiculoDescricao ?? "visita"})`;
+    const quandoTarefa = iaChama ? dez : oito;
     await db.insert(F).values({
       conversaId: td.conversaId,
       clienteId: td.clienteId,
       negocioId: td.negocioId,
       usuarioId: td.responsavelId,
-      agendadoPara: oito.getTime() > Date.now() ? oito : new Date(),
+      agendadoPara: quandoTarefa.getTime() > agora.getTime() ? quandoTarefa : agora,
       tipo: "retorno_cliente",
       motivo: td.tipo === "compra" ? "Compra prevista para hoje" : "Visita avisada para hoje",
       origem: "ia",
-      notas: `${td.nomeContato ?? "O cliente"} ${oQue}. Chame ele para combinar o horário.`,
+      notas: `${td.nomeContato ?? "O cliente"} ${oQue}. ${iaChama ? "A IA perguntou o horário a ele às 8h; se ele ainda não respondeu, chame você." : "Chame ele para combinar o horário."}`,
       contexto: { agendaId: td.id, detectadoPor: "ia" },
     });
     return null;
   }
-  const [ultima] = await db
-    .select({ em: schema.mensagens.criadoEm })
-    .from(schema.mensagens)
-    .where(and(eq(schema.mensagens.conversaId, td.conversaId), eq(schema.mensagens.direcao, "incoming")))
-    .orderBy(desc(schema.mensagens.id))
-    .limit(1);
-  if (!ultima) return null;
-  const agora = new Date();
-  const plano = planoRetirada(td.agendadoPara, agora, new Date(ultima.em));
-  if (!plano.lembreteEm) return null;
-  const [cli] = td.clienteId ? await db.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, td.clienteId)).limit(1) : [];
-  const nome = (cli?.nome ?? td.nomeContato ?? "").trim().split(/\s+/)[0] || null;
-  const texto = textoLembreteVisita({ nome: nome && /\p{L}{2}/u.test(nome) ? nome : null, descricao: td.veiculoDescricao, quando: td.agendadoPara });
+  /* janela de 24 h: o envio decide (texto dentro, modelo fora); aqui só a hora do lembrete */
+  const lembreteEm = planoRetirada(td.agendadoPara, agora, td.agendadoPara).lembreteEm;
+  if (!lembreteEm) return null;
+  const texto = textoLembreteVisita({ nome, descricao: td.veiculoDescricao, quando: td.agendadoPara });
   await db.insert(F).values({
     conversaId: td.conversaId,
     clienteId: td.clienteId,
     negocioId: td.negocioId,
     usuarioId: td.responsavelId,
-    agendadoPara: plano.lembreteEm,
+    agendadoPara: lembreteEm,
     tipo: "lembrete_visita",
     motivo: "Lembrete do test drive",
     origem: "ia",
     notas: `Lembrete automático do test drive de ${dataHora(td.agendadoPara)}. Cancele se não quiser que saia.`,
-    contexto: { texto, testDriveId: td.id, quando: td.agendadoPara.toISOString() },
+    contexto: { texto, testDriveId: td.id, quando: td.agendadoPara.toISOString(), modelo: { nome: MODELO_LEMBRETE_VISITA.nome, valores: valoresLembrete({ nome, descricao: td.veiculoDescricao, hora: hora(td.agendadoPara).replace(/:00$/, "h").replace(":", "h") }) } },
   });
-  return plano.lembreteEm;
+  return lembreteEm;
 }
 
 export async function reagendarTestDrive(u: Quem | null, testDriveId: number, quando: Date, o: { horaDefinida?: boolean } = {}) {
