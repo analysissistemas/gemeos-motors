@@ -294,6 +294,9 @@ export function CentralConversas({
     }
   }
 
+  /* envios da equipe ainda subindo, por conversa (áudio leva alguns segundos: converte e sobe para a Meta) */
+  const enviosEmCurso = useRef(new Map<number, Set<Promise<unknown>>>());
+
   /* ---------- ações do chat ---------- */
   async function enviar(e: EnvioChat): Promise<boolean> {
     const id = aberta;
@@ -339,10 +342,13 @@ export function CentralConversas({
       criadoEm: new Date(),
     };
     setDados((d) => (d ? { ...d, mensagens: [...d.mensagens, temp] } : d));
-    const r =
+    const envio =
       e.tipo === "audio"
-        ? await enviarAudio(id, e.blob, e.mime, e.duracao, citada?.id ?? null)
-        : await acaoEnviarMensagem(id, { tipo: e.tipo, conteudo: e.conteudo, midia: "midia" in e ? e.midia : null, respostaA: citada?.id ?? null });
+        ? enviarAudio(id, e.blob, e.mime, e.duracao, citada?.id ?? null)
+        : acaoEnviarMensagem(id, { tipo: e.tipo, conteudo: e.conteudo, midia: "midia" in e ? e.midia : null, respostaA: citada?.id ?? null });
+    const emCurso = enviosEmCurso.current.get(id) ?? new Set<Promise<unknown>>();
+    enviosEmCurso.current.set(id, emCurso.add(envio));
+    const r = await envio.finally(() => emCurso.delete(envio));
     if (!r.ok) {
       setDados((d) => (d ? { ...d, mensagens: d.mensagens.filter((m) => m.id !== temp.id) } : d));
       toast.error(r.erro);
@@ -392,11 +398,19 @@ export function CentralConversas({
 
   /* botão IA ⇄ Humano: avisa quando a IA está desligada (a conversa fica no modo IA, mas ninguém responde) */
   async function mudarModo(id: number, modo: "ia" | "humano") {
+    /* Milton, 19/10/2026: mandou um áudio e voltou para a IA antes de ele terminar de subir; a IA respondeu o cliente e o
+       áudio apareceu depois. Agora a volta espera o envio terminar: com a resposta dele por último, a IA aguarda o cliente */
+    const emCurso = Array.from(enviosEmCurso.current.get(id) ?? []);
+    if (modo === "ia" && emCurso.length) {
+      const aviso = toast.loading("Esperando a sua mensagem terminar de enviar…");
+      await Promise.allSettled(emCurso);
+      toast.dismiss(aviso);
+    }
     const r = await acaoModoAtendimento(id, modo);
     if (!r.ok) return void toast.error(r.erro);
     if (modo === "humano") toast.success("Você assumiu o atendimento");
     else if (!r.dados.iaPodeResponder) toast.warning("Conversa com a IA, mas a IA está desligada em Inteligência artificial → Controle. Ninguém vai responder até ligar.", { duration: 8000 });
-    else toast.success(r.dados.respondendo ? "Conversa com a IA. Ela já está respondendo o cliente." : "Conversa com a IA. Ela responde a próxima mensagem do cliente.");
+    else toast.success(r.dados.respondendo ? "Conversa com a IA. Ela já está respondendo o cliente." : "Conversa com a IA. Ela espera o cliente responder e continua de onde você parou (com follow-up se ele sumir).");
     await recarregarContexto();
     sincronizar();
   }

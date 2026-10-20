@@ -18,6 +18,7 @@ import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
 import { STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
+import { vendedorRespondeuDepois } from "./devolver";
 import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { formatarTelefone, hora } from "@/lib/formato";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
@@ -2028,6 +2029,12 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       if (nova) {
         await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
         return { fim: "parou", detalhe: `Chegou mensagem nova (#${nova.id}) enquanto a IA escrevia: a execução dela responde tudo junto`, saida: { chegouNova: nova.id } };
+      }
+      /* o vendedor respondeu enquanto a IA escrevia (Milton, 19/10/2026: o áudio dele ainda subia quando ele voltou a conversa
+         para a IA, e a resposta dela apareceu antes da dele): a dele vale, a IA não fala por cima */
+      if (await vendedorRespondeuDepois(c.conversaId, c.mensagemId)) {
+        await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
+        return { fim: "parou", detalhe: "O vendedor respondeu o cliente enquanto a IA escrevia: a resposta dele vale", saida: { vendedorRespondeu: true } };
       }
     }
     const texto = c.blocos[c.indice];

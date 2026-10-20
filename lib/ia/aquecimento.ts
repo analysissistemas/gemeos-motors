@@ -135,9 +135,11 @@ export function ultimaAbertaAntes(t: Date, h: HorarioLoja): Date | null {
 
 /** Quando sai cada tentativa, contando da última mensagem do cliente. Tentativa que não cabe não entra.
  *  `soUltima`: o cliente disse que ele mesmo volta a falar; sai só a de 23 h. */
-export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja, o: { soUltima?: boolean } = {}): { etapa: number; rotulo: string; quando: Date }[] {
-  const base = ultimaDoCliente.getTime();
-  const limite = new Date(base + LIMITE_JANELA_MIN * MIN);
+/** `desde`: conta as tentativas a partir de outra mensagem (a resposta do vendedor que devolveu a conversa para a IA); a
+ *  janela de 24 h continua contando da mensagem do cliente. */
+export function planejarAquecimento(ultimaDoCliente: Date, h: HorarioLoja, o: { soUltima?: boolean; desde?: Date } = {}): { etapa: number; rotulo: string; quando: Date }[] {
+  const base = Math.max(ultimaDoCliente.getTime(), o.desde?.getTime() ?? 0);
+  const limite = new Date(ultimaDoCliente.getTime() + LIMITE_JANELA_MIN * MIN);
   const plano: { etapa: number; rotulo: string; quando: Date }[] = [];
   for (const e of o.soUltima ? ETAPAS_AQUECIMENTO.slice(-1) : ETAPAS_AQUECIMENTO) {
     /* loja fechada empurrou a anterior: mantém o espaço entre a 1ª e a 2ª (1 h → 3 h são 2 h; Milton, 12/10/2026).

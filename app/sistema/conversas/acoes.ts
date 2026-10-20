@@ -34,6 +34,7 @@ import {
 import { analisarMensagemEntrante } from "@/lib/servicos/ligacoes";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { rodarWorkflowAtendimento, workflowAtivo } from "@/lib/ia/workflow/executar";
+import { depoisDeDevolverParaIa } from "@/lib/ia/workflow/devolver";
 import { lerConfigWorkflow } from "@/lib/ia/workflow/config";
 import { lerControle } from "@/lib/ia/controle";
 import type { TipoMensagem } from "@/lib/mensageria/tipos";
@@ -193,6 +194,8 @@ export async function acaoModoAtendimento(conversaId: number, modo: "ia" | "huma
     const mensagemId = r.mensagemEsperando;
     const respondendo = iaPodeResponder && mensagemId != null;
     if (respondendo) after(() => rodarWorkflowAtendimento({ conversaId, mensagemId, gatilho: "whatsapp", simulado: r.demo }).then(() => {}));
+    /* a última é do vendedor: a IA espera o cliente, ouve o áudio dele e agenda o follow-up (Milton, 19/10/2026) */
+    else if (iaPodeResponder) after(() => depoisDeDevolverParaIa(conversaId).then(() => {}).catch((e) => console.error("[devolver]", e)));
     revalidarFunil();
     return { iaPodeResponder, respondendo };
   });

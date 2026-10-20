@@ -51,6 +51,8 @@ export async function agendarAquecimento(p: {
   qualifica: boolean;
   nome: string | null;
   modelo: string | null;
+  /** conta as tentativas desta hora (a resposta do vendedor), não da mensagem do cliente */
+  desde?: Date;
 }) {
   const agora = new Date();
   /* o cliente falou de novo: o que estava agendado e não saiu fica sem efeito */
@@ -88,7 +90,7 @@ export async function agendarAquecimento(p: {
     return { agendados: 0 };
   }
   /* "vou mostrar a ele", "te aviso", "vou pensar": só a última tentativa ((81) 7301-7155, 11/10/2026) */
-  const plano = planejarAquecimento(new Date(ultima.em), await lerHorario(), { soUltima: clienteVaiRetornar(ultima.conteudo ?? "") });
+  const plano = planejarAquecimento(new Date(ultima.em), await lerHorario(), { soUltima: clienteVaiRetornar(ultima.conteudo ?? ""), desde: p.desde });
   if (!plano.length) return { agendados: 0 };
   await db.insert(F).values(
     plano.map((e) => ({

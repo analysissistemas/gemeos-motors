@@ -182,3 +182,12 @@ test("(81) 7301-7155: cliente vendo para outra pessoa — a IA facilita o repass
   assert.match(instrucaoIntermediario("vou mostrar a ele"), /NÃO ofereça visita/u);
   assert.equal(instrucaoIntermediario("quanto custa?"), "");
 });
+
+test("Milton (19/10/2026): respondeu o cliente e devolveu para a IA; o follow-up conta da resposta dele, na janela do cliente", async () => {
+  const { planejarAquecimento } = await import("../../lib/ia/aquecimento.ts");
+  const { HORARIO_PADRAO } = await import("../../lib/ia/horario.ts");
+  const recife = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Recife", weekday: "short", hour: "2-digit", minute: "2-digit" });
+  /* cliente terça 10:00, Milton respondeu às 14:00: 15:00, 17:00 e a última na quarta, pouco antes de a janela de 24 h do cliente fechar */
+  const p = planejarAquecimento(new Date("2026-10-13T13:00:00Z"), HORARIO_PADRAO, { desde: new Date("2026-10-13T17:00:00Z") });
+  assert.deepEqual(p.map((e) => recife(e.quando)), ["ter., 15:00", "ter., 17:00", "qua., 09:57"]);
+});
