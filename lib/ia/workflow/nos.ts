@@ -1040,6 +1040,8 @@ function conduzirFechamento(c: CtxWorkflow, resposta: string[]): string[] {
       /* a conta certa já entrou (garantirEconomia); a pergunta de fechamento fica para o follow-up (Milton, 12/10/2026) */
       return semPerguntaDeFechamento(resposta);
     case "quer_visitar":
+      /* "talvez sábado": a resposta fixa já diz "quando tiver certeza, me avisa"; pedir o dia agora contradiz (Simulador, 20/10/2026) */
+      if (RX_DIA_INCERTO.test(c.textoBuffer) && dataHoraDaVisita(c.textoBuffer).temDia) return resposta;
       return [...semPerguntas(resposta), variar(PERGUNTAS_VISITA)];
     case "sem_modelo":
       return [...semPerguntas(resposta), PERGUNTA_TEM_MODELO];
