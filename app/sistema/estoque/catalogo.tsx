@@ -78,7 +78,7 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
                       {m.nome}
                       {!m.ativo && <Selo tom="neutro">Desativado</Selo>}
                       {m.ativo && !m.mostrarNoSite && <Selo tom="neutro">Fora do site</Selo>}
-                      {m.lancamento && <Selo tom="info">Lançamento</Selo>}
+                      {lancamentoNoSite(m) && <Selo tom="info">Lançamento</Selo>}
                       {m.reservasNovas > 0 && <Selo tom="atencao">{m.reservasNovas} reserva(s) nova(s)</Selo>}
                       <SituacaoNoSite m={m} />
                       {m.naFila > 0 && <Selo tom="atencao">{m.naFila} na fila de espera</Selo>}
@@ -521,9 +521,12 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   );
 }
 
+/* lançamento com unidade disponível já é pronta entrega no site (dono, 20/10/2026); o mesmo de /api/vitrine/catalogo */
+const lancamentoNoSite = (m: ItemCatalogo) => m.lancamento && !(m.tipo === "acessorio" ? (m.quantidade ?? 0) > 0 : m.disponiveis > 0);
+
 /* Situação no site, pelo estoque (dono, 18/10/2026): o mesmo cálculo de /api/vitrine/catalogo */
 function SituacaoNoSite({ m }: { m: ItemCatalogo }) {
-  if (!m.ativo || !m.mostrarNoSite || m.lancamento) return null;
+  if (!m.ativo || !m.mostrarNoSite || lancamentoNoSite(m)) return null;
   if (m.tipo === "acessorio" && m.quantidade == null) return null;
   const tem = m.tipo === "acessorio" ? (m.quantidade ?? 0) > 0 : m.disponiveis > 0;
   if (tem) return <Selo tom="bom">No site: pronta entrega</Selo>;
