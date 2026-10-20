@@ -638,7 +638,7 @@ async function anotarNaAgenda(c: CtxWorkflow, p: { tipo: "visita" | "compra"; di
       agendadoPara: quando,
       tipo: p.tipo,
       horaDefinida: false,
-      observacoes: `Anotado pela IA no WhatsApp: "${c.textoBuffer.slice(0, 200)}". Horário a combinar.`,
+      observacoes: `Anotado pela IA no WhatsApp: "${c.textoBuffer.slice(0, 200)}"`,
     });
     return true;
   } catch (e) {
