@@ -1478,7 +1478,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* "o que vocês têm?" ou "tem modelo parecido?" (dono, 19/10/2026): o site, não a lista do estoque. No site ele clica na
        moto e a mensagem chega com o modelo, mais fácil de atender. Uma vez: já foi o site nas últimas falas, a conversa segue */
     const textoLivre = semAberturaDoSite(c.textoBuffer);
-    if (r.ctx.texto && !r.ctx.humano && intencao === "compra" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3))) {
+    /* com o orçamento já dito, vão as opções dentro dele (Milton, 19/10/2026), não o site */
+    if (r.ctx.texto && !r.ctx.humano && intencao === "compra" && passo?.acao !== "indicar" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3))) {
       const nomeCli = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
       const texto = RX_MODELO_PARECIDO.test(textoLivre) ? textoSiteParecido(nomeCli) : textoSiteOpcoes(nomeCli);
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
