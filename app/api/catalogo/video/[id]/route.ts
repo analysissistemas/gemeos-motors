@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { guardarMidia } from "@/lib/mensageria/midia";
-import { compactarVideoArquivo } from "@/lib/mensageria/compactar";
+import { compactarVideoAte } from "@/lib/mensageria/compactar";
 
 /* Vídeo da moto no catálogo (Estoque → Catálogo → editar modelo). A IA manda esse vídeo no WhatsApp
    junto com a ficha da moto. Rota própria (e não ação de servidor) porque a ação aceita só 4 MB.
@@ -25,7 +25,7 @@ async function compactarNaHora(bytes: Uint8Array): Promise<Uint8Array> {
     const entrada = join(pasta, "original.mp4");
     const saida = join(pasta, "leve.mp4");
     await writeFile(entrada, bytes);
-    await compactarVideoArquivo(entrada, saida, 4 * 60_000);
+    await compactarVideoAte(entrada, saida, WHATSAPP_LIMITE_BYTES - 512 * 1024);
     return new Uint8Array(await readFile(saida));
   } finally {
     await rm(pasta, { recursive: true, force: true });

@@ -101,6 +101,35 @@ export async function compactarVideoArquivo(entrada: string, saida: string, time
   await ffmpeg(["-y", "-i", entrada, ...ARGS_VIDEO_SAIDA, "-f", "mp4", saida], null, timeoutMs);
 }
 
+/* Vídeo da moto (catálogo) que precisa caber no WhatsApp: vídeo em pé do Instagram já vem com 720 no lado menor, então
+   a compactação normal quase não reduz (dono, 20/10/2026: vídeo de 25 MB e 58 s não entrava). Tenta 720p; se passar do
+   limite, desce a tela e aperta a qualidade até caber. */
+const DEGRAUS_VIDEO = [
+  { lado: 720, crf: 28, audio: "96k" },
+  { lado: 540, crf: 30, audio: "80k" },
+  { lado: 432, crf: 32, audio: "64k" },
+  { lado: 360, crf: 34, audio: "48k" },
+];
+export async function compactarVideoAte(entrada: string, saida: string, limiteBytes: number, timeoutMs = 3 * 60_000) {
+  const { stat } = await import("node:fs/promises");
+  let tamanho = Infinity;
+  for (const d of DEGRAUS_VIDEO) {
+    await ffmpeg(
+      [
+        "-y", "-i", entrada,
+        "-vf", `scale='if(gt(iw,ih),-2,min(${d.lado},iw))':'if(gt(iw,ih),min(${d.lado},ih),-2)'`,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", String(d.crf), "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", d.audio, "-movflags", "+faststart", "-f", "mp4", saida,
+      ],
+      null,
+      timeoutMs,
+    );
+    tamanho = (await stat(saida)).size;
+    if (tamanho <= limiteBytes) break;
+  }
+  return tamanho;
+}
+
 /** Foto do catálogo (WebP) em JPEG para o WhatsApp, que não aceita WebP como foto. JPEG e PNG passam direto. */
 export async function fotoParaWhatsApp(bytes: Uint8Array): Promise<{ bytes: Buffer; mime: "image/jpeg" | "image/png" }> {
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return { bytes: Buffer.from(bytes), mime: "image/jpeg" };

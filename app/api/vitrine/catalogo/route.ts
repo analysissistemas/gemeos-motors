@@ -72,6 +72,10 @@ export async function GET() {
       : [];
 
     const saida = modelos.map((x) => {
+      const situacao = situacaoNoSite(x, unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())).length, hoje);
+      /* lançamento que já chegou ao estoque deixa de ser lançamento no site sozinho: some a faixa e o "Quero reservar"
+         e volta o botão normal (dono, 20/10/2026: "automaticamente quando coloca no estoque tem que mudar") */
+      const lancamento = x.lancamento && situacao.disponibilidade !== "pronta_entrega";
       /* ficha: só as chaves conhecidas e preenchidas, para o site esconder o chip vazio */
       const ficha: Record<string, string> = {};
       if (x.tipo !== "acessorio" && x.ficha)
@@ -86,10 +90,10 @@ export async function GET() {
         descricao: x.descricao,
         foto: x.foto?.startsWith("/api/vitrine/foto/") ? x.foto : null,
         cores: cores.filter((k) => k.modeloId === x.id).map((k) => ({ nome: k.nome, hex: k.hex, foto: k.foto })),
-        ...situacaoNoSite(x, unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase())).length, hoje),
-        lancamento: x.lancamento,
-        lancamentoTexto: x.lancamento ? x.lancamentoTexto : null,
-        reservas: x.lancamento ? x.reservas : 0,
+        ...situacao,
+        lancamento,
+        lancamentoTexto: lancamento ? x.lancamentoTexto : null,
+        reservas: lancamento ? x.reservas : 0,
         ordem: x.ordem,
       };
     });

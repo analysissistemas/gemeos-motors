@@ -290,7 +290,7 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     if (!item) return;
     if (arquivo && arquivo.type !== "video/mp4") return void toast.error("Use um vídeo MP4.");
     if (arquivo && arquivo.size > 100 * 1024 * 1024) return void toast.error("O vídeo passa de 100 MB. Mande um mais curto.");
-    if (arquivo && arquivo.size > 10 * 1024 * 1024) toast.info("Vídeo grande: o sistema está deixando ele mais leve para o WhatsApp. Pode levar até 1 minuto.");
+    if (arquivo && arquivo.size > 10 * 1024 * 1024) toast.info("Vídeo grande: o sistema está deixando ele mais leve para o WhatsApp. Pode levar até 2 minutos.");
     setEnviandoVideo(true);
     try {
       let r: Response;
