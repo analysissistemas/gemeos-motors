@@ -105,6 +105,13 @@ export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: num
     const v = valor(ate[1], true);
     if (v) return { de: null, ate: v };
   }
+  /* a mensagem é só o valor ("13 mil", "8 mil reais", "R$ 8.000"): é o orçamento, mesmo sem a pergunta da faixa logo antes
+     (José, 21/10/2026: respondeu "13 mil" e a IA perguntou se ele queria moto, acessório ou assistência) */
+  const soValor = t.match(/^(?:uns\s+|umas\s+|so\s+|tenho\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)\s*(?:reais|conto)?\s*[.!]*$/);
+  if (soValor && /mil|k|\d{4}|\d\.\d{3}/.test(soValor[1])) {
+    const v = valor(soValor[1], true);
+    if (v) return { de: null, ate: v };
+  }
   if (respondendoFaixa) {
     const solto = t.match(/^\D{0,12}(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)\D{0,12}$/);
     if (solto) {

@@ -32,7 +32,7 @@ test("sem intenção, a frase que oferece produto sai e o resto fica", () => {
 test("a IA é avisada antes de escrever", () => {
   assert.match(instrucaoDeIntencao(null), /NÃO fale de moto/);
   assert.match(instrucaoDeIntencao("assistencia"), /NÃO ofereça moto/);
-  assert.equal(instrucaoDeIntencao("compra"), "");
+  assert.match(instrucaoDeIntencao("compra"), /NÃO peça licença para mostrar/);
 });
 
 test("frase comum de quem está comprando não vira assistência", () => {
@@ -138,4 +138,8 @@ test("dono (21/10/2026): moto pra idoso oferece o triciclo do estoque", async ()
   assert.match(instrucaoTriciclo("é pro meu avô", ["MM3"]), /\*MM3\*/);
   assert.equal(instrucaoTriciclo("moto pra idoso", []), "");
   assert.equal(instrucaoTriciclo("sou maior de idade", ["MM3"]), "");
+});
+
+test("vespa é compra (Milton, 20/10/2026)", () => {
+  assert.equal(intencaoDoTexto("tem aquela vespa?", NOMES), "compra");
 });

@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
-import { faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { faixaDoTexto, faixasDoEstoque, indicarMotos, perguntaPendente, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
@@ -997,12 +997,14 @@ async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
      triciclo") → compra (Pablo Júnior, 12/10/2026: a conversa ficou presa em assistência e a IA repetiu 4 vezes o pedido
      de relato) */
   if (intencaoDoTexto(semAberturaDoSite(c.textoBuffer), nomes) === "compra") return "compra";
+  /* disse só o orçamento ("13 mil") ou a loja já mostrou as motos: segue a venda (José, 21/10/2026) */
+  if (faixaDoTexto(semAberturaDoSite(c.textoBuffer), perguntaPendente(ultimaFalaDaLoja(c.memoria.historico)) === "faixa")) return "compra";
   const intencao = intencaoDoTexto([c.memoria.fatos.interesse ?? "", semAberturaDoSite(texto)].join("\n"), nomes);
   /* "onde fica a assistência?", "e a garantia?" de quem veio pelo site ou já conversa sobre uma moto é pergunta de compra
      (Cyanthya, 19/10/2026, T3 Retrô: virou pedido de relato de defeito); pós-venda só com sinal claro ("minha moto", defeito) */
   if (intencao === "assistencia" && !assistenciaClara(texto) && (veioDoSite(texto) || c.modeloDaConversa)) return "compra";
   /* veio pelo botão do site e ainda não disse o quê: é quem quer comprar (o "consultor" é o Milton) */
-  return intencao ?? (veioDoSite(texto) ? "compra" : null);
+  return intencao ?? (veioDoSite(texto) || jaIndicou(c.memoria.historico ?? "") ? "compra" : null);
 }
 
 /* Pedido do dono (02/10/2026): na abordagem, primeiro ENTENDER o que o cliente quer. Quem só cumprimentou
@@ -1444,8 +1446,14 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
        responde, uma por vez, o que falta (uso, km por dia, garupa/carga, faixa de valor); com o suficiente, o sistema
        indica no máximo 2 motos do estoque com o porquê. Nada de lista do estoque antes disso. */
     const necessidade = lerDoCliente(semAberturaDoSite(c.textoBuffer), lerNecessidade(c.memoria.fatos.necessidade), ultimaDaLoja);
+    /* orçamento novo depois das opções ("13 mil" depois de "Qual delas te agradou mais?"): indica de novo, já na faixa dele
+       (José, 21/10/2026: a IA perguntou "Posso te mostrar as opções...?" em vez de mostrar) */
+    const necessidadeAntes = lerNecessidade(c.memoria.fatos.necessidade);
+    const faixaNova = !!faixaDoTexto(semAberturaDoSite(c.textoBuffer), perguntaPendente(ultimaDaLoja) === "faixa") && (necessidade.faixaAte !== necessidadeAntes.faixaAte || necessidade.faixaDe !== necessidadeAntes.faixaDe);
     const emDescoberta =
-      intencao === "compra" && !modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento) && !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
+      intencao === "compra" &&
+      (faixaNova || (!modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento))) &&
+      !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
     const motosQualif = emDescoberta ? await motosParaIndicar(c) : [];
     const passo = emDescoberta
       ? proximoPasso(necessidade, perguntasFeitas(falasDaLoja(c.memoria.historico)), {

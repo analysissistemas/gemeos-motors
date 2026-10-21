@@ -273,3 +273,10 @@ test("dono (21/10/2026): moto pra idoso oferece o triciclo, sem perguntar a faix
   /* sem triciclo no estoque: segue a indicação de sempre */
   assert.ok(indicarMotos(lerDoCliente("moto pra idoso"), ESTOQUE, 3).length > 0);
 });
+
+test("José (21/10/2026): a mensagem só com o valor é o orçamento", () => {
+  for (const [t, v] of [["13 mil", 13000], ["8 mil reais", 8000], ["R$ 8.000", 8000], ["uns 10 mil", 10000]] as const) assert.equal(faixaDoTexto(t)?.ate, v, t);
+  /* número solto sem "mil" fora da pergunta da faixa não é orçamento ("13" pode ser hora, km...) */
+  assert.equal(faixaDoTexto("13"), null);
+  assert.equal(faixaDoTexto("rodo 20 km"), null);
+});

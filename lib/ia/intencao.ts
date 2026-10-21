@@ -71,7 +71,10 @@ export function tirarOfertaDeProduto(bloco: string, nomesDeModelos: string[] = [
 
 /** O que a IA precisa saber antes de escrever. */
 export function instrucaoDeIntencao(intencao: Intencao | null): string {
-  if (intencao === "compra") return "";
+  /* Milton (21/10/2026): "às vezes ela pergunta muito"; José disse "13 mil" e ouviu "Posso te mostrar as opções...?" */
+  if (intencao === "compra")
+    return `# O QUE O CLIENTE QUER
+O cliente quer comprar. Seja direto e afunile: NÃO pergunte se ele quer moto, acessório ou assistência, e NÃO peça licença para mostrar ("Posso te mostrar as opções?", "Quer que eu te mande?"): mostre. Nada de pergunta que ele já respondeu.`;
   if (intencao === "assistencia")
     return `# O QUE O CLIENTE QUER
 O cliente fala de assistência, garantia, defeito, peça ou reclamação. A venda para aqui: NÃO ofereça moto, preço nem foto. Deixe o cliente contar, mostre empatia de verdade, não discuta, não culpe o cliente e não use frase pronta. Entenda o problema (o que está acontecendo, qual é a moto e quando comprou — uma pergunta por vez). Quando entender, convide UMA vez a trazer a moto à loja para a assistência técnica avaliar (endereço e horário da base de conhecimento). Se ele disser que não pode vir ou mora longe, NÃO insista: diga que vai encaminhar o caso aos responsáveis para avaliarem a melhor forma de atendimento e combinarem os próximos passos com ele, e coloque transferir como true com o motivo "pós-venda: <resumo fiel do relato>". Cliente muito irritado: priorize passar para uma pessoa. Nunca prometa conserto, troca, reembolso ou prazo.`;
