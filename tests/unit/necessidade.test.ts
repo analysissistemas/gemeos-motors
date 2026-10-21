@@ -90,7 +90,8 @@ test("não confunde preço, parcela e garantia com a necessidade", () => {
 test("próximo passo: uma pergunta por vez, só o que falta, e indica quando sabe o suficiente", () => {
   const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
-  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, p), { acao: "perguntar", chave: "uso" });
+  /* Milton (20/10/2026): a única pergunta é a faixa de valor */
+  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, p), { acao: "perguntar", chave: "faixa" });
   const leandro = lerDoCliente("quero usar na cidade, 20km");
   /* Milton (20/10/2026): sabendo o uso, já vai para a faixa (km e garupa não são mais perguntados) */
   assert.deepEqual(proximoPasso(leandro, zero, p), { acao: "perguntar", chave: "faixa" });
@@ -208,10 +209,10 @@ test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Re
   assert.deepEqual(proximoPasso(lerDoCliente("pra passear"), zero, p), { acao: "perguntar", chave: "faixa" });
   const faixa = textoPergunta("faixa", { n: NECESSIDADE_VAZIA, precos: PRECOS });
   const nomes = (resposta: string, max = 3) => indicarMotos(lerDoCliente(resposta, lerDoCliente("pra passear"), faixa), ESTOQUE, max).map((x) => x.moto.nome);
-  /* até 6: N2 e patinete */
-  assert.deepEqual(nomes("até 6"), ["N2", "Patinete X"]);
-  /* até 8: as de 6 a 8 (UFO e DF17), sem patinete */
-  assert.deepEqual(nomes("até 8 mil").sort(), ["DF17", "UFOFAST F01"]);
+  /* até 6: N2 e patinete, e a UFO, que fica um pouquinho acima */
+  assert.deepEqual(nomes("até 6"), ["N2", "Patinete X", "UFOFAST F01"]);
+  /* até 8: as de 6 a 8 (UFO e DF17), sem patinete, e a AG08 um pouquinho acima */
+  assert.deepEqual(nomes("até 8 mil").sort(), ["AG08", "DF17", "UFOFAST F01"]);
   /* até 11: Retrô e AG08 */
   assert.deepEqual(nomes("11").sort(), ["AG08", "T3 RETRÔ", "T5 RETRÔ"]);
   /* até 13: as topadas */
@@ -221,4 +222,18 @@ test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Re
   assert.equal(vespa.estilo, "retro");
   assert.deepEqual(proximoPasso(vespa, zero, p), { acao: "indicar" });
   assert.deepEqual(indicarMotos(vespa, ESTOQUE, 3).map((x) => x.moto.nome).sort(), ["T3 RETRÔ", "T5 RETRÔ"]);
+});
+
+test("Milton (20/10/2026): só a faixa; 'média de 8 mil' vale; moto de trilha não é indicada", () => {
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
+  /* contou o uso sozinho: ainda é a faixa, nunca km nem garupa */
+  assert.deepEqual(proximoPasso(lerDoCliente("é pra trabalhar, rodo uns 10 km"), zero, p), { acao: "perguntar", chave: "faixa" });
+  assert.equal(lerDoCliente("na média de 8 mil").faixaAte, 8000);
+  assert.equal(lerDoCliente("quero gastar uns 7 mil").faixaAte, 7000);
+  const mt4: MotoParaIndicar = { nome: "Moto Elétrica Off-Road MT4 2000W", tipo: "moto_eletrica", preco: 8000, autonomia: "Até 50 km", carga: null, velocidade: "55 km/h", descricao: "Mini moto elétrica estilo motocross, ideal para trilhas leves e circuitos fechados." };
+  assert.ok(!indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 8000 }, [...ESTOQUE, mt4], 3).some((x) => x.moto.nome === mt4.nome));
+  /* a que fica acima vai no cartão com o aviso */
+  const c = cartoesIndicacao({ nome: null, n: { ...NECESSIDADE_VAZIA, faixaAte: 8000 }, indicadas: indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 8000 }, ESTOQUE, 3) })!;
+  assert.ok(c.cartoes.find((k) => k.nome === "AG08")!.legenda.includes("um pouquinho acima do valor que você falou"));
 });

@@ -96,7 +96,7 @@ export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: num
     const de = valor(acima[1], true);
     if (de) return { de, ate: null };
   }
-  for (const ate of t.matchAll(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/g)) {
+  for (const ate of t.matchAll(/\b(?:ate|abaixo d[eo]s?|menos d[eo]s?|no maximo|max|uns|tenho|disponho de|posso (?:pagar|gastar|investir)|(?:quero|pretendo|penso em) (?:pagar|gastar|investir)|orcamento de|na faixa de|em torno de|por volta de|media|mais ou menos|algo (?:em torno|perto) de)\s+(?:uns\s+|de\s+)?(\d[\d.,]*\s*(?:mil|k(?![a-z]))?)/g)) {
     if (!respondendoFaixa && !/mil|k|\d{4}|\d\.\d{3}/.test(ate[1])) continue;
     const v = valor(ate[1], true);
     if (v) return { de: null, ate: v };
@@ -199,7 +199,7 @@ export const pediuOpcoes = (texto: string) => RX_QUER_OPCOES.test(norm(texto));
 export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indicar" };
 
 /** Próximo passo da qualificação: a próxima pergunta que falta (uma por vez) ou indicar as motos.
- *  Ordem: uso → faixa (só a faixa quando o cliente já perguntou de valor); "vespa"/"retrô" indica direto.
+ *  Só a faixa de valor (Milton, 20/10/2026); "vespa"/"retrô" indica direto.
  *  Indica assim que o cliente diz quanto quer investir (Milton, 19/10/2026: "quando o cliente já passa a média de
  *  orçamento, era bom ele já mandar as opções dentro do orçamento... deixa o cliente decidir a moto"; Edimilson disse
  *  "Até 7 mil reais" e a IA ainda perguntou o km), quando tudo já foi perguntado, ou quando o cliente pede as opções
@@ -209,8 +209,9 @@ export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, numbe
   if (sabeFaixa(n) || n.estilo === "retro") return { acao: "indicar" };
   /* Milton (20/10/2026): "muita pergunta faz o cliente fugir. Pergunta a média de orçamento" (Dinho: uso, km, garupa duas
      vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */
-  const ordem: ChavePergunta[] = p.falouDeValor ? ["faixa"] : ["uso", "faixa"];
-  const falta = ordem.find((k) => !sabe[k](n) && feitas[k] < 2);
+  /* Milton (20/10/2026, de novo): "pergunta a média de orçamento... manda orçamento, ele manda o que tem". Nem o uso: só a
+     faixa; o uso que o cliente contar sozinho ainda pesa na indicação */
+  const falta = (["faixa"] as ChavePergunta[]).find((k) => !sabe[k](n) && feitas[k] < 2);
   return falta ? { acao: "perguntar", chave: falta } : { acao: "indicar" };
 }
 
@@ -259,6 +260,7 @@ const RX_GARUPA_MOTO = /garupa|passageir|duas pessoas|2 pessoas|banco duplo/i;
 const RX_CESTA = /\b(ba[uú]|cesta|bagageiro|porta[- ]?objetos?|suporte de carga)\b/i;
 const RX_TRICICLO_MOTO = /triciclo|tr[eê]s rodas|3 rodas/i;
 const RX_MOTO_RETRO = /retr[oô]/i;
+const RX_OFF_ROAD = /off[- ]?road|trilhas?|motocross|circuitos? fechados?|propriedades? privadas?/i;
 
 type Indicada = { moto: MotoParaIndicar; motivos: string[]; pontos: number };
 
@@ -269,6 +271,8 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
   else {
     lista = lista.filter((m) => m.tipo === "moto_eletrica");
     lista = n.tipo === "triciclo" ? lista.filter((m) => RX_TRICICLO_MOTO.test(m.descricao ?? "")) : lista;
+    /* moto de trilha (MT4: "circuitos fechados e propriedades privadas") não é indicada para o dia a dia (20/10/2026) */
+    lista = lista.filter((m) => !RX_OFF_ROAD.test(`${m.nome} ${m.descricao ?? ""}`));
   }
   if (!lista.length) return [];
   const maisBarata = Math.min(...lista.map((m) => m.preco!));
@@ -348,6 +352,13 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     const naFaixa = escolhidas.filter((x) => x.moto.preco! > pisoDaFaixa(n.faixaAte!) && x.moto.preco! <= n.faixaAte!);
     if (naFaixa.length >= 2) escolhidas = naFaixa;
     if (patinete && servePatinete && escolhidas.length < max) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
+    /* e a que fica um pouquinho acima (até 15%), se sobrar lugar (Milton, 20/10/2026: "manda o que tem abaixo, que tá um
+       pouquinho acima, que é na média") */
+    const acima = lista
+      .filter((m) => m.preco! > n.faixaAte! && m.preco! <= n.faixaAte! * 1.15 && !escolhidas.some((x) => x.moto.nome === m.nome))
+      .sort((a, b) => a.preco! - b.preco!)[0];
+    if (acima && escolhidas.length < max && escolhidas.some((x) => x.moto.preco! <= n.faixaAte!))
+      escolhidas.push({ moto: acima, motivos: ["fica um pouquinho acima do valor que você falou"], pontos: 0 });
   }
   return escolhidas;
 }
