@@ -60,3 +60,32 @@ export function corrigirKmSemFonte(bloco: string, fichas: FichaFatos[]): string 
   }
   return texto;
 }
+
+/* Garantia só do cadastro (compilado de 20/10/2026: "a T3 Retrô tem 2 anos de garantia na bateria e 1 ano no restante",
+   sem nada disso na T3; o dono: "pode corrigir"). Frase que fala de garantia com prazo (anos, meses) sai se o prazo não
+   está na ficha (campo garantia) nem na descrição DAQUELE modelo; sem modelo citado, vale a base de conhecimento. No
+   lugar entra "A garantia da *T3 RETRÔ* eu confirmo com a equipe". */
+export type FichaGarantia = { nome: string; garantia?: string | null; descricao: string | null };
+const RX_PRAZO = /(\d+)\s*(?:anos?|m[eê]s(?:es)?)/giu;
+export function corrigirGarantiaSemFonte(bloco: string, fichas: FichaGarantia[], conhecimento = ""): string {
+  const partes = bloco.match(FRASES) ?? [bloco];
+  const confirmar = new Set<string>();
+  let semModelo = false;
+  const ficam = partes.filter((f) => {
+    if (!/garantia/iu.test(f) || !RX_PRAZO.test(f)) return true;
+    RX_PRAZO.lastIndex = 0;
+    const citados = fichas.filter((m) => ultimaCitada([m], f));
+    const fonte = citados.length === 1 ? `${citados[0].garantia ?? ""} ${citados[0].descricao ?? ""}` : conhecimento;
+    const temGarantia = /garantia/iu.test(fonte) || (citados.length === 1 && !!citados[0].garantia);
+    const prazos = numerosDe(Array.from(fonte.matchAll(RX_PRAZO), (x) => x[0]).join(" "));
+    const ok = temGarantia && Array.from(f.matchAll(RX_PRAZO)).every((x) => prazos.has(Number(x[1])));
+    if (ok) return true;
+    if (citados.length === 1) confirmar.add(citados[0].nome);
+    else semModelo = true;
+    return false;
+  });
+  let texto = ficam.join("").replace(/\n{3,}/g, "\n\n").trim();
+  for (const nome of confirmar) texto = `${texto}${texto ? " " : ""}A garantia d${artigo(nome)} *${nome}* eu confirmo com a equipe.`;
+  if (semModelo && !confirmar.size) texto = `${texto}${texto ? " " : ""}A garantia certinha eu confirmo com a equipe.`;
+  return texto;
+}

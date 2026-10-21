@@ -190,7 +190,7 @@ export function instrucaoIntermediario(textoDoCliente: string): string {
 }
 
 /** Assistência sem relato ainda: a IA pede o que aconteceu para registrar (sem oferecer moto). */
-export const TEXTO_PEDE_RELATO = "Entendi! Me conta o que está acontecendo com o seu aparelho, qual é o modelo e quando você comprou, que eu já registro tudo pra nossa assistência técnica 🙏";
+export const TEXTO_PEDE_RELATO = "Entendi! Me conta o que está acontecendo com a sua moto, qual é o modelo e quando você comprou, que eu já registro tudo pra nossa assistência técnica 🙏";
 
 /* A lista do estoque só vai quando o cliente pede (dono, 15/10/2026: "o cliente falou bom dia e a IA mandou tudo que
    tinha em estoque... isso não pode mais acontecer"; e o Anderson pediu o proprietário e recebeu a lista). Pediu =

@@ -19,7 +19,7 @@ import { diaPorExtensoDe, STATUS_ABERTOS } from "@/lib/test-drive";
 import { ErroRegra } from "@/lib/acao";
 import { limparEmojis, semFrasesBarradas, validarResposta } from "@/lib/ia/validador";
 import { vendedorRespondeuDepois } from "./devolver";
-import { catalogoParaIa, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
+import { catalogoParaIa, conhecimentoAtivo, fontesAutorizadas, lerHorario, montarPromptSistema, reais } from "@/lib/ia/prompt";
 import { formatarTelefone, hora } from "@/lib/formato";
 import { autonomiaMinima, comGasolinaDaRegiao, fraseEconomia, kmPorSemana, lerParametrosEconomia } from "@/lib/ia/economia";
 import { gasolinaPara } from "@/lib/ia/gasolina";
@@ -53,7 +53,8 @@ import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencao
 import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
-import { corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
+import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
+import { corrigirDigitacao, perguntaDeIdade, soDespedida, textoDespedida, tirarFalaDeIdade, TEXTO_IDADE } from "@/lib/ia/limites";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
 import { camposFaltando, enderecoDe, lerDadosDoCliente } from "@/lib/ia/dados-cliente";
 import { horaDoContato, MODELO_CONFIRMAR_VISITA, periodoDoTexto, RX_PERGUNTOU_PERIODO, textoContatoCombinado, textoDoDia, textoPerguntaPeriodo, valoresConfirmar, type Dia, type Periodo } from "@/lib/ia/contato-do-dia";
@@ -1356,7 +1357,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       .filter((m) => m.conteudo?.trim().toLowerCase() !== c.config.palavraLimpar.toLowerCase())
       .map((m) => (m.id === c.mensagemId ? c.textoEntrada : textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m) })))
       .filter((t) => t.trim());
-    const textoBuffer = textos.join("\n\n") || c.textoEntrada;
+    /* "usar no seio" é sítio (Simulador, 20/10/2026): a IA lia ao pé da letra */
+    const textoBuffer = corrigirDigitacao(textos.join("\n\n") || c.textoEntrada);
     /* mensagem repetida que a IA acabou de responder (teste de 12/10/2026: "Valor dos patinetes elétricos?" entrou duas
        vezes e saíram duas respostas quase iguais; cliente que reenvia achando que não foi): não responde de novo */
     /* a mensagem desta execução pode ter chegado antes da resposta anterior sair (aí não está em msgs) */
@@ -1715,6 +1717,20 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* dono, 20/10/2026: "a IA tem que perguntar o horário ou o período para fazer o follow-up e disparar automaticamente".
        Sem período, pergunta "de manhã ou à tarde?"; com ele, confirma que chama no dia. A mensagem do dia já fica
        programada (sem resposta, às 9h) */
+    /* idade de quem vai pilotar (compilado de 20/10/2026: a IA inventou "a legislação recomenda…"). Dono, 21/10/2026: sem
+       passar para a equipe; texto fixo, sem falar de lei */
+    if (!r.ctx.humano && intencao !== "assistencia" && perguntaDeIdade(c.textoBuffer)) {
+      const texto = TEXTO_IDADE;
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento: null } };
+    }
+    /* "ok, obrigada! no momento não": despedida curta, sem pergunta (o "posso ajudar em mais alguma coisa?" insistia). Só
+       "obrigado" logo depois do preço continua com a regra do dono de 13/10 (a IA mostra os ganhos uma vez) */
+    if (!r.ctx.humano && intencao !== "assistencia" && soDespedida(c.textoBuffer) && (!/r\$\s*\d/iu.test(ultimaDaLoja) || /momento n[ãa]o|s[óo] isso|tchau|por enquanto/iu.test(c.textoBuffer))) {
+      const texto = textoDespedida(primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome));
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento: null } };
+    }
     const dhTalvez = dataHoraDaVisita(c.textoBuffer);
     if (momento === "quer_visitar" && !r.ctx.humano && RX_DIA_INCERTO.test(c.textoBuffer) && dhTalvez.temDia && dhTalvez.dia) {
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
@@ -2131,8 +2147,12 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
     if (resposta.length) {
       const fichas = await db.select({ nome: schema.modelos.nome, ficha: schema.modelos.ficha, descricao: schema.modelos.descricao }).from(schema.modelos).where(eq(schema.modelos.ativo, true));
-      const fatos = fichas.map((f) => ({ nome: f.nome, autonomia: (f.ficha as Record<string, string> | null)?.autonomia ?? null, velocidade: (f.ficha as Record<string, string> | null)?.velocidade ?? null, descricao: f.descricao }));
-      resposta = resposta.map((b) => corrigirKmSemFonte(b, fatos));
+      const fatos = fichas.map((f) => ({ nome: f.nome, autonomia: (f.ficha as Record<string, string> | null)?.autonomia ?? null, velocidade: (f.ficha as Record<string, string> | null)?.velocidade ?? null, garantia: (f.ficha as Record<string, string> | null)?.garantia ?? null, descricao: f.descricao }));
+      /* garantia só do cadastro daquele modelo (compilado de 20/10/2026, T3 Retrô); sem modelo citado, a base de conhecimento */
+      const baseGarantia = (await conhecimentoAtivo()).map((k) => `${k.titulo}\n${k.conteudo}`).filter((k) => /garantia/iu.test(k)).join("\n");
+      resposta = resposta.map((b) => corrigirGarantiaSemFonte(corrigirKmSemFonte(b, fatos), fatos, baseGarantia));
+      /* idade e lei: o que a IA escreveu sai, e entra o texto fixo (uma vez) */
+      resposta = tirarFalaDeIdade(resposta);
     }
     /* sem balão repetido nem a mesma pergunta da mensagem anterior (Arine, 06/10/2026) */
     resposta = semRepeticao(resposta, ultimaFalaDaLoja(c.memoria.historico));

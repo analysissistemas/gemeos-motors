@@ -5,7 +5,7 @@
    conhecidas. Puro, sem banco. */
 
 const FRASES_PRONTAS = [
-  /me conta o que est[áa] acontecendo com o seu aparelho/i, // assistência sem relato
+  /me conta o que est[áa] acontecendo com (?:o seu aparelho|a sua moto)/i, // assistência sem relato
   /j[áa] anotei tudo! um vendedor te responde/i, // fora do horário
   /um vendedor te responde assim que a loja abrir/i,
   /nossa equipe de vendas volta assim que a loja abrir/i,
