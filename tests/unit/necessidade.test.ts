@@ -246,3 +246,9 @@ test("Simulador (20/10/2026): 'moto elétrica' não tira o patinete do até 6; f
   const c = cartoesIndicacao({ nome: null, n: NECESSIDADE_VAZIA, indicadas: indicarMotos(NECESSIDADE_VAZIA, [bike], 3) })!;
   assert.ok(c.cartoes[0].legenda.includes("Autonomia de até 30 km, até 25 km/h."), c.cartoes[0].legenda);
 });
+
+test("Simulador (20/10/2026): descrição em várias linhas vai só a 1ª no cartão", () => {
+  const t5: MotoParaIndicar = { nome: "T5 RETRÔ", tipo: "moto_eletrica", preco: 11000, autonomia: "55 a 70 km", carga: null, velocidade: "32 km/h", descricao: "1000w potência de motor\nBateria de lítio removível\nFarol em led" };
+  const c = cartoesIndicacao({ nome: null, n: NECESSIDADE_VAZIA, indicadas: indicarMotos(NECESSIDADE_VAZIA, [t5], 3) })!;
+  assert.equal(c.cartoes[0].legenda, "*T5 RETRÔ*\n1000w potência de motor. Autonomia de 55 a 70 km, até 32 km/h.\n💰 *R$ 11.000*");
+});

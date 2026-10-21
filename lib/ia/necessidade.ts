@@ -413,7 +413,9 @@ export function cartoesIndicacao(p: { nome: string | null; n: Necessidade; indic
     /* a descrição é da moto (cadastro e ficha); "cabe na faixa" e "a mais em conta" vão junto do preço */
     const uteis = x.motivos.filter((m) => !/faixa que voc[eê] falou|a mais em conta/.test(m)).slice(0, 3);
     const detalhes = uteis.length ? uteis : ficha;
-    const frase = (x.moto.descricao ?? "").split(/(?<=[.!])\s/)[0].trim();
+    /* só a 1ª frase ou a 1ª linha: a descrição da T5 é uma lista de linhas e ia inteira no cartão (Simulador, 20/10/2026) */
+    const primeira = (x.moto.descricao ?? "").trim().split(/(?<=[.!])\s|\n/)[0].trim();
+    const frase = primeira && !/[.!?]$/.test(primeira) ? `${primeira}.` : primeira;
     const descricao = [frase, detalhes.length ? `${detalhes.join(", ").replace(/^./, (l) => l.toUpperCase())}.` : null].filter(Boolean).join(" ");
     const maisEmConta = x.motivos.includes("a mais em conta") ? " (a mais em conta)" : "";
     return { nome: x.moto.nome, legenda: [`*${x.moto.nome}*`, descricao, `💰 *${brl(x.moto.preco!)}*${maisEmConta}`].filter(Boolean).join("\n") };
