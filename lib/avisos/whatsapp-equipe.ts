@@ -12,7 +12,7 @@ import { MODELO_RELATORIO, parametrosRelatorio, textoRelatorioWhatsApp, type Res
    sempre em Humano (a IA não responde) e a mensagem dele marca a hora (abre a janela). */
 
 const CHAVE = "avisos.whatsapp_equipe";
-type Guardado = { telefone: string; nome: string; ultimaMsgEm: string | null; ultimoEnvio: { em: string; como: string; ok: boolean; erro?: string } | null };
+type Guardado = { telefone: string; nome: string; ultimaMsgEm: string | null; ultimoEnvio: { em: string; como: string; ok: boolean; erro?: string; externoId?: string | null; entrega?: "entregue" | "lido" | "falhou"; erroEntrega?: string } | null };
 
 export async function lerWhatsappEquipe(): Promise<Guardado | null> {
   const [l] = await db.select({ valor: schema.configuracoes.valor }).from(schema.configuracoes).where(eq(schema.configuracoes.chave, CHAVE)).limit(1);
@@ -98,6 +98,18 @@ export async function enviarRelatorioWhatsApp(r: ResumoRelatorio): Promise<{ ok:
       });
   const ok = res.status !== "failed";
   const como = janela ? "texto completo" : "modelo relatorio_manha";
-  await gravar({ ...e, ultimoEnvio: { em: new Date().toISOString(), como, ok, ...(ok ? {} : { erro: res.erro ?? "falhou" }) } });
+  await gravar({ ...e, ultimoEnvio: { em: new Date().toISOString(), como, ok, externoId: res.externoId ?? null, ...(ok ? {} : { erro: res.erro ?? "falhou" }) } });
   return { ok, como, ...(ok ? {} : { erro: res.erro ?? "falhou" }) };
+}
+
+/** Entregue, lido ou recusado: a Meta avisa pelo webhook. O relatório não fica em conversa nenhuma, então sem isto a
+ *  tela dizia "saiu" mesmo quando não chegava ao celular (dono, 20/10/2026: "o relatório não estava saindo"). */
+export async function aplicarStatusRelatorio(externoId: string, status: "delivered" | "read" | "failed", erro?: string) {
+  const e = await lerWhatsappEquipe();
+  const u = e?.ultimoEnvio;
+  if (!e || !u?.externoId || u.externoId !== externoId) return false;
+  const entrega = status === "failed" ? "falhou" : status === "read" ? "lido" : "entregue";
+  if (u.entrega === "lido" && entrega === "entregue") return true;
+  await gravar({ ...e, ultimoEnvio: { ...u, entrega, ...(erro ? { erroEntrega: erro } : {}) } });
+  return true;
 }

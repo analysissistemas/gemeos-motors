@@ -110,7 +110,8 @@ export function RelatorioNoWhatsapp() {
         </div>
         {d?.ultimoEnvio && (
           <p className={d.ultimoEnvio.ok ? "mt-2 text-ink-2" : "mt-2 text-critico"}>
-            Último envio: {dataHora(d.ultimoEnvio.em)} · {d.ultimoEnvio.como} · {d.ultimoEnvio.ok ? "saiu" : `não saiu (${d.ultimoEnvio.erro})`}
+            Último envio: {dataHora(d.ultimoEnvio.em)} · {d.ultimoEnvio.como} · {d.ultimoEnvio.ok ? "a Meta aceitou" : `não saiu (${d.ultimoEnvio.erro})`}
+            {d.ultimoEnvio.ok && (d.ultimoEnvio.entrega === "lido" ? " · lido ✅" : d.ultimoEnvio.entrega === "entregue" ? " · entregue no celular ✅" : d.ultimoEnvio.entrega === "falhou" ? <span className="text-critico"> · NÃO chegou ao celular: {d.ultimoEnvio.erroEntrega ?? "a Meta não disse o motivo"}</span> : d.ultimoEnvio.externoId ? " · aguardando a confirmação de entrega" : "")}
           </p>
         )}
         {d?.ultimaMsgEm && <p className="mt-1 text-ink-3">O Milton escreveu para a loja em {dataHora(d.ultimaMsgEm)} (dentro de 24 h vai o relatório inteiro em texto).</p>}

@@ -302,7 +302,9 @@ export async function simularAndamento(conversaId?: number) {
 export async function aplicarStatus(externoId: string, status: "delivered" | "read" | "failed", erro?: string) {
   const ordem = { sent: 1, delivered: 2, read: 3, failed: 9 } as Record<string, number>;
   const [m] = await db.select({ id: schema.mensagens.id, status: schema.mensagens.status }).from(schema.mensagens).where(eq(schema.mensagens.externoId, externoId)).limit(1);
-  if (!m || (ordem[m.status] ?? 0) >= ordem[status]) return;
+  /* não é mensagem de conversa: pode ser o relatório das 8h no WhatsApp do Milton */
+  if (!m) return void (await import("@/lib/avisos/whatsapp-equipe").then((w) => w.aplicarStatusRelatorio(externoId, status, erro)).catch(() => null));
+  if ((ordem[m.status] ?? 0) >= ordem[status]) return;
   /* junta o erro aos metadados que já existem (a duração do áudio, por exemplo), sem apagá-los */
   await db
     .update(schema.mensagens)
