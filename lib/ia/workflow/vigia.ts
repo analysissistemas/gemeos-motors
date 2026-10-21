@@ -125,6 +125,8 @@ export async function vigiarAtendimentos(agora = new Date()) {
   await enviarLembretesRetirada(agora).catch((e) => console.error("[vigia] lembrete retirada", e));
   /* avisos no celular do Milton: tarefa da retirada na hora e o resumo das 8h (dono, 15/10/2026) */
   await avisosAgendados(agora).catch((e) => console.error("[vigia] avisos", e));
+  /* modelos da Meta do contato do dia: criados sozinhos se faltarem (dono, 20/10/2026) */
+  await import("@/lib/avisos/modelos-cliente").then((m) => m.garantirModelosCliente()).catch((e) => console.error("[vigia] modelos da Meta", e));
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
   const tarefasCobradas = await cobrarTarefasDaLoja(agora, aberta).catch((e) => {

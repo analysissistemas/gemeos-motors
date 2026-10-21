@@ -37,7 +37,7 @@ export function ModelosDoCliente() {
         <CalendarClock className="size-4.5" /> Mensagens do dia combinado
       </h2>
       <p className="mt-1 text-[13px] text-ink-2">
-        No dia que o cliente combinou, a IA chama ele sozinha. Se já passaram 24 h desde a última mensagem dele, o WhatsApp só aceita estes modelos aprovados pela Meta. Sem eles, a mensagem vira tarefa para a equipe em Follow-ups.
+        No dia que o cliente combinou, a IA chama ele sozinha. Se já passaram 24 h desde a última mensagem dele, o WhatsApp só aceita estes modelos aprovados pela Meta. O sistema cria os modelos sozinho na Meta (confere de 6 em 6 horas); até a Meta aprovar, a mensagem vira tarefa para a equipe em Follow-ups.
       </p>
       <div className="mt-4 rounded-2xl border border-linha p-3 text-[13px]">
         {d?.erro ? (
