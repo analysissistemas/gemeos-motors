@@ -260,3 +260,16 @@ test("Simulador (20/10/2026): descrição em várias linhas vai só a 1ª no car
   const c = cartoesIndicacao({ nome: null, n: NECESSIDADE_VAZIA, indicadas: indicarMotos(NECESSIDADE_VAZIA, [t5], 3) })!;
   assert.equal(c.cartoes[0].legenda, "*T5 RETRÔ*\n1000w potência de motor. Autonomia de 55 a 70 km, até 32 km/h.\n💰 *R$ 11.000*");
 });
+
+test("dono (21/10/2026): moto pra idoso oferece o triciclo, sem perguntar a faixa", () => {
+  const fox: MotoParaIndicar = { nome: "Triciclo Foxscoo", tipo: "moto_eletrica", preco: 10000, autonomia: "45 km", carga: "150 kg", velocidade: null, descricao: "Triciclo Foxscoo\nBateria de lítio" };
+  for (const frase of ["queria uma moto pra idoso", "é pro meu avô", "uma moto pra minha mãe que é idosa", "pra uma pessoa de idade"]) {
+    const n = lerDoCliente(frase);
+    assert.equal(n.idoso, true, frase);
+    assert.deepEqual(proximoPasso(n, { uso: 0, km: 0, garupa: 0, faixa: 0 }, { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false }), { acao: "indicar" });
+    assert.deepEqual(indicarMotos(n, [...ESTOQUE, fox], 3).map((x) => x.moto.nome), ["Triciclo Foxscoo"], frase);
+  }
+  assert.ok(!lerDoCliente("sou maior de idade").idoso);
+  /* sem triciclo no estoque: segue a indicação de sempre */
+  assert.ok(indicarMotos(lerDoCliente("moto pra idoso"), ESTOQUE, 3).length > 0);
+});

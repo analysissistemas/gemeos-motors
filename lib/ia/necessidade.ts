@@ -21,6 +21,8 @@ export type Necessidade = {
   tipo: "moto" | "triciclo" | "patinete" | null;
   /** "vespa", "retrô": o cliente já escolheu o estilo (T3 e T5 Retrô) */
   estilo?: "retro" | null;
+  /** "moto pra idoso", "pro meu avô": oferece o triciclo (três rodas) primeiro */
+  idoso?: boolean;
 };
 export type ChavePergunta = "uso" | "km" | "garupa" | "faixa";
 
@@ -71,6 +73,8 @@ const RX_PATINETE = /\bpatinete/;
 /* Milton (20/10/2026): "T3 Retrô e T5 Retrô são conhecidas como vespa" */
 const RX_RETRO = /\b(?:vespa\w*|retro|classica|estilo antigo)\b/;
 const RX_TRICICLO = /\b(?:triciclo|tres rodas|3 rodas)\b/;
+/* dono (21/10/2026): "quando os clientes perguntarem moto para idoso oferecer os triciclos" */
+export const RX_IDOSO = /\b(?:idos[oa]s?|terceira idade|melhor idade|(?<!(?:maior|menor) )de idade|aposentad[oa]s?|(?:meu|minha|pro|pra|pros|pras) (?:avo|avos|vovo|vozinh\w*))\b/;
 
 /** "7 mil" → 7000; "7.500" → 7500; "10k" → 10000; "7" sozinho (resposta da faixa) → 7000. */
 function valor(txt: string, soNumeroEhMil = false): number | null {
@@ -170,6 +174,7 @@ export function lerDoCliente(texto: string, anterior: Necessidade = NECESSIDADE_
   if (RX_PATINETE.test(t)) n.tipo = "patinete";
   else if (RX_TRICICLO.test(t)) n.tipo = "triciclo";
   else if (/\bmot(?:o|os|inha|oca|ocinha)\b/.test(t) && !n.tipo) n.tipo = "moto";
+  if (RX_IDOSO.test(t)) n.idoso = true;
   return n;
 }
 
@@ -206,7 +211,7 @@ export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indic
  *  pela 2ª vez (a 1ª vez ele recebe o "a partir de" e a pergunta). */
 export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean }): Passo {
   if (p.pedeOpcoesAgora && p.pediuOpcoesAntes) return { acao: "indicar" };
-  if (sabeFaixa(n) || n.estilo === "retro") return { acao: "indicar" };
+  if (sabeFaixa(n) || n.estilo === "retro" || n.idoso) return { acao: "indicar" };
   /* Milton (20/10/2026): "muita pergunta faz o cliente fugir. Pergunta a média de orçamento" (Dinho: uso, km, garupa duas
      vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */
   /* Milton (20/10/2026, de novo): "pergunta a média de orçamento... manda orçamento, ele manda o que tem". Nem o uso: só a
@@ -273,6 +278,9 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     lista = n.tipo === "triciclo" ? lista.filter((m) => RX_TRICICLO_MOTO.test(m.descricao ?? "")) : lista;
     /* moto de trilha (MT4: "circuitos fechados e propriedades privadas") não é indicada para o dia a dia (20/10/2026) */
     lista = lista.filter((m) => !RX_OFF_ROAD.test(`${m.nome} ${m.descricao ?? ""}`));
+    /* moto pra idoso: só os triciclos, se tiver no estoque; sem triciclo, segue a indicação de sempre */
+    const triciclos = lista.filter((m) => RX_TRICICLO_MOTO.test(`${m.nome} ${m.descricao ?? ""}`));
+    if (n.idoso && triciclos.length) lista = triciclos;
   }
   if (!lista.length) return [];
   const maisBarata = Math.min(...lista.map((m) => m.preco!));
@@ -334,6 +342,7 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     }
     if (n.faixaAte && m.preco! > pisoDaFaixa(n.faixaAte) && m.preco! <= n.faixaAte) pontos += 3;
     if (n.faixaDe && m.preco! < n.faixaDe * 0.85) pontos -= 1;
+    if (n.idoso && RX_TRICICLO_MOTO.test(`${m.nome} ${m.descricao ?? ""}`)) motivos.push("tem três rodas, fica em pé sozinho e dá mais segurança");
     if (n.estilo === "retro" && RX_MOTO_RETRO.test(m.nome)) {
       pontos += 8;
       motivos.push("é a que chamam de vespa, com o visual retrô");

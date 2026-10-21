@@ -148,7 +148,13 @@ export function instrucaoDoSite(texto: string): string {
    `triciclos` = nomes desses modelos com unidade no estoque. */
 const RX_TRICICLO = /(?<![\p{L}])(?:tric[ií]clos?|tr[êe]s\s+rodas|3\s+rodas)(?![\p{L}])/iu;
 export const pediuTriciclo = (texto: string) => RX_TRICICLO.test(texto);
+/* dono (21/10/2026): "quando os clientes perguntarem moto para idoso oferecer os triciclos" */
+const RX_IDOSO = /(?<![\p{L}])(?:idos[oa]s?|terceira\s+idade|melhor\s+idade|(?<!(?:maior|menor)\s)de\s+idade|aposentad[oa]s?|(?:meu|minha|pro|pra|pros|pras)\s+(?:av[oóô]s?|vov[oóô]|vozinh\p{L}*))(?![\p{L}])/iu;
+export const falouDeIdoso = (texto: string) => RX_IDOSO.test(texto);
 export function instrucaoTriciclo(texto: string, triciclos: string[] = []): string {
+  if (!pediuTriciclo(texto) && falouDeIdoso(texto) && triciclos.length)
+    return `# MOTO PARA IDOSO
+O cliente procura moto para uma pessoa idosa. Ofereça PRIMEIRO o triciclo ${triciclos.map((n) => `*${n}*`).join(" e ")} (três rodas: fica em pé sozinho, não precisa equilibrar e dá mais segurança), com a ficha do catálogo e o preço por último. Nenhuma outra moto é triciclo.\n\n`;
   if (!pediuTriciclo(texto)) return "";
   if (triciclos.length)
     return `# TRICICLO

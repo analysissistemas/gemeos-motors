@@ -883,7 +883,7 @@ async function triciclosComEstoque(c: CtxWorkflow) {
   const linhas = await db
     .select({ nome: m.nome })
     .from(m)
-    .where(and(eq(m.ativo, true), sql`(${m.descricao} ilike '%triciclo%' or ${m.descricao} ilike '%três rodas%' or ${m.descricao} ilike '%tres rodas%')`, sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`));
+    .where(and(eq(m.ativo, true), sql`(${m.nome} ilike '%triciclo%' or ${m.descricao} ilike '%triciclo%' or ${m.descricao} ilike '%três rodas%' or ${m.descricao} ilike '%tres rodas%')`, sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`));
   return linhas.map((l) => l.nome);
 }
 

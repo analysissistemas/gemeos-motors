@@ -131,3 +131,11 @@ test("pergunta de quem vai comprar sobre assistência não vira pós-venda (Cyan
   for (const t of ["Onde fica a assistência?", "preciso da assistência", "quero levar na assistência a minha T1", "minha moto precisa de assistência"])
     assert.equal(intencaoDoTexto(t, NOMES), "assistencia", t);
 });
+
+test("dono (21/10/2026): moto pra idoso oferece o triciclo do estoque", async () => {
+  const { instrucaoTriciclo } = await import("../../lib/ia/intencao.ts");
+  assert.match(instrucaoTriciclo("vcs tem moto pra idoso?", ["Triciclo Foxscoo"]), /MOTO PARA IDOSO[\s\S]*\*Triciclo Foxscoo\*/);
+  assert.match(instrucaoTriciclo("é pro meu avô", ["MM3"]), /\*MM3\*/);
+  assert.equal(instrucaoTriciclo("moto pra idoso", []), "");
+  assert.equal(instrucaoTriciclo("sou maior de idade", ["MM3"]), "");
+});
