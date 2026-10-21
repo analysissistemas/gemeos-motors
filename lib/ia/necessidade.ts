@@ -262,7 +262,7 @@ const RX_TRICICLO_MOTO = /triciclo|tr[eê]s rodas|3 rodas/i;
 const RX_MOTO_RETRO = /retr[oô]/i;
 const RX_OFF_ROAD = /off[- ]?road|trilhas?|motocross|circuitos? fechados?|propriedades? privadas?/i;
 
-type Indicada = { moto: MotoParaIndicar; motivos: string[]; pontos: number };
+type Indicada = { moto: MotoParaIndicar; motivos: string[]; pontos: number; /** não serve ao que ele contou (km, garupa, peso) */ ruim?: boolean };
 
 /** As motos que mais combinam (no máximo `max`), cada uma com os motivos tirados da ficha e da descrição. */
 export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2): Indicada[] {
@@ -279,6 +279,7 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
   const avaliadas: Indicada[] = lista.map((m) => {
     const motivos: string[] = [];
     let pontos = 0;
+    let ruim = false;
     const [autMin, autMax] = [Math.min(...numeros(m.autonomia)), Math.max(...numeros(m.autonomia))];
     const cargaKg = Math.max(0, ...numeros(m.carga));
     if (n.kmDia && Number.isFinite(autMin)) {
@@ -288,13 +289,19 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
       } else if (autMax >= n.kmDia) {
         pontos += 1;
         motivos.push(`roda ${m.autonomia!.trim().replace(/^At[ée]/, "até")}, dá pros seus ${n.kmDia} km por dia`);
-      } else pontos -= 6;
+      } else {
+        pontos -= 6;
+        ruim = true;
+      }
     }
     if (n.garupa) {
       if (RX_GARUPA_MOTO.test(m.descricao ?? "")) {
         pontos += 3;
         motivos.push("aceita garupa");
-      } else pontos -= 2;
+      } else {
+        pontos -= 2;
+        ruim = true;
+      }
     }
     if (n.carga || n.uso === "entregas") {
       const cesta = (m.descricao ?? "").match(RX_CESTA);
@@ -305,8 +312,10 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     }
     const precisaPeso = (n.pesoKg ?? 0) + (n.garupa ? 70 : 0);
     if (cargaKg && (n.pesoKg || n.garupa || n.carga || n.uso === "entregas")) {
-      if (precisaPeso && cargaKg < precisaPeso) pontos -= 4;
-      else {
+      if (precisaPeso && cargaKg < precisaPeso) {
+        pontos -= 4;
+        ruim = true;
+      } else {
         pontos += cargaKg >= 180 ? 2 : 1;
         motivos.push(`aguenta até ${m.carga!.trim()}`);
       }
@@ -331,7 +340,7 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     }
     if (n.maisBarata || (!n.faixaAte && !n.faixaDe)) pontos += m.preco === maisBarata ? 1 : 0;
     if (m.preco === maisBarata && (n.maisBarata || n.faixaAte)) motivos.push("a mais em conta");
-    return { moto: m, motivos, pontos };
+    return { moto: m, motivos, pontos, ruim };
   });
   let escolhidas = avaliadas
     .sort((a, b) => b.pontos - a.pontos || (n.faixaDe ? b.moto.preco! - a.moto.preco! : a.moto.preco! - b.moto.preco!))
@@ -340,26 +349,32 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
   /* pediu vespa e tem retrô no estoque: só as retrô */
   if (n.estilo === "retro" && escolhidas.some((x) => RX_MOTO_RETRO.test(x.moto.nome))) escolhidas = escolhidas.filter((x) => RX_MOTO_RETRO.test(x.moto.nome));
   else if (n.faixaAte) {
-    /* o patinete que cabe no orçamento entra como opção ("DF17, Z2, Patinete"; "abaixo de 6: N2 e patinete"), menos para
-       quem roda muito, trabalha com ela ou leva garupa */
-    const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= n.faixaAte!).sort((a, b) => a.preco! - b.preco!)[0];
-    /* "moto elétrica" dito de passagem não tira o patinete: "abaixo de 6: N2 e patinete" (Milton, 20/10/2026) */
-    const servePatinete = !!patinete && n.faixaAte < 8000 && n.tipo !== "triciclo" && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
-    /* com 2 ou mais opções dentro do orçamento (o patinete conta), a que passa dele sai (Milton, 19/10/2026: "as opções
-       dentro do orçamento do lead") */
-    const dentro = escolhidas.filter((x) => x.moto.preco! <= n.faixaAte!);
-    if (dentro.length + (servePatinete ? 1 : 0) >= 2) escolhidas = dentro;
-    /* e com 2 ou mais na faixa da loja ("até 8" = de 6 a 8), as mais baratas que ela saem (Milton, 20/10/2026) */
-    const naFaixa = escolhidas.filter((x) => x.moto.preco! > pisoDaFaixa(n.faixaAte!) && x.moto.preco! <= n.faixaAte!);
-    if (naFaixa.length >= 2) escolhidas = naFaixa;
-    if (patinete && servePatinete && escolhidas.length < max) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
-    /* e a que fica um pouquinho acima (até 15%), se sobrar lugar (Milton, 20/10/2026: "manda o que tem abaixo, que tá um
-       pouquinho acima, que é na média") */
-    const acima = lista
-      .filter((m) => m.preco! > n.faixaAte! && m.preco! <= n.faixaAte! * 1.15 && !escolhidas.some((x) => x.moto.nome === m.nome))
-      .sort((a, b) => a.preco! - b.preco!)[0];
-    if (acima && escolhidas.length < max && escolhidas.some((x) => x.moto.preco! <= n.faixaAte!))
-      escolhidas.push({ moto: acima, motivos: ["fica um pouquinho acima do valor que você falou"], pontos: 0 });
+    /* Milton (19 e 20/10/2026): "as opções dentro do orçamento do lead"; "abaixo de 6: N2 e patinete; abaixo de 8: DF17 e
+       UFO; de 11: Retrô e AG08; 13: as topadas"; "manda o que tem abaixo, que tá um pouquinho acima, que é na média".
+       Ordem: as da faixa da loja ("até 8" = de 6 a 8), o patinete que cabe, uma até 15% acima e, sobrando lugar, as logo
+       abaixo da faixa (as mais perto do orçamento, nunca as mais baratas da loja). Moto que não serve ao que ele contou
+       (km, garupa, peso) só entra se não houver outra. */
+    const ate = n.faixaAte;
+    const piso = pisoDaFaixa(ate);
+    const servem = avaliadas.filter((x) => !x.ruim);
+    const pool = servem.length ? servem : avaliadas;
+    const naFaixa = pool.filter((x) => x.moto.preco! > piso && x.moto.preco! <= ate).sort((a, b) => b.pontos - a.pontos || b.moto.preco! - a.moto.preco!);
+    const abaixo = pool.filter((x) => x.moto.preco! <= piso).sort((a, b) => b.moto.preco! - a.moto.preco! || b.pontos - a.pontos);
+    const acima = pool.filter((x) => x.moto.preco! > ate && x.moto.preco! <= ate * 1.15).sort((a, b) => a.moto.preco! - b.moto.preco!)[0];
+    escolhidas = naFaixa.slice(0, max);
+    /* o patinete que cabe entra como opção, menos para quem roda muito, trabalha com ela ou leva garupa; "moto elétrica"
+       dito de passagem não tira o patinete */
+    const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= ate).sort((a, b) => a.preco! - b.preco!)[0];
+    const servePatinete = !!patinete && ate < 8000 && n.tipo !== "triciclo" && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    if (patinete && servePatinete && escolhidas.length < max && !escolhidas.some((x) => x.moto.nome === patinete.nome)) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
+    if (acima && escolhidas.length < max) escolhidas.push({ ...acima, motivos: [...acima.motivos.filter((m) => m !== "a mais em conta"), "fica um pouquinho acima do valor que você falou"] });
+    for (const x of abaixo) if (escolhidas.length < max) escolhidas.push(x);
+    /* menos de 2: completa com as do orçamento mesmo sem servir em tudo, para ele poder escolher */
+    if (escolhidas.length < 2)
+      for (const x of avaliadas.filter((x) => x.ruim && x.moto.preco! > piso && x.moto.preco! <= ate * 1.15).sort((a, b) => b.pontos - a.pontos))
+        if (escolhidas.length < Math.min(2, max) && !escolhidas.includes(x)) escolhidas.push(x);
+    /* nada perto do orçamento: as que mais combinam */
+    if (!escolhidas.length) escolhidas = pool.sort((a, b) => b.pontos - a.pontos || a.moto.preco! - b.moto.preco!).slice(0, max);
   }
   return escolhidas;
 }

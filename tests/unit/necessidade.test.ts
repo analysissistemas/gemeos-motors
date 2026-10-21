@@ -129,7 +129,8 @@ test("indicação: as 2 que combinam, com o porquê tirado da ficha", () => {
   assert.ok(r[0].motivos.includes("aceita garupa"));
   /* até 7 mil, dia a dia na cidade: primeiro a que fica entre 6 e 7 mil (faixa da loja), depois a N2 */
   const barata = indicarMotos({ ...NECESSIDADE_VAZIA, uso: "cidade", kmDia: 15, faixaAte: 7000 }, ESTOQUE);
-  assert.deepEqual(barata.map((x) => x.moto.nome), ["UFOFAST F01", "N2"]);
+  /* Milton (20/10/2026): a da faixa e o patinete que cabe */
+  assert.deepEqual(barata.map((x) => x.moto.nome), ["UFOFAST F01", "Patinete X"]);
   assert.ok(barata[0].motivos.includes("cabe na faixa que você falou"));
   /* patinete: só patinete */
   assert.deepEqual(indicarMotos({ ...NECESSIDADE_VAZIA, tipo: "patinete" }, ESTOQUE).map((x) => x.moto.nome), ["Patinete X"]);
@@ -216,7 +217,14 @@ test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Re
   /* até 11: Retrô e AG08 */
   assert.deepEqual(nomes("11").sort(), ["AG08", "T3 RETRÔ", "T5 RETRÔ"]);
   /* até 13: as topadas */
-  assert.ok(nomes("até 13 mil").every((n) => ["M6", "T1"].includes(n)));
+  /* até 13: as topadas e, sobrando lugar, a logo abaixo (nunca as mais baratas da loja) */
+  const treze = nomes("até 13 mil");
+  assert.deepEqual(treze.slice(0, 2).sort(), ["M6", "T1"]);
+  assert.ok(["T3 RETRÔ", "T5 RETRÔ"].includes(treze[2]), treze.join());
+  /* só a M6 na faixa: completa com as logo abaixo, não com a N2 */
+  const semT1 = indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 13000 }, ESTOQUE.filter((m) => m.nome !== "T1"), 3).map((x) => x.moto.nome);
+  assert.equal(semT1[0], "M6");
+  assert.ok(!semT1.includes("N2") && !semT1.includes("Patinete X"), semT1.join());
   /* vespa: indica direto as retrô */
   const vespa = lerDoCliente("vocês têm aquela vespa?");
   assert.equal(vespa.estilo, "retro");
