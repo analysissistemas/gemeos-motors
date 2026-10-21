@@ -1458,7 +1458,10 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       const precos = doTipo.map((x) => x.preco!);
       /* perguntou valor ou as opções: "temos a partir de" (a mais em conta, do estoque) antes da pergunta, como o vendedor faz */
       const quis = RX_PERGUNTOU_VALOR.test(semAberturaDoSite(c.textoBuffer)) || pediuOpcoes(semAberturaDoSite(c.textoBuffer));
-      const abertura = quis && precos.length ? `Temos ${necessidade.tipo === "patinete" ? "patinete elétrico" : "moto elétrica"} a partir de *${reais(Math.min(...precos))}*, com pronta entrega 😊` : null;
+      /* "moto a partir de" é preço de moto: a bicicleta elétrica (cadastrada como moto elétrica) não conta (Simulador, 20/10/2026) */
+      const deMoto = doTipo.filter((x) => !/bicicleta|\bbike/i.test(x.nome)).map((x) => x.preco!);
+      const aPartir = deMoto.length ? deMoto : precos;
+      const abertura = quis && aPartir.length ? `Temos ${necessidade.tipo === "patinete" ? "patinete elétrico" : "moto elétrica"} a partir de *${reais(Math.min(...aPartir))}*, com pronta entrega 😊` : null;
       qualificacao = { pergunta: textoPergunta(passo.chave, { n: necessidade, precos: faixasDoEstoque(precos) ? precos : motosQualif.map((x) => x.preco ?? 0) }), abertura };
     }
     const g = criarGerador({
@@ -2108,6 +2111,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
         if (soCumprimentou) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
         /* depois de uma lista ("• *T1* ... R$ 12.000"), a pergunta vai numa linha própria (teste de 13/10/2026) */
         /* abertura dos cartões ("as que eu te indico são estas:"): o nome não entra ali, a pergunta vem depois das fotos (Simulador, 20/10/2026) */
+        /* resposta que ficou vazia nos filtros: a pergunta vai sozinha (20/10/2026, Jadiel: saiu "undefined E com quem eu falo?") */
+        else if (!resposta.length) resposta = ["Com quem eu falo? 😊"];
         else if (!resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
       }
     } else if (resposta.length && !vaiParaEquipe && !clienteVaiRetornar(c.textoBuffer) && !clienteEncerrou(c.textoBuffer) && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && !resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) {

@@ -237,3 +237,12 @@ test("Milton (20/10/2026): só a faixa; 'média de 8 mil' vale; moto de trilha n
   const c = cartoesIndicacao({ nome: null, n: { ...NECESSIDADE_VAZIA, faixaAte: 8000 }, indicadas: indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 8000 }, ESTOQUE, 3) })!;
   assert.ok(c.cartoes.find((k) => k.nome === "AG08")!.legenda.includes("um pouquinho acima do valor que você falou"));
 });
+
+test("Simulador (20/10/2026): 'moto elétrica' não tira o patinete do até 6; ficha 'Até 30 km' sai minúscula", () => {
+  const n = lerDoCliente("abaixo de 6", lerDoCliente("quanto custa a moto eletrica de voces?"), "Pra eu te mostrar as opções certas: você pensa em investir até 6 mil, até 8 mil, até 11 mil ou até 13 mil?");
+  assert.equal(n.tipo, "moto");
+  assert.ok(indicarMotos(n, ESTOQUE, 3).some((x) => x.moto.tipo === "patinete"));
+  const bike: MotoParaIndicar = { nome: "Bicicleta", tipo: "moto_eletrica", preco: 4000, autonomia: "Até 30 km", carga: null, velocidade: "25 km/h", descricao: "Dobrável." };
+  const c = cartoesIndicacao({ nome: null, n: NECESSIDADE_VAZIA, indicadas: indicarMotos(NECESSIDADE_VAZIA, [bike], 3) })!;
+  assert.ok(c.cartoes[0].legenda.includes("Autonomia de até 30 km, até 25 km/h."), c.cartoes[0].legenda);
+});

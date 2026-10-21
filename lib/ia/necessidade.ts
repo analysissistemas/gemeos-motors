@@ -284,10 +284,10 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     if (n.kmDia && Number.isFinite(autMin)) {
       if (autMin >= n.kmDia * 1.3) {
         pontos += 3;
-        motivos.push(`roda ${m.autonomia!.trim()} com uma carga, folga pros seus ${n.kmDia} km por dia`);
+        motivos.push(`roda ${m.autonomia!.trim().replace(/^At[ée]/, "até")} com uma carga, folga pros seus ${n.kmDia} km por dia`);
       } else if (autMax >= n.kmDia) {
         pontos += 1;
-        motivos.push(`roda ${m.autonomia!.trim()}, dá pros seus ${n.kmDia} km por dia`);
+        motivos.push(`roda ${m.autonomia!.trim().replace(/^At[ée]/, "até")}, dá pros seus ${n.kmDia} km por dia`);
       } else pontos -= 6;
     }
     if (n.garupa) {
@@ -343,7 +343,8 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     /* o patinete que cabe no orçamento entra como opção ("DF17, Z2, Patinete"; "abaixo de 6: N2 e patinete"), menos para
        quem roda muito, trabalha com ela ou leva garupa */
     const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= n.faixaAte!).sort((a, b) => a.preco! - b.preco!)[0];
-    const servePatinete = !!patinete && n.faixaAte < 8000 && !n.tipo && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    /* "moto elétrica" dito de passagem não tira o patinete: "abaixo de 6: N2 e patinete" (Milton, 20/10/2026) */
+    const servePatinete = !!patinete && n.faixaAte < 8000 && n.tipo !== "triciclo" && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
     /* com 2 ou mais opções dentro do orçamento (o patinete conta), a que passa dele sai (Milton, 19/10/2026: "as opções
        dentro do orçamento do lead") */
     const dentro = escolhidas.filter((x) => x.moto.preco! <= n.faixaAte!);
@@ -406,7 +407,9 @@ export function cartoesIndicacao(p: { nome: string | null; n: Necessidade; indic
     ? `${quem}elo que você me contou (${resumo}), separei ${uma ? "a que mais combina com você" : "as que mais combinam com você"}:`
     : `${p.nome ? `${p.nome}, ` : ""}${uma ? "a que eu te indico é esta" : "as que eu te indico são estas"}:`;
   const cartoes = p.indicadas.map((x) => {
-    const ficha = [x.moto.autonomia ? `autonomia de ${x.moto.autonomia.trim()}` : null, x.moto.velocidade ? `até ${x.moto.velocidade.trim()}` : null].filter(Boolean);
+    /* "Até 30 km" da ficha: "autonomia de até 30 km", nunca "de Até" nem "até até" (Simulador, 20/10/2026) */
+    const semAte = (s: string) => s.trim().replace(/^at[ée]\s+/i, "");
+    const ficha = [x.moto.autonomia ? `autonomia de ${/^at[ée]\s/i.test(x.moto.autonomia.trim()) ? "até " : ""}${semAte(x.moto.autonomia)}` : null, x.moto.velocidade ? `até ${semAte(x.moto.velocidade)}` : null].filter(Boolean);
     /* a descrição é da moto (cadastro e ficha); "cabe na faixa" e "a mais em conta" vão junto do preço */
     const uteis = x.motivos.filter((m) => !/faixa que voc[eê] falou|a mais em conta/.test(m)).slice(0, 3);
     const detalhes = uteis.length ? uteis : ficha;
