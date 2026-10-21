@@ -2107,9 +2107,10 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       if (!nome && !nomeNovo && !vaiParaEquipe && !jaPerguntouONome(c.memoria.historico)) {
         if (soCumprimentou) abertura = `${abertura} ${variar(PERGUNTAS_NOME)}`;
         /* depois de uma lista ("• *T1* ... R$ 12.000"), a pergunta vai numa linha própria (teste de 13/10/2026) */
-        else if (!resposta.some((b) => /\?/.test(b))) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
+        /* abertura dos cartões ("as que eu te indico são estas:"): o nome não entra ali, a pergunta vem depois das fotos (Simulador, 20/10/2026) */
+        else if (!resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
       }
-    } else if (resposta.length && !vaiParaEquipe && !clienteVaiRetornar(c.textoBuffer) && !clienteEncerrou(c.textoBuffer) && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && !resposta.some((b) => /\?/.test(b))) {
+    } else if (resposta.length && !vaiParaEquipe && !clienteVaiRetornar(c.textoBuffer) && !clienteEncerrou(c.textoBuffer) && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && !resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) {
       /* conversa que já andou sem o nome: pergunta no fim, se a resposta não tem outra pergunta */
       resposta = [...resposta, variar(PERGUNTAS_NOME)];
     }
@@ -2120,7 +2121,7 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     if (!abertura && resposta.length && !vaiParaEquipe && !fechandoAConversa && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && deveRepetirPerguntaDoNome(c.memoria.historico)) {
       /* pela etapa da conversa, não por palavra solta ("pronta para entrega" bloqueava a pergunta, teste de 07/10/2026) */
       const passoImportante = ["quer_parcelar", "pediu_simulacao", "recusou_simulacao", "negociar", "decidido", "escolheu_entrega", "escolheu_retirada", "mandou_dados", "dados_parciais", "quer_visitar", "informou_visita"].includes(c.momento ?? "") || /nome\s+completo|cpf/iu.test(resposta.join(" "));
-      if (!passoImportante && !resposta.some((b) => /\?/.test(b))) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
+      if (!passoImportante && !resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) resposta = [...resposta, variar(REPERGUNTAS_NOME)];
     }
     /* autonomia só do catálogo: km que a ficha do modelo não tem vira "a confirmar" (06/10/2026) */
     if (resposta.length) {
