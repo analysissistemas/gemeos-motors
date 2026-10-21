@@ -21,3 +21,16 @@ test("km e km/h da ficha, conta de economia e frase com dois modelos ficam", () 
   const ok = ["A *T3 RETRÔ* anda de 60 a 70 km com uma carga e chega a 32 km/h.", "A *DF17* anda até 50 km.", "Rodando 80 km por semana com a *T3 RETRÔ*, você economiza R$ 200.", "A *DF17* e a *T3 RETRÔ* andam até 70 km."];
   for (const t of ok) assert.equal(corrigirKmSemFonte(t, FICHAS), t, t);
 });
+
+test("frase que sai levava o nome: o 'Ela também…' seguinte ganha o nome de volta (Simulador, 20/10/2026)", () => {
+  assert.equal(
+    corrigirKmSemFonte("A *X GÊMEOS* anda até 45 km. Ela também tem caixa de som integrada e sistema de ré.", FICHAS),
+    "A *X GÊMEOS* também tem caixa de som integrada e sistema de ré. A autonomia da *X GÊMEOS* eu confirmo com a equipe.",
+  );
+  assert.equal(
+    corrigirKmSemFonte("Já a *X GÊMEOS* chega a 40 km/h. Além disso, ela tem farol em LED.", FICHAS),
+    "Além disso, a *X GÊMEOS* tem farol em LED. A velocidade da *X GÊMEOS* eu confirmo com a equipe.",
+  );
+  /* frase que não começa com "ela/também" fica igual */
+  assert.equal(corrigirKmSemFonte("A *X GÊMEOS* anda até 45 km. Quer ver de perto?", FICHAS), "Quer ver de perto? A autonomia da *X GÊMEOS* eu confirmo com a equipe.");
+});

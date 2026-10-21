@@ -14,10 +14,24 @@ const RX_ECONOMIA = /(?:por|na|no|ao|cada)\s+(?:semana|dia|m[êe]s)|rodando|roda
 const FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu;
 const numerosDe = (s: string) => new Set((s.match(/\d+/g) ?? []).map(Number));
 
+/** "Ela também tem…" / "Além disso, ela tem…" / "Também tem…" → "A *X GÊMEOS* também tem…". Outra frase fica como está. */
+function comSujeito(frase: string, nome: string): string {
+  const r = frase.match(/^(\s*)(?:(além disso,?|e)\s+)?(?:(?:ela|ele|essa|esse)(?:\s+moto)?\s+|(?=também\b))/iu);
+  if (!r) return frase;
+  const [tudo, espaco, ligacao] = r;
+  const sujeito = `${artigo(nome)} *${nome}*`;
+  const ligado = ligacao ? `${ligacao[0].toUpperCase()}${ligacao.slice(1).toLowerCase()} ${sujeito}` : `${sujeito[0].toUpperCase()}${sujeito.slice(1)}`;
+  return `${espaco}${ligado} ${frase.slice(tudo.length).replace(/^também\b/iu, "também")}`;
+}
+
 export function corrigirKmSemFonte(bloco: string, fichas: FichaFatos[]): string {
   const partes = bloco.match(FRASES) ?? [bloco];
   const confirmar = new Map<string, Set<"autonomia" | "velocidade">>();
-  const ficam = partes.filter((f) => {
+  /* a frase que sai era a que dizia o nome: a seguinte que começa com "Ela também…" ganha o nome de volta, senão o
+     cliente lê como se fosse da moto de antes (Simulador de 20/10/2026: "Ela também tem caixa de som" logo depois da MT4) */
+  let saiu: string | null = null;
+  const ficam: string[] = [];
+  const fica = (f: string) => {
     if (!/\d\s*km/iu.test(f) || RX_ECONOMIA.test(f)) return true;
     const citados = fichas.filter((m) => ultimaCitada([m], f));
     if (citados.length !== 1) return true;
@@ -29,8 +43,16 @@ export function corrigirKmSemFonte(bloco: string, fichas: FichaFatos[]): string 
     for (const x of f.matchAll(RX_DISTANCIA)) if (!fonteKm.has(Number(x[1])) || (x[2] && !fonteKm.has(Number(x[2])))) faltam.add("autonomia");
     if (!faltam.size) return true;
     confirmar.set(m.nome, new Set([...(confirmar.get(m.nome) ?? []), ...faltam]));
+    saiu = m.nome;
     return false;
-  });
+  };
+  for (let f of partes) {
+    if (saiu && f.trim()) {
+      f = comSujeito(f, saiu);
+      saiu = null;
+    }
+    if (fica(f)) ficam.push(f);
+  }
   let texto = ficam.join("").replace(/\n{3,}/g, "\n\n").trim();
   for (const [nome, o] of confirmar) {
     const oque = Array.from(o).sort().map((x) => `a ${x}`).join(" e ");
