@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { ErroRegra } from "@/lib/acao";
@@ -111,6 +111,28 @@ const normal = (v: unknown): unknown =>
   v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : (v ?? null);
 const iguais = (a: unknown, b: unknown) => JSON.stringify(normal(a)) === JSON.stringify(normal(b));
 
+/* Preço de tabela vale para as unidades à venda (dono, 20/10/2026: a bicicleta tinha preço no catálogo e o estoque dizia
+   "Sem preço"). Unidade sem preço, ou com o preço de tabela antigo, passa a ter o novo; preço próprio da unidade fica. */
+async function precoDeTabelaNasUnidades(u: Quem, modeloId: number, nome: string, antes: number | null, novo: number | null | undefined) {
+  if (!novo) return 0;
+  const v = schema.veiculos;
+  const mudou = await db
+    .update(v)
+    .set({ valorAnunciado: novo })
+    .where(
+      and(
+        sql`(${v.modeloId} = ${modeloId} or (${v.modeloId} is null and lower(trim(${v.modelo})) = lower(trim(${nome}))))`,
+        inArray(v.status, ["disponivel", "reservado"]),
+        sql`(${v.valorAnunciado} is null${antes ? sql` or ${v.valorAnunciado} = ${antes}` : sql``})`,
+        sql`${v.valorAnunciado} is distinct from ${novo}`,
+      ),
+    )
+    .returning({ id: v.id });
+  if (mudou.length)
+    await registrarLog(u, { acao: "modelo.preco_alterado", entidade: "modelo", entidadeId: modeloId, descricao: `Preço de tabela de ${nome} (${brl(novo)}) aplicado em ${mudou.length} unidade(s) do estoque` });
+  return mudou.length;
+}
+
 export async function salvarModelo(u: Quem, id: number | null, entrada: unknown) {
   const d = esquemaModelo.parse(entrada);
   await conferirNomeLivre(d.nome, id ?? undefined);
@@ -118,6 +140,7 @@ export async function salvarModelo(u: Quem, id: number | null, entrada: unknown)
   if (id) {
     const antes = await modeloPorId(id);
     const campos = (Object.keys(d) as (keyof DadosModelo)[]).filter((k) => !iguais(antes[k], d[k]));
+    await precoDeTabelaNasUnidades(u, id, d.nome, antes.precoTabela, d.precoTabela);
     if (!campos.length) return id;
     await db.transaction(async (tx) => {
       await tx.update(m).set(d).where(eq(m.id, id));
