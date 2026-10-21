@@ -2113,6 +2113,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
         /* abertura dos cartões ("as que eu te indico são estas:"): o nome não entra ali, a pergunta vem depois das fotos (Simulador, 20/10/2026) */
         /* resposta que ficou vazia nos filtros: a pergunta vai sozinha (20/10/2026, Jadiel: saiu "undefined E com quem eu falo?") */
         else if (!resposta.length) resposta = ["Com quem eu falo? 😊"];
+        /* resposta que ficou vazia nos filtros: a pergunta vai sozinha (20/10/2026, Jadiel: saiu "undefined E com quem eu falo?") */
+        else if (!resposta.length) resposta = ["Com quem eu falo? 😊"];
         else if (!resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) resposta = [...resposta.slice(0, -1), `${resposta.at(-1)}${/^•/mu.test(resposta.at(-1) ?? "") ? "\n\n" : " "}E com quem eu falo? 😊`];
       }
     } else if (resposta.length && !vaiParaEquipe && !clienteVaiRetornar(c.textoBuffer) && !clienteEncerrou(c.textoBuffer) && !primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) && !jaPerguntouONome(c.memoria.historico) && !jaChamouPeloNome(c.conversa?.contatoNome, c.memoria.historico, resposta) && !resposta.some((b) => /\?/.test(b)) && !/:\s*$/.test(resposta.at(-1) ?? "")) {
