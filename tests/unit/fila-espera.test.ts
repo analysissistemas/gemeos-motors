@@ -63,3 +63,13 @@ test("os textos da fila só usam emoji que o validador aceita (o 😕 barrava a 
     assert.ok(!/\p{Extended_Pictographic}/u.test(resto), t);
   }
 });
+
+test("dono (21/10/2026): MM3 esgotada sugere o outro triciclo, não a moto de preço parecido", () => {
+  const mm3: ModeloSemEstoque = { id: 1, nome: "MM3", tipo: "moto_eletrica", preco: 10500, chegaEm: null, descricao: "Triciclo elétrico de três rodas." };
+  const estoque = [
+    { nome: "X GÊMEOS", tipo: "moto_eletrica", preco: 10500, descricao: "Caixa de som." },
+    { nome: "Triciclo Foxscoo", tipo: "moto_eletrica", preco: 10000, descricao: "Triciclo elétrico de três rodas." },
+  ];
+  assert.equal(maisParecida(mm3, estoque)?.nome, "Triciclo Foxscoo");
+  assert.equal(maisParecida({ ...mm3, nome: "T1", descricao: null }, estoque)?.nome, "X GÊMEOS");
+});

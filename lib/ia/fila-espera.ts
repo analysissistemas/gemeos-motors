@@ -8,8 +8,8 @@ const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const artigo = (nome: string) => (/^\s*patinete/i.test(nome) ? "o" : "a");
 const brl = (x: number) => `R$ ${x.toLocaleString("pt-BR", Number.isInteger(x) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export type ModeloSemEstoque = { id: number; nome: string; tipo: string; preco: number | null; chegaEm: string | null };
-export type ModeloComEstoque = { nome: string; tipo: string; preco: number | null };
+export type ModeloSemEstoque = { id: number; nome: string; tipo: string; preco: number | null; chegaEm: string | null; descricao?: string | null };
+export type ModeloComEstoque = { nome: string; tipo: string; preco: number | null; descricao?: string | null };
 
 /* "Quero ser avisado quando a X chegar" (botão do site), "me avisa quando chegar", "me chama quando tiver" */
 const RX_PEDE_AVISO = /\b(?:quero ser avisad\w*|me avis\w*|avis\w* (?:quando|qnd|assim que)|me (?:chama|chame|fala|manda (?:mensagem|msg)) (?:quando|qnd|assim que) (?:chegar|tiver|voltar)|quando (?:chegar|tiver|voltar) me (?:avis\w*|chama|fala))\b/;
@@ -31,9 +31,14 @@ export function citouSemEstoque(texto: string, modelos: ModeloSemEstoque[]): Mod
   return [...modelos].sort((a, b) => b.nome.length - a.nome.length).find((m) => bate(m.nome)) ?? null;
 }
 
-/** A mais parecida que tem: mesmo tipo, preço mais perto. */
+const RX_TRICICLO = /triciclo|tr[eê]s rodas|3 rodas/i;
+const ehTriciclo = (x: { nome: string; descricao?: string | null }) => RX_TRICICLO.test(`${x.nome} ${x.descricao ?? ""}`);
+
+/** A mais parecida que tem: mesmo tipo, preço mais perto. Triciclo esgotado: o outro triciclo, se tiver (dono, 21/10/2026:
+ *  "não tem a MM3 mas tem um triciclo parecido também"). */
 export function maisParecida(m: ModeloSemEstoque, comEstoque: ModeloComEstoque[]): ModeloComEstoque | null {
-  const mesmas = comEstoque.filter((x) => x.tipo === m.tipo && x.preco);
+  const triciclos = ehTriciclo(m) ? comEstoque.filter((x) => ehTriciclo(x) && x.preco) : [];
+  const mesmas = triciclos.length ? triciclos : comEstoque.filter((x) => x.tipo === m.tipo && x.preco);
   if (!mesmas.length) return null;
   if (!m.preco) return mesmas[0];
   return [...mesmas].sort((a, b) => Math.abs(a.preco! - m.preco!) - Math.abs(b.preco! - m.preco!))[0];

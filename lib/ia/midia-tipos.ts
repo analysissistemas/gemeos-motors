@@ -12,7 +12,7 @@ import { artigo, norm } from "./estoque-tipos.ts";
 
 export type TipoMidiaIa = "foto" | "video";
 export type FotoDaMoto = { url: string; cor: string | null };
-export type ModeloComMidia = { id: number; nome: string; fotos: FotoDaMoto[]; videoUrl: string | null };
+export type ModeloComMidia = { id: number; nome: string; fotos: FotoDaMoto[]; videoUrl: string | null; /** sem unidade disponível: só vai quando o cliente pede a foto */ semEstoque?: boolean };
 export type ItemMidia = { tipo: TipoMidiaIa; url: string; legenda: string };
 export type PlanoMidia = { modelo: ModeloComMidia | null; pedido: TipoMidiaIa[]; itens: ItemMidia[]; /** quantos arquivos podem ir (padrão 3) */ maxItens?: number; /** texto que vai DEPOIS das fotos (a pergunta da indicação) */ depois?: string };
 
@@ -146,7 +146,9 @@ export function instrucaoDeMidia(plano: PlanoMidia | null): string {
   const vai = plano.itens.map((i) => (i.tipo === "foto" ? "foto" : "vídeo"));
   const faltou = plano.pedido.filter((t) => !plano.itens.some((i) => i.tipo === t)).map((t) => (t === "foto" ? "foto" : "vídeo"));
   if (!vai.length) return `# FOTO E VÍDEO\n${base} O cliente pediu ${faltou.join(" e ")} da ${plano.modelo.nome}, mas a loja ainda não tem esse arquivo no sistema: NÃO diga que está mandando; diga com naturalidade que o vendedor envia assim que possível e siga com a ficha da moto.`;
-  return `# FOTO E VÍDEO\n${base} Junto com esta resposta vai: ${Array.from(new Set(vai)).join(" e ")} da ${plano.modelo.nome}. Apresente em uma frase curta (ex.: "Olha ela aí 👇") e siga a conversa.${faltou.length ? ` Não tem ${faltou.join(" nem ")} no sistema: diga que o vendedor manda depois.` : ""}`;
+  /* sem estoque e o cliente pediu a foto: a foto vai mesmo assim (dono, 21/10/2026: "tudo bem não tem em estoque mas pelo menos manda a foto") */
+  const esgotada = plano.modelo.semEstoque ? ` A ${plano.modelo.nome} está sem unidade no estoque agora: a foto vai mesmo assim; NÃO diga que não dá para mandar foto, diga só que no momento ela não tem pronta entrega.` : "";
+  return `# FOTO E VÍDEO\n${base} Junto com esta resposta vai: ${Array.from(new Set(vai)).join(" e ")} da ${plano.modelo.nome}. Apresente em uma frase curta (ex.: "Olha ela aí 👇") e siga a conversa.${faltou.length ? ` Não tem ${faltou.join(" nem ")} no sistema: diga que o vendedor manda depois.` : ""}${esgotada}`;
 }
 
 /* Frases que prometem foto/vídeo ("segue a foto", "vou te mandar o vídeo"): saem quando nada vai junto. */

@@ -112,3 +112,10 @@ test("indicação da qualificação: foto e vídeo de cada moto indicada, até 4
   /* sem arquivo nenhum (DF17): nada */
   assert.equal(planejarIndicacao({ modelos: [DF17], nomes: ["DF17"], jaEnviadas: [] }), null);
 });
+
+test("dono (21/10/2026): cliente pede a foto da moto esgotada, a foto vai e a IA não diz que não dá", () => {
+  const mm3 = { id: 9, nome: "MM3", fotos: [{ url: "/m/mm3.jpg", cor: null }], videoUrl: null, semEstoque: true };
+  const plano = planejarPedido({ modelos: [mm3], textoCliente: "manda a foto dela direitinho", historicoCliente: "", interesse: "MM3" });
+  assert.equal(plano?.itens[0]?.url, "/m/mm3.jpg");
+  assert.match(instrucaoDeMidia(plano), /a foto vai mesmo assim/);
+});

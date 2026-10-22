@@ -394,7 +394,7 @@ async function modelosSemUnidade(c: CtxWorkflow): Promise<ModeloSemEstoque[]> {
   const v = schema.veiculos;
   const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
   const [modelos, unidades, vindo] = await Promise.all([
-    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, reposicaoEm: m.reposicaoEm }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
+    db.select({ id: m.id, nome: m.nome, tipo: m.tipo, preco: m.precoTabela, reposicaoEm: m.reposicaoEm, descricao: m.descricao }).from(m).where(and(eq(m.ativo, true), eq(m.mostrarNoSite, true), inArray(m.tipo, [...TIPOS_VENDA_IA]))),
     db.select({ modeloId: v.modeloId, modelo: v.modelo }).from(v).where(and(eq(v.status, "disponivel"), c.conversa?.demo ? undefined : eq(v.teste, false))),
     db.select({ modeloId: v.modeloId, entradaEm: v.entradaEm }).from(v).where(and(eq(v.status, "reservado"), sql`${v.entradaEm} > current_date`, c.conversa?.demo ? undefined : eq(v.teste, false))),
   ]);
@@ -404,7 +404,7 @@ async function modelosSemUnidade(c: CtxWorkflow): Promise<ModeloSemEstoque[]> {
     .map((x) => {
       const reservada = vindo.filter((u) => u.modeloId === x.id).map((u) => u.entradaEm).sort()[0];
       const chega = x.reposicaoEm && x.reposicaoEm >= hoje ? x.reposicaoEm : (reservada ?? null);
-      return { id: x.id, nome: x.nome, tipo: x.tipo, preco: x.preco ? Number(x.preco) : null, chegaEm: chega ? ddmm(chega) : null };
+      return { id: x.id, nome: x.nome, tipo: x.tipo, preco: x.preco ? Number(x.preco) : null, chegaEm: chega ? ddmm(chega) : null, descricao: x.descricao };
     });
 }
 /** As falas da loja (IA ou vendedor) no histórico, uma por bloco. */
@@ -876,14 +876,16 @@ async function tarefaRevisarIa(c: CtxWorkflow, queixa: string) {
   return true;
 }
 
-/** Modelos que o catálogo descreve como triciclo / três rodas (hoje o MM3) e que têm unidade disponível. */
-async function triciclosComEstoque(c: CtxWorkflow) {
+/** Modelos que o catálogo descreve como triciclo / três rodas (MM3, Triciclo Foxscoo) e que têm unidade disponível.
+ *  `todos`: também os sem estoque (para a rede de segurança não trocar "a MM3 é um triciclo" por "moto de duas rodas":
+ *  Eliane, 21/10/2026). */
+async function triciclosComEstoque(c: CtxWorkflow, todos = false) {
   const m = schema.modelos;
   const v = schema.veiculos;
   const linhas = await db
     .select({ nome: m.nome })
     .from(m)
-    .where(and(eq(m.ativo, true), sql`(${m.nome} ilike '%triciclo%' or ${m.descricao} ilike '%triciclo%' or ${m.descricao} ilike '%três rodas%' or ${m.descricao} ilike '%tres rodas%')`, sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`));
+    .where(and(eq(m.ativo, true), sql`(${m.nome} ilike '%triciclo%' or ${m.descricao} ilike '%triciclo%' or ${m.descricao} ilike '%três rodas%' or ${m.descricao} ilike '%tres rodas%')`, todos ? undefined : sql`exists (select 1 from ${v} where ${v.modeloId} = ${m.id} and ${v.status} = 'disponivel' ${c.conversa?.demo ? sql`` : sql`and not ${v.teste}`})`));
   return linhas.map((l) => l.nome);
 }
 
@@ -1155,8 +1157,10 @@ function gasolinaDoCliente(c: CtxWorkflow) {
 }
 
 /** Motos com unidade disponível e a mídia de cada uma: a foto do WhatsApp do modelo ou, sem ela, a foto
- *  de cada cor do estoque (sem foto da cor, a principal do modelo) e o vídeo do catálogo. Conversa simulada enxerga os veículos de teste. */
-async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
+ *  de cada cor do estoque (sem foto da cor, a principal do modelo) e o vídeo do catálogo. Conversa simulada enxerga os veículos de teste.
+ *  `semEstoque`: também as do catálogo sem unidade (só quando o cliente PEDE a foto: Eliane, 21/10/2026, pediu a da MM3
+ *  esgotada e a IA disse que não tinha como mandar). */
+async function motosComMidia(c: CtxWorkflow, semEstoque = false): Promise<ModeloComMidia[]> {
   const m = schema.modelos;
   const v = schema.veiculos;
   const k = schema.modeloCores;
@@ -1167,7 +1171,10 @@ async function motosComMidia(c: CtxWorkflow): Promise<ModeloComMidia[]> {
   ]);
   return modelos.flatMap((x) => {
     const minhas = unidades.filter((u) => u.modeloId === x.id || (!u.modeloId && u.modelo.trim().toLowerCase() === x.nome.trim().toLowerCase()));
-    if (!minhas.length) return [];
+    if (!minhas.length) {
+      const foto = x.fotoWhatsappUrl ?? x.fotoUrl;
+      return semEstoque && (foto || x.videoUrl) ? [{ id: x.id, nome: x.nome, fotos: foto ? [{ url: foto, cor: null }] : [], videoUrl: x.videoUrl, semEstoque: true }] : [];
+    }
     const coresEstoque = Array.from(new Set(minhas.map((u) => u.cor?.trim()).filter((cor): cor is string => !!cor)));
     /* foto só do WhatsApp (o panfleto da moto): vai ela, no lugar das fotos das cores */
     if (x.fotoWhatsappUrl) return [{ id: x.id, nome: x.nome, fotos: [{ url: x.fotoWhatsappUrl, cor: null }], videoUrl: x.videoUrl }];
@@ -1426,7 +1433,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
     /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
     const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
-    const midia = planejarPedido({ modelos: await motosComMidia(c), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null, ultimasDaLoja: ultimasFalasDaLoja(c.memoria.historico, 3) });
+    const midia = planejarPedido({ modelos: await motosComMidia(c, true), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null, ultimasDaLoja: ultimasFalasDaLoja(c.memoria.historico, 3) });
     /* o que o cliente quer (compra, assistência ou ainda não disse): sem saber, nada de produto */
     const intencao = await intencaoDoCliente(c);
     /* momento da compra: a que pergunta ele responde, se tem interesse, se decidiu, se tem objeção */
@@ -2023,7 +2030,7 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     resposta = tirarFraseProibida(resposta);
     /* frase de enchimento sai (Genilso, 18/10/2026: "estou aqui para ajudar" e "estarei aqui para ajudar" em dois balões seguidos) */
     resposta = resposta.map((b) => b.replace(RX_ENCHIMENTO, "").replace(/\s{2,}/g, " ").trim()).filter((b) => /\p{L}{2,}/u.test(b));
-    resposta = tirarTriciclo(resposta, await triciclosComEstoque(c));
+    resposta = tirarTriciclo(resposta, await triciclosComEstoque(c, true));
     /* a lista do estoque só quando o cliente pede (dono, 15/10/2026: "bom dia" recebeu tudo que tinha em estoque) */
     if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = tirarListaSemPedido(resposta, c.textoBuffer, await nomesDoCatalogo());
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */
