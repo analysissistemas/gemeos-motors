@@ -518,7 +518,7 @@ export function instrucaoQualificacao(n: Necessidade): string {
   return `# QUALIFICAÇÃO (o diferencial do atendimento)
 Agora você está entendendo o que o cliente precisa, para depois indicar a moto certa pra ele. O que já se sabe: ${fichaDaNecessidade(n)}.
 Nesta resposta escreva SÓ 1 ou 2 frases curtas e calorosas, sem pergunta nenhuma: o sistema faz a próxima pergunta logo depois da sua frase.
-- Comente com naturalidade o que ele acabou de contar (ex.: "20 km por dia é tranquilo pra uma elétrica 👍", "pra entregas faz toda a diferença não gastar com gasolina").
+- Comente com naturalidade SÓ o que ele acabou de contar, com as palavras dele (se contou o uso, fale do uso; se disse quantos km roda, fale desses km). NUNCA cite km, uso, valor ou garupa que ele não disse. Se ele só disse o nome ou cumprimentou, escreva só um "prazer" curto, sem comentar mais nada.
 - Se ele perguntou algo, responda sem citar modelo nem preço: parcelamento, "dá pra parcelar em até 21x no cartão, e no Pix sai melhor"; garantia, entrega e loja, só o que estiver na base de conhecimento.
 - Se ele disse que vai ver com alguém (esposa, família) ou que volta depois: respeite com carinho e diga que você só quer deixar separadas as opções certas pra ele mostrar.
 - NÃO cite nenhum modelo, preço, autonomia, cor, estoque nem catálogo, e não liste motos: a indicação vem depois, feita sob medida.
