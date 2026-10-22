@@ -86,8 +86,12 @@ export function planejarPedido(p: { modelos: ModeloComMidia[]; textoCliente: str
       return { modelo: { ...apresentadas[0], nome: apresentadas.map((m) => m.nome).join(" e ") }, pedido, itens: apresentadas.flatMap((m) => itensDe(m, ["foto"])) };
     }
   }
+  /* a loja acabou de mostrar UMA moto e ele pede "manda o vídeo dele" (Simulador, 21/10/2026: o Triciclo Foxscoo da
+     indicação e a IA perguntou o nome em vez de mandar o vídeo) */
+  const unicaApresentada = !ultimaCitada(p.modelos, p.textoCliente) && p.ultimasDaLoja ? p.modelos.filter((m) => !m.semEstoque && ultimaCitada([m], p.ultimasDaLoja!)) : [];
   const modelo =
     ultimaCitada(p.modelos, p.textoCliente) ??
+    (unicaApresentada.length === 1 ? unicaApresentada[0] : null) ??
     ultimaCitada(p.modelos, [p.interesse ?? "", p.historicoCliente].join("\n")) ??
     (p.modelos.length === 1 ? p.modelos[0] : null);
   return { modelo, pedido, itens: modelo ? itensDe(modelo, pedido) : [] };

@@ -418,7 +418,8 @@ const ROTULO_USO: Record<Uso, string> = { trabalho: "pro trabalho", entregas: "p
 /** O que o cliente contou, em poucas palavras ("pro trabalho, uns 20 km por dia, levando alguém na garupa"). */
 export function resumoDaNecessidade(n: Necessidade): string {
   const partes = [
-    n.uso ? ROTULO_USO[n.uso] : null,
+    /* "pra minha mãe que é idosa" não é presente (Simulador, 21/10/2026: saía "pra presentear alguém da família") */
+    n.idoso ? "pra uma pessoa de mais idade" : n.uso ? ROTULO_USO[n.uso] : null,
     n.kmDia ? `uns ${n.kmDia} km por dia` : null,
     n.garupa ? "levando alguém na garupa" : null,
     n.carga ? "com carga" : null,
@@ -524,7 +525,10 @@ export function limparParaQualificacao(blocos: string[], nomesDeModelos: string[
         .split(/(?<=\p{Extended_Pictographic}️?)\s+(?=[\p{Lu}*])/u)
         .map((p) => (p.match(RX_FRASE) ?? [p]).filter((f) => f.trim() && !proibida(f)).join("").trim())
         .filter(Boolean)
-        .join(" "),
+        .join(" ")
+        /* a lista saiu e sobrou a frase que a apresentava ("Por exemplo:" antes do "Qual é o seu nome?": Simulador, 21/10/2026) */
+        .replace(/(?:^|(?<=[.!?]\s+))[^.!?\n]*:\s*$/u, "")
+        .trim(),
     )
     .filter((b) => /\p{L}/u.test(b));
 }

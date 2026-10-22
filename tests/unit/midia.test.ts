@@ -119,3 +119,11 @@ test("dono (21/10/2026): cliente pede a foto da moto esgotada, a foto vai e a IA
   assert.equal(plano?.itens[0]?.url, "/m/mm3.jpg");
   assert.match(instrucaoDeMidia(plano), /a foto vai mesmo assim/);
 });
+
+test("Simulador (21/10/2026): 'manda o vídeo dele' depois de mostrar UMA moto manda o vídeo dela", () => {
+  const fox = { id: 1, nome: "Triciclo Foxscoo", fotos: [{ url: "/f.jpg", cor: null }], videoUrl: "/f.mp4" };
+  const n2 = { id: 2, nome: "N2", fotos: [{ url: "/n2.jpg", cor: null }], videoUrl: "/n2.mp4" };
+  const plano = planejarPedido({ modelos: [fox, n2], textoCliente: "manda o vídeo dele", historicoCliente: "Lead: queria uma moto pra minha mãe que é idosa", interesse: null, ultimasDaLoja: "Agente IA: *Triciclo Foxscoo* Triciclo elétrico. 💰 *R$ 10.000*\nGostou dela? Quer que eu te mande o vídeo? 😊" });
+  assert.equal(plano?.modelo?.nome, "Triciclo Foxscoo");
+  assert.equal(plano?.itens.find((i) => i.tipo === "video")?.url, "/f.mp4");
+});

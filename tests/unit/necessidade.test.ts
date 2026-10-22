@@ -304,3 +304,8 @@ test("Marcela (21/10/2026): pergunta o tipo, '4 km' não é orçamento, moto nã
   /* depois da bicicleta, "gostei mais da motinha": vira moto */
   assert.equal(lerDoCliente("Gostei mais da motinho mesmo", bici, "Qual delas te agradou mais? 😊").tipo, "moto");
 });
+
+test("Simulador (21/10/2026): a lista sai e não sobra o 'Por exemplo:' solto", () => {
+  assert.deepEqual(limparParaQualificacao(["Por exemplo:\n• N2 por R$ 5.890"], ["N2"]), []);
+  assert.deepEqual(limparParaQualificacao(["Que bom falar com você! Por exemplo:\n• N2"], ["N2"]), ["Que bom falar com você!"]);
+});
