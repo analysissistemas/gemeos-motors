@@ -1660,7 +1660,10 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
        pessoa, manda recado, a própria IA pediu a transferência, ou a loja já perguntou "como posso te ajudar?" e ele
        seguiu falando de outra coisa. Texto do sistema: passa o recado, sem vender e sem repetir a pergunta. */
     const jaPerguntouAjuda = /como posso te ajudar|em que posso te ajudar|o que você precisa/iu.test(ultimaDaLoja);
-    const falouAlgo = c.textoBuffer.replace(/[^\p{L}]+/gu, " ").trim().split(" ").length >= 4;
+    /* pergunta que a IA sabe responder não é recado (Mada, 21/10/2026: "Vcs são de onde meu amigo" virou recado para a
+       equipe; antes, "Manda foto dela pra mim" e "Quero mais informações sobre forma de pagto") */
+    const perguntaRespondivel = /\?|(?<![\p{L}])(?:de\s+onde|onde\s+(?:fica|ficam|[ée]|est[aã]o)|endere[çc]o|localiza[çc][ãa]o|cidade|pagamento|pagto|pix|cart[ãa]o|parcel\p{L}*|pre[çc]o|valor|quanto|foto|v[íi]deo|entreg\p{L}*|hor[áa]rio|abre|fecha|garantia|autonomia|modelos?|motos?|patinete|bicicleta|triciclo)(?![\p{L}])/iu.test(semAberturaDoSite(c.textoBuffer));
+    const falouAlgo = c.textoBuffer.replace(/[^\p{L}]+/gu, " ").trim().split(" ").length >= 4 && !perguntaRespondivel;
     const perguntaRobo = /rob[ôo]|(?<![\p{L}])bot(?![\p{L}])|[ée]\s+humano|pessoa de verdade|intelig[êe]ncia artificial/iu.test(c.textoBuffer);
     const pedePessoa = RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer));
     /* "compra" só por ter vindo do botão do site não segura quem pede o dono (Anderson, 15/10/2026: "Gostaria de falar
