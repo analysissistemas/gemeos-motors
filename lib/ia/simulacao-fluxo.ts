@@ -31,6 +31,7 @@ import {
   textoSimulacaoPronta,
   textoTabelaCompleta,
 } from "./fechamento.ts";
+import { semNomesDeModelo } from "./midia-tipos.ts";
 import { AMEX_ATE, entradaDoTexto, MAX_PARCELAS, simularCartao, tabelaCompleta, TAXAS_PADRAO, type TaxasMaquineta } from "./simulacao-cartao.ts";
 
 export type AcaoSimulacao =
@@ -64,8 +65,10 @@ export function decidirSimulacao(p: {
   const loja = semAcento(p.ultimaDaLoja);
   /* "em 21" sozinho vale como parcelas quando a loja perguntou "em quantas vezes" (agora) ou acabou de pedir a bandeira
      depois dessa pergunta (antes: o "em 21" veio numa mensagem e o "visa" na seguinte) */
-  const agora = simulacaoPedida(p.textoCliente, RX_LOJA_PERGUNTOU_VEZES.test(loja));
-  const antes = simulacaoPedida(p.recentesCliente, /quantas vezes|bandeira/.test(loja));
+  /* sem o nome da moto: o 11 de "Tank ag11" não é 11 parcelas (Nay, 21/10/2026: disse só "Visa" e foi a simulação em 11x) */
+  const semModelo = (t: string) => (p.modelo ? semNomesDeModelo(t, [{ nome: p.modelo }]) : t);
+  const agora = simulacaoPedida(semModelo(p.textoCliente), RX_LOJA_PERGUNTOU_VEZES.test(loja));
+  const antes = simulacaoPedida(semModelo(p.recentesCliente), /quantas vezes|bandeira/.test(loja));
   /* a entrada desta mensagem ou, se não tiver, a última que ele disse na conversa */
   const entrada =
     entradaDoTexto(p.textoCliente) ??

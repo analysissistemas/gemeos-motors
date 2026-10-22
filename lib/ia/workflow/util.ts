@@ -150,6 +150,8 @@ export function pagamentoDoTexto(texto: string) {
   return formas.find(([rx]) => rx.test(t))?.[1] ?? null;
 }
 
+export const PREFIXO_MODELO_NA_FOTO = "modelo escrito na foto:";
+
 export type MensagemMemoria ={ autor: string; tipo: string; conteudo: string | null; transcricao?: string | null; criadoEm: Date };
 
 /** Texto que representa a mensagem para a IA (mídia usa a transcrição/descrição).
@@ -159,7 +161,9 @@ export function textoDaMensagem(m: Pick<MensagemMemoria, "tipo" | "conteudo" | "
   if (m.tipo === "texto") return m.conteudo ?? "";
   const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento", video: "vídeo", localizacao: "localização", contato: "contato" }[m.tipo] ?? m.tipo;
   if (m.transcricao && m.tipo !== "imagem") return `[${rotulo}] ${m.transcricao}`;
-  return `[${rotulo}${m.conteudo ? `: ${m.conteudo}` : ""}]`;
+  /* foto: só o nome de modelo da loja que está ESCRITO nela (print do Instagram, Nay, 21/10/2026), nunca a descrição */
+  const escrito = m.tipo === "imagem" && m.transcricao?.startsWith(PREFIXO_MODELO_NA_FOTO) ? ` (${m.transcricao})` : "";
+  return `[${rotulo}${m.conteudo ? `: ${m.conteudo}` : ""}]${escrito}`;
 }
 
 /** Histórico no formato do n8n ("Lead: …", "Agente IA: …"), do mais antigo para o mais novo. */

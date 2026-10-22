@@ -48,9 +48,38 @@ const regexDoNome = (n: string) =>
   /^\d+$/.test(n)
     ? new RegExp(`(?<![\\p{L}\\p{N}.,$])(?<!r\\$\\s)${escapar(n)}(?![\\p{L}\\p{N}]|[.,]\\d|\\s*(?:km|reais|mil|x|vezes)(?![\\p{L}]))`, "gu")
     : new RegExp(`(?<![\\p{L}\\p{N}])${escapar(n)}(?![\\p{L}\\p{N}])`, "gu");
+/* nome digitado com uma letra a menos, a mais ou trocada ("Tnk 11", Nay, 21/10/2026: a IA não viu a TANK AG11 e leu o
+   11 como "até 11 mil"). Só a 1ª palavra do modelo com 4+ letras, palavra do cliente com 3+ letras e mesma inicial. */
+function umaLetraDeDiferenca(a: string, b: string) {
+  if (a === b || Math.abs(a.length - b.length) > 1) return a === b;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i) || a.slice(i) === b.slice(i + 1);
+}
+function corrigirNomes(t: string, modelos: { nome: string }[]) {
+  const primeiras = Array.from(new Set(modelos.map((m) => norm(m.nome.split(/\s+/)[0] ?? "")))).filter((p) => p.length >= 4 && /^\p{L}+$/u.test(p) && !GENERICOS.has(p));
+  if (!primeiras.length) return t;
+  return t.replace(/\p{L}{3,}/gu, (w) => primeiras.find((p) => p !== w && p[0] === w[0] && umaLetraDeDiferenca(p, w)) ?? w);
+}
+
+/** O texto sem o NÚMERO dos nomes de modelo ("tnk 11", "ag11", "t3"): não é orçamento, km nem parcelas. As palavras
+ *  ("bicicleta", "triciclo") ficam: dizem o tipo que o cliente quer. */
+export function semNomesDeModelo(texto: string, modelos: { nome: string }[]): string {
+  let t = corrigirNomes(norm(texto), modelos);
+  for (const m of modelos) {
+    /* "tank 11": o número que vem depois da palavra é o do nome (AG11) */
+    const num = m.nome.match(/\d+/)?.[0];
+    for (const n of nomesDe(m.nome)) {
+      if (/\d/.test(n)) t = t.replace(regexDoNome(n), " ");
+      else if (num) t = t.replace(new RegExp(`${regexDoNome(n).source}\\s*${num}(?![\\p{L}\\p{N}])`, "gu"), " ");
+    }
+  }
+  return t;
+}
+
 /** A moto citada por último no texto (posição da última menção). */
 export function ultimaCitada<T extends { nome: string }>(modelos: T[], texto: string): T | null {
-  const t = norm(texto);
+  const t = corrigirNomes(norm(texto), modelos);
   let melhor: { m: T; pos: number; tam: number } | null = null;
   for (const m of modelos)
     for (const n of nomesDe(m.nome)) {

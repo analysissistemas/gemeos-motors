@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
-import { analisarMidia, gerarObjeto, MODELO_IA } from "@/lib/ia/cliente";
+import { analisarMidia, gerarObjeto, lerTextoDaImagem, MODELO_IA } from "@/lib/ia/cliente";
 import { consultarEstoque } from "@/lib/ia/estoque";
 import { consultarCatalogo } from "@/lib/ia/catalogo";
 import { lerControle } from "@/lib/ia/controle";
@@ -50,7 +50,7 @@ import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotad
 import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -66,7 +66,7 @@ import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo } from "./motor";
-import { corNoTexto, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, PREFIXO_MODELO_NA_FOTO, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 import { ETAPAS_ABERTAS, TIPOS_VENDA_IA } from "@/lib/dominio";
@@ -1452,11 +1452,13 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
        curadoria do estoque personalizada"; "ela será o diferencial da IA"). Quem quer comprar e ainda não escolheu a moto
        responde, uma por vez, o que falta (uso, km por dia, garupa/carga, faixa de valor); com o suficiente, o sistema
        indica no máximo 2 motos do estoque com o porquê. Nada de lista do estoque antes disso. */
-    const necessidade = lerDoCliente(semAberturaDoSite(c.textoBuffer), lerNecessidade(c.memoria.fatos.necessidade), ultimaDaLoja);
+    /* sem o nome da moto: "Tnk 11" é a TANK AG11, não "até 11 mil" (Nay, 21/10/2026) */
+    const textoQualif = semNomesDeModelo(semAberturaDoSite(c.textoBuffer), nomesCat);
+    const necessidade = lerDoCliente(textoQualif, lerNecessidade(c.memoria.fatos.necessidade), ultimaDaLoja);
     /* orçamento novo depois das opções ("13 mil" depois de "Qual delas te agradou mais?"): indica de novo, já na faixa dele
        (José, 21/10/2026: a IA perguntou "Posso te mostrar as opções...?" em vez de mostrar) */
     const necessidadeAntes = lerNecessidade(c.memoria.fatos.necessidade);
-    const faixaNova = !!faixaDoTexto(semAberturaDoSite(c.textoBuffer), perguntaPendente(ultimaDaLoja) === "faixa") && (necessidade.faixaAte !== necessidadeAntes.faixaAte || necessidade.faixaDe !== necessidadeAntes.faixaDe);
+    const faixaNova = !!faixaDoTexto(textoQualif, perguntaPendente(ultimaDaLoja) === "faixa") && (necessidade.faixaAte !== necessidadeAntes.faixaAte || necessidade.faixaDe !== necessidadeAntes.faixaDe);
     /* tipo novo depois das opções ("gostei mais da motinha" depois da bicicleta e do patinete: Marcela, 21/10/2026): indica de
        novo, só do tipo que ele quer */
     const ultimasDaLojaQ = ultimasFalasDaLoja(c.memoria.historico, 3);
@@ -2276,7 +2278,22 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
      Transcrição desligada no nó ou falhou: o cliente recebe o catálogo, como antes */
   /* foto não é descrita (dono, 10/10/2026: com a descrição a IA adivinhava a moto, muitas vezes de modelo que a loja nem
      trabalha): a IA vê só "[imagem]" e a legenda, e o cliente recebe o catálogo (lib/ia/foto-cliente.ts) */
-  if (tipo === "imagem") return { ctx: { textoEntrada: textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: null }) }, saida: { texto: "foto não descrita (a IA não tenta reconhecer a moto)" } };
+  /* exceção: o NOME de um modelo da loja escrito na foto (print do Instagram com "TANK | PRETA": Nay, 21/10/2026, a IA
+     mandou o catálogo duas vezes). Só o texto escrito; a moto não é reconhecida pelo formato */
+  if (tipo === "imagem") {
+    const ja = transcricaoDe(m);
+    let escrito = ja?.startsWith(PREFIXO_MODELO_NA_FOTO) ? ja : null;
+    if (!ja && m.midiaUrl) {
+      const arq = await lerBytes(m.midiaUrl);
+      const texto = arq ? await lerTextoDaImagem(arq.bytes, m.midiaMime ?? arq.mime).catch(() => "") : "";
+      const modelo = texto ? ultimaCitada((await nomesDoCatalogo()).map((nome) => ({ nome })), texto) : null;
+      if (modelo) {
+        escrito = `${PREFIXO_MODELO_NA_FOTO} ${modelo.nome}`;
+        await db.update(schema.mensagens).set({ metadados: sql`coalesce(${schema.mensagens.metadados}, '{}'::jsonb) || ${JSON.stringify({ transcricao: escrito })}::jsonb`, alteradaEm: new Date() }).where(eq(schema.mensagens.id, m.id));
+      }
+    }
+    return { ctx: { textoEntrada: textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: escrito }) }, saida: { texto: escrito ?? "foto sem nome de modelo escrito (a IA não tenta reconhecer a moto)" } };
+  }
   const ja = transcricaoDe(m);
   if (ja) return { saida: { texto: ja, reaproveitada: true } };
   if (!ligado) return { saida: { texto: c.textoEntrada, observacao: "análise desligada nos ajustes do nó" } };

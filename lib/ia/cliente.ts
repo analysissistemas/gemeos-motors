@@ -98,6 +98,26 @@ const PEDIDOS_MIDIA = {
   documento: "Resuma os dados deste documento em português do Brasil, em até 6 linhas. Não invente o que não está escrito.",
 } as const;
 
+/** Só o texto ESCRITO na foto (print do Instagram com "TANK | PRETA"): nada de descrever ou reconhecer a moto pelo
+ *  formato (dono, 10/10/2026). "" quando não tem texto. */
+export async function lerTextoDaImagem(bytes: Buffer, mime: string): Promise<string> {
+  await exigirIaLigada();
+  if (!COM_OPENAI) return "";
+  try {
+    const r = await generateText({
+      model: modelo(),
+      messages: [{ role: "user", content: [{ type: "text", text: "Copie apenas o texto que está ESCRITO nesta imagem (letreiro, legenda, nome, preço), do jeito que aparece. Não descreva a imagem. Se não houver texto escrito, responda só: SEM TEXTO" }, { type: "image", image: bytes, mediaType: mime }] }],
+      maxOutputTokens: 200,
+      timeout: 30_000,
+      maxRetries: 1,
+    });
+    const t = r.text.trim();
+    return /^sem texto\.?$/i.test(t) ? "" : t;
+  } catch (e) {
+    throw traduzirErro(e);
+  }
+}
+
 /** Áudio vira texto; imagem e PDF viram descrição. Só com a chave da OpenAI no ambiente. */
 export async function analisarMidia(tipo: "audio" | "imagem" | "documento", bytes: Buffer, mime: string): Promise<string> {
   await exigirIaLigada();

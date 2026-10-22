@@ -59,7 +59,8 @@ export const temFotoNoBuffer = (textoBuffer: string) => RX_FOTO_NO_BUFFER.test(t
 function escritoPeloCliente(textoBuffer: string) {
   return textoBuffer
     .split(/\n\s*\n/)
-    .map((b) => b.replace(/^\[imagem:\s*([\s\S]*)\]$/u, "$1").replace(/^\[(?:imagem|áudio|vídeo|documento)[^\]]*\]\s*/u, ""))
+    /* "[imagem: legenda] (modelo escrito na foto: X)": a legenda e o modelo lido na foto ficam */
+    .map((b) => b.replace(/^\[imagem:\s*([\s\S]*?)\]((?:\s*\(modelo escrito na foto:[^)]*\))?)$/u, "$1$2").replace(/^\[(?:imagem|áudio|vídeo|documento)[^\]]*\]\s*/u, ""))
     .join("\n")
     .trim();
 }
