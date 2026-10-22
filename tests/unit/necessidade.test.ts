@@ -88,8 +88,11 @@ test("não confunde preço, parcela e garantia com a necessidade", () => {
 });
 
 test("próximo passo: uma pergunta por vez, só o que falta, e indica quando sabe o suficiente", () => {
-  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 1 };
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
+  /* dono (21/10/2026): sem saber o tipo, a 1ª pergunta é o tipo (moto, bicicleta ou patinete); depois, a faixa */
+  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, { ...zero, tipo: 0 }, p), { acao: "perguntar", chave: "tipo" });
+  assert.deepEqual(proximoPasso(lerDoCliente("quero uma moto"), { ...zero, tipo: 0 }, p), { acao: "perguntar", chave: "faixa" });
   /* Milton (20/10/2026): a única pergunta é a faixa de valor */
   assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, p), { acao: "perguntar", chave: "faixa" });
   const leandro = lerDoCliente("quero usar na cidade, 20km");
@@ -117,7 +120,7 @@ test("perguntas: a faixa sai dos preços do estoque", () => {
   assert.equal(perguntaPendente(textoPergunta("km", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0.9 })), "km");
   assert.equal(perguntaPendente(textoPergunta("garupa", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 })), "garupa");
   assert.equal(perguntaPendente(textoPergunta("garupa", { n: lerDoCliente("entregas"), precos: PRECOS })), "garupa");
-  assert.deepEqual(perguntasFeitas(["Me conta: você vai usar a moto mais pra trabalhar, pro dia a dia na cidade ou pra passear? 😊", "E mais ou menos quantos km você roda por dia?"]), { uso: 1, km: 1, garupa: 0, faixa: 0 });
+  assert.deepEqual(perguntasFeitas(["Me conta: você vai usar a moto mais pra trabalhar, pro dia a dia na cidade ou pra passear? 😊", "E mais ou menos quantos km você roda por dia?"]), { uso: 1, km: 1, garupa: 0, faixa: 0, tipo: 0 });
 });
 
 test("indicação: as 2 que combinam, com o porquê tirado da ficha", () => {
@@ -163,7 +166,7 @@ test("texto da indicação: o que ele contou, as motos e uma pergunta", () => {
 });
 
 test("Edimilson (19/10/2026): disse o uso e 'Até 7 mil reais': indica na hora, com foto, descrição e preço de cada", () => {
-  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 1 };
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
   const faixa = "Pra eu te indicar dentro do seu bolso: você pensa em investir até uns 7 mil, entre 7 e 11 mil, ou acima de 11 mil?";
   const n = lerDoCliente("Até 7 mil reais", lerDoCliente("Passeio, e ir pegar criança na escola."), faixa);
@@ -204,7 +207,7 @@ test("Simulador (19/10/2026): 'me conta pra que você vai usar' sai do comentár
 });
 
 test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Retrô", () => {
-  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 1 };
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
   /* Dinho: disse o uso; a próxima é a faixa, nunca km nem garupa */
   assert.deepEqual(proximoPasso(lerDoCliente("pra passear"), zero, p), { acao: "perguntar", chave: "faixa" });
@@ -233,7 +236,7 @@ test("Milton (20/10/2026): poucas perguntas, faixas da loja e 'vespa' = T3/T5 Re
 });
 
 test("Milton (20/10/2026): só a faixa; 'média de 8 mil' vale; moto de trilha não é indicada", () => {
-  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 1 };
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
   /* contou o uso sozinho: ainda é a faixa, nunca km nem garupa */
   assert.deepEqual(proximoPasso(lerDoCliente("é pra trabalhar, rodo uns 10 km"), zero, p), { acao: "perguntar", chave: "faixa" });
@@ -246,10 +249,10 @@ test("Milton (20/10/2026): só a faixa; 'média de 8 mil' vale; moto de trilha n
   assert.ok(c.cartoes.find((k) => k.nome === "AG08")!.legenda.includes("um pouquinho acima do valor que você falou"));
 });
 
-test("Simulador (20/10/2026): 'moto elétrica' não tira o patinete do até 6; ficha 'Até 30 km' sai minúscula", () => {
+test("dono (21/10/2026): quem pediu moto não recebe patinete nem bicicleta; ficha 'Até 30 km' sai minúscula", () => {
   const n = lerDoCliente("abaixo de 6", lerDoCliente("quanto custa a moto eletrica de voces?"), "Pra eu te mostrar as opções certas: você pensa em investir até 6 mil, até 8 mil, até 11 mil ou até 13 mil?");
   assert.equal(n.tipo, "moto");
-  assert.ok(indicarMotos(n, ESTOQUE, 3).some((x) => x.moto.tipo === "patinete"));
+  assert.ok(!indicarMotos(n, ESTOQUE, 3).some((x) => x.moto.tipo === "patinete"));
   const bike: MotoParaIndicar = { nome: "Bicicleta", tipo: "moto_eletrica", preco: 4000, autonomia: "Até 30 km", carga: null, velocidade: "25 km/h", descricao: "Dobrável." };
   const c = cartoesIndicacao({ nome: null, n: NECESSIDADE_VAZIA, indicadas: indicarMotos(NECESSIDADE_VAZIA, [bike], 3) })!;
   assert.ok(c.cartoes[0].legenda.includes("Autonomia de até 30 km, até 25 km/h."), c.cartoes[0].legenda);
@@ -279,4 +282,25 @@ test("José (21/10/2026): a mensagem só com o valor é o orçamento", () => {
   /* número solto sem "mil" fora da pergunta da faixa não é orçamento ("13" pode ser hora, km...) */
   assert.equal(faixaDoTexto("13"), null);
   assert.equal(faixaDoTexto("rodo 20 km"), null);
+});
+
+test("Marcela (21/10/2026): pergunta o tipo, '4 km' não é orçamento, moto não manda bicicleta, 'motinha' depois troca o tipo", () => {
+  const bike: MotoParaIndicar = { nome: "Bicicleta Elétrica Dobrável Urbana 400W", tipo: "moto_eletrica", preco: 4000, autonomia: "Até 30 km", carga: null, velocidade: null, descricao: "Bicicleta elétrica urbana." };
+  const estoque = [...ESTOQUE, bike];
+  const tipoQ = textoPergunta("tipo", { n: NECESSIDADE_VAZIA, precos: PRECOS });
+  assert.equal(perguntaPendente(tipoQ), "tipo");
+  const faixaQ = textoPergunta("faixa", { n: NECESSIDADE_VAZIA, precos: PRECOS });
+  /* respondeu "4 km" à pergunta da faixa: não vira "até 4 mil" */
+  assert.equal(faixaDoTexto("4 km", true), null);
+  assert.equal(lerDoCliente("4 km", NECESSIDADE_VAZIA, faixaQ).faixaAte, null);
+  /* escolheu moto: nada de bicicleta nem patinete */
+  const moto = lerDoCliente("moto elétrica", NECESSIDADE_VAZIA, tipoQ);
+  assert.equal(moto.tipo, "moto");
+  const ate6 = indicarMotos(lerDoCliente("até 6", moto, faixaQ), estoque, 3).map((x) => x.moto.nome);
+  assert.ok(!ate6.some((n) => /bicicleta|patinete/i.test(n)), ate6.join());
+  /* escolheu bicicleta: só bicicleta */
+  const bici = lerDoCliente("bicicleta", NECESSIDADE_VAZIA, tipoQ);
+  assert.deepEqual(indicarMotos({ ...bici, faixaAte: 6000 }, estoque, 3).map((x) => x.moto.nome), [bike.nome]);
+  /* depois da bicicleta, "gostei mais da motinha": vira moto */
+  assert.equal(lerDoCliente("Gostei mais da motinho mesmo", bici, "Qual delas te agradou mais? 😊").tipo, "moto");
 });

@@ -18,13 +18,13 @@ export type Necessidade = {
   faixaAte: number | null;
   faixaDe: number | null;
   maisBarata: boolean;
-  tipo: "moto" | "triciclo" | "patinete" | null;
+  tipo: "moto" | "triciclo" | "patinete" | "bicicleta" | null;
   /** "vespa", "retrô": o cliente já escolheu o estilo (T3 e T5 Retrô) */
   estilo?: "retro" | null;
   /** "moto pra idoso", "pro meu avô": oferece o triciclo (três rodas) primeiro */
   idoso?: boolean;
 };
-export type ChavePergunta = "uso" | "km" | "garupa" | "faixa";
+export type ChavePergunta = "uso" | "km" | "garupa" | "faixa" | "tipo";
 
 export const NECESSIDADE_VAZIA: Necessidade = { uso: null, kmDia: null, garupa: null, carga: null, pesoKg: null, faixaAte: null, faixaDe: null, maisBarata: false, tipo: null };
 
@@ -46,11 +46,12 @@ const RX_PERGUNTOU: Record<ChavePergunta, RegExp> = {
   km: /quantos (?:km|quilometros)|roda mais ou menos/,
   garupa: /garupa|levar alguem|leva alguem|levar carga|usar bau/,
   faixa: /faixa de valor|pensa em investir|quer investir|pretende investir|dentro do seu bolso/,
+  tipo: /moto eletrica, bicicleta|bicicleta eletrica ou patinete/,
 };
 export function perguntaPendente(ultimaDaLoja: string): ChavePergunta | null {
   const t = norm(ultimaDaLoja);
   const q = (t.match(/[^.!?\n]*\?/g) ?? []).join(" ");
-  for (const k of ["faixa", "garupa", "km", "uso"] as ChavePergunta[]) if (RX_PERGUNTOU[k].test(q)) return k;
+  for (const k of ["tipo", "faixa", "garupa", "km", "uso"] as ChavePergunta[]) if (RX_PERGUNTOU[k].test(q)) return k;
   return null;
 }
 
@@ -70,6 +71,10 @@ const RX_PESO = /(\d{2,3})\s*(?:kg|quilos?|kilos?)\b/;
 const RX_PESADO = /\b(?:obes\w*|acima do peso|sou (?:bem |muito )?(?:pesad\w*|gord\w*|grande|fort\w*))\b/;
 const RX_MAIS_BARATA = /\b(?:mais (?:barat\w*|em conta|economic\w*)|baratinh\w*|menor (?:valor|preco)|mais simples)\b/;
 const RX_PATINETE = /\bpatinete/;
+const RX_BICICLETA = /\b(?:bicicleta|bicicletinha|bike|bikes)\b/;
+const RX_MOTO = /\bmot(?:o|os|inha|inhas|inho|inhos|oca|ocinha|oquinha|oneta)\b|\bscooter|\bvespa/;
+/** Bicicleta elétrica: tipo moto_eletrica no catálogo, mas não é moto para quem pediu moto (Marcela, 21/10/2026) */
+const ehBicicleta = (m: { nome: string }) => /bicicleta|\bbike\b/i.test(m.nome);
 /* Milton (20/10/2026): "T3 Retrô e T5 Retrô são conhecidas como vespa" */
 const RX_RETRO = /\b(?:vespa\w*|retro|classica|estilo antigo)\b/;
 const RX_TRICICLO = /\b(?:triciclo|tres rodas|3 rodas)\b/;
@@ -87,8 +92,9 @@ function valor(txt: string, soNumeroEhMil = false): number | null {
 
 /** Faixa de valor que o cliente disse ("até 7 mil", "abaixo de 10k", "entre 7 e 10", "acima de 10 mil"). */
 export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: number | null; ate: number | null } | null {
-  const t = norm(texto).replace(/r\$\s*/g, "");
-  const entre = t.match(/\bentre\s+(\d[\d.,]*)\s*(?:mil|k(?![a-z]))?\s+e\s+(\d[\d.,]*)\s*(mil|k(?![a-z]))?/);
+  /* "4 km" não é orçamento (Marcela, 21/10/2026: respondeu "4 km" à pergunta da faixa e virou "até uns 4 mil") */
+  const t = norm(texto).replace(/r\$\s*/g, "").replace(/\d[\d.,]*\s*(?:km|kms|quilometros?)\b/g, " ");
+  const entre =t.match(/\bentre\s+(\d[\d.,]*)\s*(?:mil|k(?![a-z]))?\s+e\s+(\d[\d.,]*)\s*(mil|k(?![a-z]))?/);
   if (entre) {
     const ate = valor(`${entre[2]} ${entre[3] ?? ""}`, true);
     const de = valor(`${entre[1]} ${entre[3] ?? ""}`, true);
@@ -178,9 +184,12 @@ export function lerDoCliente(texto: string, anterior: Necessidade = NECESSIDADE_
   if (RX_MAIS_BARATA.test(t)) n.maisBarata = true;
   if (pend === "faixa" && /\b(?:tanto faz|nao sei|qualquer|depende)\b/.test(t)) n.maisBarata = n.maisBarata || false;
   if (RX_RETRO.test(t)) n.estilo = "retro";
+  /* resposta à pergunta do tipo troca o que já se sabia ("gostei mais da motinha" depois da bicicleta: Marcela, 21/10/2026) */
+  const escolheuTipo = pend === "tipo" || !n.tipo;
   if (RX_PATINETE.test(t)) n.tipo = "patinete";
   else if (RX_TRICICLO.test(t)) n.tipo = "triciclo";
-  else if (/\bmot(?:o|os|inha|oca|ocinha)\b/.test(t) && !n.tipo) n.tipo = "moto";
+  else if (RX_BICICLETA.test(t) && escolheuTipo) n.tipo = "bicicleta";
+  else if (RX_MOTO.test(t) && (escolheuTipo || n.tipo === "bicicleta")) n.tipo = "moto";
   if (RX_IDOSO.test(t)) n.idoso = true;
   return n;
 }
@@ -192,11 +201,12 @@ const sabe: Record<ChavePergunta, (n: Necessidade) => boolean> = {
   km: (n) => !!n.kmDia,
   garupa: (n) => n.garupa !== null || n.carga !== null,
   faixa: sabeFaixa,
+  tipo: (n) => !!n.tipo || n.estilo === "retro" || !!n.idoso,
 };
 
 /** Quantas vezes a loja já fez cada pergunta (para não insistir: 2 vezes sem resposta, pula). */
 export function perguntasFeitas(falasDaLoja: string[]): Record<ChavePergunta, number> {
-  const r: Record<ChavePergunta, number> = { uso: 0, km: 0, garupa: 0, faixa: 0 };
+  const r: Record<ChavePergunta, number> = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 0 };
   for (const f of falasDaLoja) {
     const k = perguntaPendente(f);
     if (k) r[k]++;
@@ -223,7 +233,9 @@ export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, numbe
      vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */
   /* Milton (20/10/2026, de novo): "pergunta a média de orçamento... manda orçamento, ele manda o que tem". Nem o uso: só a
      faixa; o uso que o cliente contar sozinho ainda pesa na indicação */
-  const falta = (["faixa"] as ChavePergunta[]).find((k) => !sabe[k](n) && feitas[k] < 2);
+  /* dono (21/10/2026, Marcela): "a IA não perguntou se o cliente teria interesse em moto elétrica, bicicleta elétrica,
+     patinete": sem saber o tipo, pergunta primeiro o tipo e depois a faixa */
+  const falta = (["tipo", "faixa"] as ChavePergunta[]).find((k) => !sabe[k](n) && (feitas[k] ?? 0) < (k === "tipo" ? 1 : 2));
   return falta ? { acao: "perguntar", chave: falta } : { acao: "indicar" };
 }
 
@@ -245,7 +257,7 @@ export function faixasDoEstoque(precos: number[]): [number, number] | null {
 export function textoPergunta(chave: ChavePergunta, p: { n: Necessidade; precos: number[]; sorte?: number }): string {
   const s = p.sorte ?? Math.random();
   const escolher = (v: string[]) => v[Math.min(v.length - 1, Math.floor(s * v.length))];
-  const coisa = p.n.tipo === "patinete" ? "o patinete" : "a moto";
+  const coisa = p.n.tipo === "patinete" ? "o patinete" : p.n.tipo === "bicicleta" ? "a bicicleta" : "a moto";
   switch (chave) {
     case "uso":
       return escolher([`Me conta: você vai usar ${coisa} mais pra trabalhar, pro dia a dia na cidade ou pra passear? 😊`, `Pra eu te indicar ${coisa} certa: vai ser mais pra trabalho, pro dia a dia na cidade ou pra passeio? 😊`]);
@@ -257,6 +269,8 @@ export function textoPergunta(chave: ChavePergunta, p: { n: Necessidade; precos:
       return p.n.uso === "entregas"
         ? "Você vai usar baú ou levar carga nas entregas?"
         : escolher(["Você costuma levar alguém na garupa ou alguma carga, tipo compras?", "E vai levar alguém na garupa ou carga com você?"]);
+    case "tipo":
+      return "Pra eu te mostrar as opções certas: você procura moto elétrica, bicicleta elétrica ou patinete elétrico? 😊";
     case "faixa": {
       const [a, b, c, d] = FAIXAS_DA_LOJA.map(mil);
       return `Pra eu te mostrar as opções certas: você pensa em investir até ${a}, até ${b}, até ${c} ou até ${d}?`;
@@ -283,6 +297,9 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
   else {
     lista = lista.filter((m) => m.tipo === "moto_eletrica");
     lista = n.tipo === "triciclo" ? lista.filter((m) => RX_TRICICLO_MOTO.test(m.descricao ?? "")) : lista;
+    /* pediu moto: nada de bicicleta; pediu bicicleta: só bicicleta (Marcela, 21/10/2026) */
+    if (n.tipo === "moto") lista = lista.filter((m) => !ehBicicleta(m));
+    if (n.tipo === "bicicleta") lista = lista.filter(ehBicicleta);
     /* moto de trilha (MT4: "circuitos fechados e propriedades privadas") não é indicada para o dia a dia (20/10/2026) */
     lista = lista.filter((m) => !RX_OFF_ROAD.test(`${m.nome} ${m.descricao ?? ""}`));
     /* moto pra idoso: só os triciclos, se tiver no estoque; sem triciclo, segue a indicação de sempre */
@@ -381,7 +398,7 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     /* o patinete que cabe entra como opção, menos para quem roda muito, trabalha com ela ou leva garupa; "moto elétrica"
        dito de passagem não tira o patinete */
     const patinete = motos.filter((m) => m.tipo === "patinete" && m.preco && m.preco <= ate).sort((a, b) => a.preco! - b.preco!)[0];
-    const servePatinete = !!patinete && ate < 8000 && n.tipo !== "triciclo" && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
+    const servePatinete = !!patinete && ate < 8000 && !n.tipo && !n.garupa && !n.carga && n.uso !== "trabalho" && n.uso !== "entregas" && (!n.kmDia || n.kmDia <= 15);
     if (patinete && servePatinete && escolhidas.length < max && !escolhidas.some((x) => x.moto.nome === patinete.nome)) escolhidas.push({ moto: patinete, motivos: ["cabe na faixa que você falou"], pontos: 0 });
     if (acima && escolhidas.length < max) escolhidas.push({ ...acima, motivos: [...acima.motivos.filter((m) => m !== "a mais em conta"), "fica um pouquinho acima do valor que você falou"] });
     for (const x of abaixo) if (escolhidas.length < max) escolhidas.push(x);

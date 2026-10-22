@@ -1457,9 +1457,17 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
        (José, 21/10/2026: a IA perguntou "Posso te mostrar as opções...?" em vez de mostrar) */
     const necessidadeAntes = lerNecessidade(c.memoria.fatos.necessidade);
     const faixaNova = !!faixaDoTexto(semAberturaDoSite(c.textoBuffer), perguntaPendente(ultimaDaLoja) === "faixa") && (necessidade.faixaAte !== necessidadeAntes.faixaAte || necessidade.faixaDe !== necessidadeAntes.faixaDe);
+    /* tipo novo depois das opções ("gostei mais da motinha" depois da bicicleta e do patinete: Marcela, 21/10/2026): indica de
+       novo, só do tipo que ele quer */
+    const ultimasDaLojaQ = ultimasFalasDaLoja(c.memoria.historico, 3);
+    const tipoNovo =
+      !!necessidade.tipo &&
+      necessidade.tipo !== necessidadeAntes.tipo &&
+      jaIndicou(c.memoria.historico ?? "") &&
+      (necessidade.tipo === "moto" ? /bicicleta|patinete/i.test(ultimasDaLojaQ) : necessidade.tipo === "bicicleta" || necessidade.tipo === "patinete");
     const emDescoberta =
       intencao === "compra" &&
-      (faixaNova || (!modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento))) &&
+      (faixaNova || tipoNovo || (!modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento))) &&
       !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
     const motosQualif = emDescoberta ? await motosParaIndicar(c) : [];
     const passo = emDescoberta
@@ -1478,7 +1486,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       /* "moto a partir de" é preço de moto: a bicicleta elétrica (cadastrada como moto elétrica) não conta (Simulador, 20/10/2026) */
       const deMoto = doTipo.filter((x) => !/bicicleta|\bbike/i.test(x.nome)).map((x) => x.preco!);
       const aPartir = deMoto.length ? deMoto : precos;
-      const abertura = quis && aPartir.length ? `Temos ${necessidade.tipo === "patinete" ? "patinete elétrico" : "moto elétrica"} a partir de *${reais(Math.min(...aPartir))}*, com pronta entrega 😊` : null;
+      const abertura = quis && aPartir.length && necessidade.tipo !== "bicicleta" ? `Temos ${necessidade.tipo === "patinete" ? "patinete elétrico" : "moto elétrica"} a partir de *${reais(Math.min(...aPartir))}*, com pronta entrega 😊` : null;
       qualificacao = { pergunta: textoPergunta(passo.chave, { n: necessidade, precos: faixasDoEstoque(precos) ? precos : motosQualif.map((x) => x.preco ?? 0) }), abertura };
     }
     const g = criarGerador({
