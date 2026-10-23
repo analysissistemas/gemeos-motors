@@ -28,3 +28,10 @@ test("moto elétrica continua com os benefícios", () => {
   assert.ok(parabens("AG08").some((p) => /gasolina/.test(p)));
   assert.ok(/sem IPVA/.test(instrucaoDeFechamento("decidido", "AG08")));
 });
+
+test("Simulador (22/10/2026): 'Quais formas de pagamento?' não perde a frase do à vista por ter ficha junto", async () => {
+  const { soOQuePerguntou } = await import("../../lib/ia/fechamento.ts");
+  const r = soOQuePerguntou(["A *TANK AG11*, com motor de 1000W, pode ser paga à vista no Pix, dinheiro ou transferência, sem taxa. Também é possível parcelar no cartão em até 21 vezes."], "Quais formas de pagamento?");
+  assert.match(r.join(" "), /à vista no Pix/);
+  assert.equal(soOQuePerguntou(["A bateria dura muito. Também é possível parcelar em até 21 vezes."], "como paga?")[0], "É possível parcelar em até 21 vezes.");
+});

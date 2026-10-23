@@ -562,8 +562,12 @@ export function soOQuePerguntou(resposta: string[], textoCliente: string): strin
   const r = resposta
     /* o nome do modelo não é ficha: "*Patinete 350W*" tem "350W" no nome (teste de 14/10/2026: "No momento não temos o
        *Patinete 350W*" era cortada e sobrava só "Posso anotar seu interesse?") */
-    .map((b) => (/\n\s*[•\-]/.test(b) ? b : (b.match(RX_FRASES) ?? [b]).filter((f) => /R\$/.test(f) || !RX_FRASE_FICHA.test(f.replace(/\*[^*\n]+\*/g, "").replace(/patinetes?\s+\d+\s*w(?![\p{L}])/giu, ""))).join("").trim()))
+    /* frase de pagamento fica mesmo com ficha junto (Simulador, 22/10/2026: "Quais formas de pagamento?" perdeu o à vista e
+       sobrou "Também é possível parcelar...") */
+    .map((b) => (/\n\s*[•\-]/.test(b) ? b : (b.match(RX_FRASES) ?? [b]).filter((f) => /R\$|(?<![\p{L}])(?:pix|dinheiro|[àa] vista|transfer[êe]ncia|d[ée]bito|cart[ãa]o|parcel\p{L}*)(?![\p{L}])/iu.test(f) || !RX_FRASE_FICHA.test(f.replace(/\*[^*\n]+\*/g, "").replace(/patinetes?\s+\d+\s*w(?![\p{L}])/giu, ""))).join("").trim()))
     .filter((b) => /\p{L}/u.test(b));
+  /* a frase de antes saiu: "Também é possível..." no começo fica sem o "também" */
+  if (r.length) r[0] = r[0].replace(/^(?:tamb[ée]m|al[ée]m disso),?\s+(\p{L})/iu, (_m, l: string) => l.toUpperCase());
   /* sobrou pouco texto: vai junto, numa mensagem */
   const junto = r.join(" ");
   return r.length > 1 && junto.length <= 400 && !r.some((b) => /\n/.test(b)) ? [junto] : r;
