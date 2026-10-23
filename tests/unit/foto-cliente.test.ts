@@ -112,3 +112,17 @@ test("foto/áudio: depois do catálogo vai a lista do que está disponível, mon
   /* ficha da T1 escrita "Até 70 km": no meio da frase, minúsculo (teste de 13/10/2026) */
   assert.match(listaDisponiveis([{ nome: "T1", tipo: "moto_eletrica", cores: ["Branca"], preco: 12000, autonomia: "Até 70 km", destaque: null }], "[imagem]")!, /autonomia de até 70 km/u);
 });
+
+test("Nay (22/10/2026): print com 'a preta, uma grandona' mostra as maiores pretas do estoque", async () => {
+  const { candidatosPorPista } = await import("../../lib/ia/foto-cliente.ts");
+  const motos = [
+    { nome: "TANK AG11", tipo: "moto_eletrica", preco: 12900, cores: ["Preta", "Branca"] },
+    { nome: "M6", tipo: "moto_eletrica", preco: 11900, cores: ["Cinza"] },
+    { nome: "AG08", tipo: "moto_eletrica", preco: 8999.9, cores: ["Preta", "Branca"] },
+    { nome: "N2", tipo: "moto_eletrica", preco: 5890, cores: ["Preta"] },
+    { nome: "Triciclo Foxscoo", tipo: "moto_eletrica", preco: 10000, cores: ["Preta"] },
+    { nome: "Patinete 530W", tipo: "patinete", preco: 3500, cores: ["Preto"] },
+  ];
+  assert.deepEqual(candidatosPorPista(motos, "Ainda tem a preta? Uma grandona, nesse estilo")?.map((m) => m.nome), ["TANK AG11", "AG08", "N2"]);
+  assert.equal(candidatosPorPista(motos, "tem essa?"), null);
+});

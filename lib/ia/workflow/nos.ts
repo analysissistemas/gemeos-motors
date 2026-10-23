@@ -52,7 +52,7 @@ import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDiss
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { comMotoCitada, instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
+import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { corrigirDigitacao, perguntaDeIdade, soDespedida, textoDespedida, tirarFalaDeIdade, TEXTO_IDADE } from "@/lib/ia/limites";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -1638,6 +1638,39 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       }
     }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
+    /* foto sem o nome: a moto da conversa (a que o cliente ou o vendedor já citou) ou, com pista no texto ("a preta, uma
+       grandona"), as do estoque que batem, com foto: "É uma dessas?" (Nay, 22/10/2026) */
+    if (r.ctx.texto && (paraMidia === "catalogo_foto" || paraMidia === "foto_nao_confirma")) {
+      const comMidia = await motosComMidia(c);
+      const precos = await motosParaIndicar(c);
+      const daConversa = modeloDaConversa ? comMidia.find((m) => m.nome === modeloDaConversa) : null;
+      let escolhidas: string[] = daConversa ? [daConversa.nome] : [];
+      if (!escolhidas.length) {
+        const v = schema.veiculos;
+        const cores = await db.select({ modeloId: v.modeloId, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), c.conversa?.demo ? undefined : eq(v.teste, false)));
+        const ids = await db.select({ id: schema.modelos.id, nome: schema.modelos.nome }).from(schema.modelos);
+        const motos = precos.map((p) => {
+          const id = ids.find((x) => x.nome === p.nome)?.id;
+          return { nome: p.nome, tipo: p.tipo, preco: p.preco, cores: cores.filter((x) => x.modeloId === id && x.cor).map((x) => x.cor!) };
+        });
+        escolhidas = (candidatosPorPista(motos, [escritoPeloCliente(c.textoBuffer), leadAntes.replace(/^Lead:\s*/gm, "")].join("\n")) ?? []).map((m) => m.nome);
+      }
+      const jaEnviadas = await midiasJaEnviadas(c.conversaId);
+      const itens: ItemMidia[] = escolhidas.flatMap((nome) => {
+        const m = comMidia.find((x) => x.nome === nome);
+        const foto = m?.fotos.find((f) => !jaEnviadas.includes(f.url)) ?? m?.fotos[0];
+        const preco = precos.find((x) => x.nome === nome)?.preco;
+        return foto ? [{ tipo: "foto" as const, url: foto.url, legenda: `*${nome}*${foto.cor ? ` na cor ${foto.cor}` : ""}${preco ? `\n💰 *${reais(preco)}*` : ""}` }] : [];
+      });
+      if (itens.length) {
+        const uma = itens.length === 1;
+        const texto = uma ? `Recebi a sua foto! 😊 É ${artigo(escolhidas[0])} *${escolhidas[0]}*? Olha ${artigo(escolhidas[0]) === "o" ? "ele" : "ela"} aqui:` : "Recebi a sua foto! 😊 Pela foto eu não consigo ter certeza, mas pelo que você falou pode ser uma dessas:";
+        const pergunta = uma ? `É ${artigo(escolhidas[0]) === "o" ? "esse" : "essa"}? 😊` : "Qual delas é a da foto? 😊";
+        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+        const midiaFoto: PlanoMidia = { modelo: null, pedido: [], itens, maxItens: 3, depois: pergunta };
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaFoto, momento: null, intencao, modeloDaConversa: uma ? escolhidas[0] : null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, fotoDoCliente: escolhidas } };
+      }
+    }
     if (r.ctx.texto && paraMidia) {
       /* só o site (dono, 19/10/2026: "aqui esse estoque pode deixar confuso"; no site ele clica na moto e a IA identifica).
          A lista do estoque (listaDisponiveis, 12/10/2026) saiu daqui */

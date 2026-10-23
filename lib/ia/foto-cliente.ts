@@ -56,7 +56,7 @@ export const TEXTO_DA_RESPOSTA: Record<Exclude<RespostaMidia, null>, string> = {
 export const temFotoNoBuffer = (textoBuffer: string) => RX_FOTO_NO_BUFFER.test(textoBuffer);
 
 /** O texto que o próprio cliente escreveu no buffer (legenda da foto e mensagens de texto), sem os rótulos de mídia. */
-function escritoPeloCliente(textoBuffer: string) {
+export function escritoPeloCliente(textoBuffer: string) {
   return textoBuffer
     .split(/\n\s*\n/)
     /* "[imagem: legenda] (modelo escrito na foto: X)": a legenda e o modelo lido na foto ficam */
@@ -122,4 +122,32 @@ export function listaDisponiveis(itens: ItemDisponivel[], textoCliente: string):
   });
   const oque = moto && !patinete ? "motos elétricas" : patinete && !moto ? "patinetes elétricos" : "motos e patinetes elétricos";
   return `Tenho estas ${oque} disponíveis para pronta entrega:\n${linhas.join("\n")}`;
+}
+
+/* Foto de anúncio sem o nome (Nay, 20 e 22/10/2026: "Ainda tem a preta, uma grandona, nesse estilo" + print; a IA mandou
+   o site duas vezes). Com uma pista no texto (cor, "grandona"), a loja mostra as motos do estoque que batem e pergunta
+   "É uma dessas?". Sem pista, segue o site. */
+const CORES_PISTA: [string, RegExp][] = [
+  ["preta", /\bpret[ao]s?\b/],
+  ["branca", /\bbranc[ao]s?\b/],
+  ["cinza", /\bcinza\b/],
+  ["verde", /\bverdes?\b/],
+  ["vermelha", /\bvermelh[ao]s?\b/],
+  ["azul", /\bazu(?:l|is)\b/],
+  ["bege", /\bbege\b/],
+  ["prata", /\bprata\b/],
+];
+const RX_GRANDE = /\b(?:grand(?:e|ona|ao|aona)|robust[ao]|parrud[ao]|forte|maior|potente)\b/;
+export type MotoComCores = { nome: string; tipo: string; preco: number | null; cores: string[] };
+/** As motos do estoque que batem com a pista do texto (no máximo 3), ou null quando o texto não dá pista nenhuma. */
+export function candidatosPorPista(motos: MotoComCores[], texto: string): MotoComCores[] | null {
+  const t = texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const cor = CORES_PISTA.find(([, rx]) => rx.test(t))?.[0] ?? null;
+  const grande = RX_GRANDE.test(t);
+  if (!cor && !grande) return null;
+  const tipoPedido = /patinete/.test(t) ? "patinete" : null;
+  let lista = motos.filter((m) => m.preco && (tipoPedido ? m.tipo === tipoPedido : m.tipo !== "patinete") && !/bicicleta|\bbike\b|triciclo/i.test(m.nome));
+  if (cor) lista = lista.filter((m) => m.cores.some((c) => c.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().startsWith(cor.slice(0, 4))));
+  lista = [...lista].sort((a, b) => (grande ? b.preco! - a.preco! : a.preco! - b.preco!));
+  return lista.length ? lista.slice(0, 3) : null;
 }
