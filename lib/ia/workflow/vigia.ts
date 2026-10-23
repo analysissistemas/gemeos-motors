@@ -22,8 +22,11 @@ import { decidirNovaTentativa, decidirVigia, deveCobrarTarefa, MAX_TENTATIVAS } 
    ============================================================ */
 const M = schema.mensagens;
 const C = schema.conversas;
+/* conversa com o vendedor: cliente que volta depois de RETORNO_HORAS sem a loja falar e espera RETORNO_ESPERA_MIN */
+const RETORNO_HORAS = 12;
+const RETORNO_ESPERA_MIN = 10;
 
-async function temMarca(conversaId: number, marca: "esperaAviso" | "vigiaFechada", mensagemId: number) {
+async function temMarca(conversaId: number, marca: "esperaAviso" | "vigiaFechada" | "vigiaAssumiu", mensagemId: number) {
   const [x] = await db
     .select({ id: M.id })
     .from(M)
@@ -179,6 +182,21 @@ export async function vigiarAtendimentos(agora = new Date()) {
         }
       }
       if (cv.modo !== "humano") continue;
+
+      /* cliente que volta depois de muito tempo numa conversa que ficou com o vendedor (Nay, 22/10/2026: o vendedor
+         assumiu em 20/10, ela voltou hoje às 19h com "Quais formas de pagamento" e ficou 1h30 sem resposta). A loja não
+         falava com ele havia 12 h e ninguém respondeu em 10 min: a IA reassume (dono, 22/10/2026). */
+      if (iaPodeResponder && esperaMin >= RETORNO_ESPERA_MIN) {
+        const [antes] = await db.select({ em: M.criadoEm }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"), lt(M.id, primeira.id))).orderBy(desc(M.id)).limit(1);
+        const horasSemLoja = antes ? (new Date(primeira.em).getTime() - new Date(antes.em).getTime()) / 3_600_000 : Infinity;
+        if (horasSemLoja >= RETORNO_HORAS && !(await temMarca(cv.id, "vigiaAssumiu", ultima.id))) {
+          await db.update(C).set({ modo: "ia", prioridade: "alta", atualizadoEm: new Date() }).where(eq(C.id, cv.id));
+          await mensagemSistema(db, cv.id, `A IA assumiu: o cliente voltou depois de ${Math.round(horasSemLoja) >= 48 ? `${Math.round(horasSemLoja / 24)} dias` : `${Math.round(horasSemLoja)} h`} e esperava há ${esperaMin} min sem resposta. O vendedor pode reassumir quando quiser.`, { vigiaAssumiu: true, mensagemId: ultima.id });
+          void rodarWorkflowAtendimento({ conversaId: cv.id, mensagemId: ultima.id, gatilho: "whatsapp", simulado: cv.demo }).catch(() => {});
+          resultado.assumidas++;
+          continue;
+        }
+      }
 
       const decisao = decidirVigia({
         esperaMin,
