@@ -143,3 +143,11 @@ test("dono (21/10/2026): moto pra idoso oferece o triciclo do estoque", async ()
 test("vespa é compra (Milton, 20/10/2026)", () => {
   assert.equal(intencaoDoTexto("tem aquela vespa?", NOMES), "compra");
 });
+
+test("Simulador (22/10/2026): com triciclo no catálogo, 'esse triciclo de três rodas' sem o nome fica como está", async () => {
+  const { tirarTriciclo } = await import("../../lib/ia/intencao.ts");
+  const tri = ["Triciclo Foxscoo", "MM3"];
+  assert.deepEqual(tirarTriciclo(["Olha ele aí. Esse triciclo de três rodas é bem estável, perfeito para sua mãe."], tri, ["T3 RETRÔ", "AG08"]), ["Olha ele aí. Esse triciclo de três rodas é bem estável, perfeito para sua mãe."]);
+  assert.doesNotMatch(tirarTriciclo(["O triciclo mais indicado é a T3 RETRÔ."], tri, ["T3 RETRÔ"])[0], /triciclo/);
+  assert.doesNotMatch(tirarTriciclo(["O triciclo elétrico mais indicado é a *T3 RETRÔ*."], tri)[0], /triciclo/);
+});

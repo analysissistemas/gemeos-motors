@@ -1640,10 +1640,14 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
     /* foto sem o nome: a moto da conversa (a que o cliente ou o vendedor já citou) ou, com pista no texto ("a preta, uma
        grandona"), as do estoque que batem, com foto: "É uma dessas?" (Nay, 22/10/2026) */
-    if (r.ctx.texto && (paraMidia === "catalogo_foto" || paraMidia === "foto_nao_confirma")) {
+    /* sem foto, só a descrição ("Ainda tem a preta? Uma grandona, nesse estilo"): a IA respondia "Tenho uma unidade pronta
+       para entrega" sem dizer qual (Simulador, 22/10/2026) */
+    const fotoNaMensagem = paraMidia === "catalogo_foto" || paraMidia === "foto_nao_confirma";
+    const descreveSemNome = !paraMidia && !modeloDaConversa && intencao !== "assistencia" && !ultimaCitada(nomesCat, semAberturaDoSite(c.textoBuffer)) && /(?<![\p{L}])(?:ainda tem|tem (?:a|o|aquela|aquele|essa|esse)|tinha|nesse estilo|desse estilo|igual (?:a|o) d[ao]|aquela|daquela)(?![\p{L}])/iu.test(semAberturaDoSite(c.textoBuffer));
+    if (r.ctx.texto && (fotoNaMensagem || descreveSemNome)) {
       const comMidia = await motosComMidia(c);
       const precos = await motosParaIndicar(c);
-      const daConversa = modeloDaConversa ? comMidia.find((m) => m.nome === modeloDaConversa) : null;
+      const daConversa = modeloDaConversa && fotoNaMensagem ? comMidia.find((m) => m.nome === modeloDaConversa) : null;
       let escolhidas: string[] = daConversa ? [daConversa.nome] : [];
       if (!escolhidas.length) {
         const v = schema.veiculos;
@@ -1664,8 +1668,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       });
       if (itens.length) {
         const uma = itens.length === 1;
-        const texto = uma ? `Recebi a sua foto! 😊 É ${artigo(escolhidas[0])} *${escolhidas[0]}*? Olha ${artigo(escolhidas[0]) === "o" ? "ele" : "ela"} aqui:` : "Recebi a sua foto! 😊 Pela foto eu não consigo ter certeza, mas pelo que você falou pode ser uma dessas:";
-        const pergunta = uma ? `É ${artigo(escolhidas[0]) === "o" ? "esse" : "essa"}? 😊` : "Qual delas é a da foto? 😊";
+        const abre = fotoNaMensagem ? "Recebi a sua foto! 😊 " : "";
+        const texto = uma ? `${abre}É ${artigo(escolhidas[0])} *${escolhidas[0]}*? Olha ${artigo(escolhidas[0]) === "o" ? "ele" : "ela"} aqui:` : `${abre}${fotoNaMensagem ? "Pela foto eu não consigo ter certeza, mas pelo" : "Pelo"} que você falou, pode ser uma dessas:`;
+        const pergunta = uma ? `É ${artigo(escolhidas[0]) === "o" ? "esse" : "essa"}? 😊` : fotoNaMensagem ? "Qual delas é a da foto? 😊" : "É alguma dessas? 😊";
         const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
         const midiaFoto: PlanoMidia = { modelo: null, pedido: [], itens, maxItens: 3, depois: pergunta };
         return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaFoto, momento: null, intencao, modeloDaConversa: uma ? escolhidas[0] : null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, fotoDoCliente: escolhidas } };
@@ -2094,7 +2099,10 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     resposta = tirarFraseProibida(resposta);
     /* frase de enchimento sai (Genilso, 18/10/2026: "estou aqui para ajudar" e "estarei aqui para ajudar" em dois balões seguidos) */
     resposta = resposta.map((b) => b.replace(RX_ENCHIMENTO, "").replace(/\s{2,}/g, " ").trim()).filter((b) => /\p{L}{2,}/u.test(b));
-    resposta = tirarTriciclo(resposta, await triciclosComEstoque(c, true));
+    {
+      const triciclosTodos = await triciclosComEstoque(c, true);
+      resposta = tirarTriciclo(resposta, triciclosTodos, (await nomesDoCatalogo()).filter((n) => !triciclosTodos.includes(n)));
+    }
     /* a lista do estoque só quando o cliente pede (dono, 15/10/2026: "bom dia" recebeu tudo que tinha em estoque) */
     if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = tirarListaSemPedido(resposta, c.textoBuffer, await nomesDoCatalogo());
     /* o modelo às vezes escreve "\n" como texto: vira quebra de linha de verdade (conversa real de 06/10/2026) */

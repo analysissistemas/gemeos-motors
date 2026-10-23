@@ -166,9 +166,13 @@ O cliente falou de triciclo (três rodas). O triciclo da loja é ${triciclos.map
 O cliente falou de triciclo (três rodas). No momento a loja NÃO tem triciclo disponível no estoque: as motos disponíveis são de DUAS rodas. NÃO diga "temos sim" e NÃO chame nenhuma moto de triciclo. Diga com naturalidade que no momento não tem triciclo disponível e apresente 2 ou 3 opções do estoque que combinam com o que ele procura (conforto, carga, autonomia), com o preço por último.\n\n`;
 }
 /** Rede de segurança: "triciclo" numa frase que não nega e não fala do triciclo de verdade vira "moto". */
-export function tirarTriciclo(resposta: string[], triciclos: string[] = []): string[] {
+export function tirarTriciclo(resposta: string[], triciclos: string[] = [], outros: string[] = []): string[] {
   const NEGA = /(?<![\p{L}])n[ãa]o\s+(?:temos|tem|trabalhamos|vendemos|h[áa]|fazemos)/iu;
-  const doTriciclo = (f: string) => triciclos.some((n) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(f));
+  const cita = (f: string, nomes: string[]) => nomes.some((n) => n.trim().length >= 2 && new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(f));
+  /* a loja TEM triciclo: "esse triciclo de três rodas é bem estável" sem o nome fala dele; só troca a frase que chama de
+     triciclo uma moto de duas rodas (com o nome dela ou em negrito). Simulador, 22/10/2026: virou "moto com de duas rodas" */
+  const doTriciclo = (f: string) =>
+    cita(f, triciclos) || (triciclos.length > 0 && !cita(f, outros) && !(f.match(/\*[^*]+\*/gu) ?? []).some((b) => !cita(b, triciclos)));
   return resposta.map((b) => b.replace(/[^.!?\n]+[.!?]*/gu, (f) => (RX_TRICICLO.test(f) && !NEGA.test(f) && !doTriciclo(f) ? f.replace(/(?<![\p{L}])(o|um)\s+(tric[ií]clos?\s+el[ée]tricos?|tric[ií]clos?)/giu, (_m, art: string, t: string) => `${art.toLowerCase() === "o" ? "a" : "uma"} ${/el[ée]trico/i.test(t) ? "moto elétrica" : "moto"}`).replace(/tric[ií]clos?\s+el[ée]tricos?/giu, "moto elétrica").replace(/tric[ií]clos?/giu, "moto").replace(/(?:de\s+)?(?:tr[êe]s|3)\s+rodas/giu, "de duas rodas") : f)));
 }
 
