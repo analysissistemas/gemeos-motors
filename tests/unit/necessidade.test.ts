@@ -5,6 +5,7 @@ import { validarResposta } from "../../lib/ia/validador.ts";
 import { test } from "node:test";
 import {
   faixaDoTexto,
+  respondendoFaixa,
   faixasDoEstoque,
   indicarMotos,
   instrucaoQualificacao,
@@ -308,4 +309,17 @@ test("Marcela (21/10/2026): pergunta o tipo, '4 km' não é orçamento, moto nã
 test("Simulador (21/10/2026): a lista sai e não sobra o 'Por exemplo:' solto", () => {
   assert.deepEqual(limparParaQualificacao(["Por exemplo:\n• N2 por R$ 5.890"], ["N2"]), []);
   assert.deepEqual(limparParaQualificacao(["Que bom falar com você! Por exemplo:\n• N2"], ["N2"]), ["Que bom falar com você!"]);
+});
+
+test("Nay (22/10/2026): '12' depois das opções é orçamento; triciclo só para quem pediu", () => {
+  const opcoes = "Qual delas te agradou mais? 😊";
+  assert.ok(respondendoFaixa(opcoes, "12"));
+  assert.equal(lerDoCliente("12", { ...NECESSIDADE_VAZIA, faixaAte: 11000 }, opcoes).faixaAte, 12000);
+  assert.ok(!respondendoFaixa(opcoes, "2"));
+  assert.ok(!respondendoFaixa(opcoes, "12 vezes"));
+  assert.ok(!respondendoFaixa("Quer que eu te mande o vídeo?", "12"));
+  const fox: MotoParaIndicar = { nome: "Triciclo Foxscoo", tipo: "moto_eletrica", preco: 10000, autonomia: "45 km", carga: "150 kg", velocidade: null, descricao: "Triciclo elétrico de três rodas." };
+  const onze = indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 11000 }, [...ESTOQUE, fox], 3).map((x) => x.moto.nome);
+  assert.ok(!onze.includes(fox.nome), onze.join());
+  assert.deepEqual(indicarMotos({ ...NECESSIDADE_VAZIA, tipo: "triciclo" }, [...ESTOQUE, fox], 3).map((x) => x.moto.nome), [fox.nome]);
 });

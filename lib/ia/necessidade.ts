@@ -99,6 +99,14 @@ function valor(txt: string, soNumeroEhMil = false): number | null {
 }
 
 /** Faixa de valor que o cliente disse ("até 7 mil", "abaixo de 10k", "entre 7 e 10", "acima de 10 mil"). */
+/** O cliente está dando o orçamento: respondeu a pergunta da faixa, ou mandou só um número (4 a 20) logo depois das
+ *  opções (Nay, 22/10/2026: "12" depois de "Qual delas te agradou mais?" e a IA respondeu "você mencionou 12…"). */
+export function respondendoFaixa(ultimaDaLoja: string, texto: string): boolean {
+  if (perguntaPendente(ultimaDaLoja) === "faixa") return true;
+  const so = norm(texto).match(/^\D{0,12}?(\d{1,2})(?:\s*mil)?\D{0,12}$/);
+  return !!so && Number(so[1]) >= 4 && Number(so[1]) <= 20 && !/km|kg|vezes|x\b|parcel|anos?\b|hora|h\b/.test(norm(texto)) && /qual delas te agradou|gostou dela|qual delas voce|qual te agradou/.test(norm(ultimaDaLoja));
+}
+
 export function faixaDoTexto(texto: string, respondendoFaixa = false): { de: number | null; ate: number | null } | null {
   /* "4 km" não é orçamento (Marcela, 21/10/2026: respondeu "4 km" à pergunta da faixa e virou "até uns 4 mil") */
   const t = norm(texto).replace(/r\$\s*/g, "").replace(/\d[\d.,]*\s*(?:km|kms|quilometros?)\b/g, " ");
@@ -187,7 +195,7 @@ export function lerDoCliente(texto: string, anterior: Necessidade = NECESSIDADE_
   const peso = t.match(RX_PESO);
   if (peso && Number(peso[1]) >= 40 && Number(peso[1]) <= 250 && !/aguenta|suporta|capacidade|carga/.test(t)) n.pesoKg = Number(peso[1]);
   else if (RX_PESADO.test(t) && !n.pesoKg) n.pesoKg = 120;
-  const faixa = faixaDoTexto(t, pend === "faixa");
+  const faixa = faixaDoTexto(t, respondendoFaixa(ultimaDaLoja, texto));
   if (faixa) {
     n.faixaDe = faixa.de;
     n.faixaAte = faixa.ate;
@@ -316,6 +324,9 @@ export function indicarMotos(n: Necessidade, motos: MotoParaIndicar[], max = 2):
     /* moto pra idoso: só os triciclos, se tiver no estoque; sem triciclo, segue a indicação de sempre */
     const triciclos = lista.filter((m) => RX_TRICICLO_MOTO.test(`${m.nome} ${m.descricao ?? ""}`));
     if (n.idoso && triciclos.length) lista = triciclos;
+    /* o triciclo só para quem pediu triciclo ou é idoso (Nay, 22/10/2026: queria uma moto "grandona" e o Triciclo entrou
+       no "até 11 mil") */
+    else if (n.tipo !== "triciclo") lista = lista.filter((m) => !RX_TRICICLO_MOTO.test(`${m.nome} ${m.descricao ?? ""}`));
   }
   if (!lista.length) return [];
   const maisBarata = Math.min(...lista.map((m) => m.preco!));

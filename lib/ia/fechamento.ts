@@ -43,6 +43,10 @@ const RX_OUTRO_DADO = /(?<!\d)\d{5}-?\d{3}(?!\d)|(?<!\d)\d{1,2}\/\d{1,2}\/\d{2,4
 const RX_DECIDIDO =
   /(?<![a-z])(vou (querer|levar|ficar com|fechar|comprar)|fechad[oa]|pode fechar|vamos fechar|bora fechar|ta fechado|fecho|quero (essa|esse|ela|fechar)|pode separar|como (faco|faz) (pra|para) (comprar|fechar|pagar)|quero comprar (a|o|essa|esse)|ja quero|decidi)(?![a-z])/;
 /* "cara" sozinho é gíria ("cara, quero essa"): só conta com "achei", "tá", "muito"... */
+/** "pode separar", "separa ela pra mim" (texto sem acento) */
+export const RX_SEPARAR = /(?<![a-z])separ(?:ar|a|e|em)(?![a-z])/;
+/* "pra ver", "pra eu olhar", "conhecer de perto": vai à loja ver antes de decidir */
+const RX_PRA_VER = /(?<![a-z])(?:pra|para|p\/)\s+(?:mim\s+|eu\s+)?(?:ver|olhar|conhecer|dar uma olhada|testar|experimentar)(?![a-z])|(?<![a-z])(?:ver|olhar)\s+(?:ela|ele|a moto|de perto|pessoalmente)(?![a-z])/;
 const RX_PRECO_OBJ =
   /(?<![a-z])((achei|ta|esta|muito|meio|bem|bastante|um pouco|mt|mto|que) car[oa]|carissim[oa]|salgad[oa]|puxad[oa]|pesad[oa] (no bolso|pra mim)|(nao|n) (tenho|to com|estou com) (esse |todo esse )?(dinheiro|grana|valor)|sem (dinheiro|grana)|desconto|abaix(a|ar|ou) (o preco|o valor|pra|para|um pouco)|faz (por|mais barato)|ta alto|valor alto|fora do (meu )?orcamento|nao cabe no|muito dinheiro)(?![a-z])/;
 /* Pedido de desconto e contraproposta (Andressa Souto, 08/10/2026: "Vc faz 1800 a vista?", a IA disse "sem possibilidade
@@ -91,6 +95,12 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (RX_PEDIU_DADOS.test(loja) && p.ultimaDaLoja.includes("•")) {
     if (RX_CPF.test(t) || nomeCompletoDito(p.textoCliente)) return "mandou_dados";
     if (RX_OUTRO_DADO.test(t) || t.split(/\n/).filter((l) => l.trim()).length >= 3) return "dados_parciais";
+  }
+  /* "pode separar pra mim ver amanhã", "vou aí amanhã pra ver a moto": é visita, não compra fechada (Nay, 22/10/2026:
+     recebeu "Parabéns pela escolha 🎉", "retirar ou entrega?" e a lista de nome completo, dia e horário) */
+  if (RX_PRA_VER.test(t) && (RX_SEPARAR.test(t) || RX_QUER_VISITAR.test(p.textoCliente) || RX_PEDIU_ESCOLHA.test(loja))) {
+    const dh = dataHoraDaVisita(p.textoCliente, p.agora ?? new Date());
+    return dh.temDia || dh.temHora ? "informou_visita" : "quer_visitar";
   }
   /* respondendo "retirar ou entrega?" */
   if (RX_PEDIU_ESCOLHA.test(loja)) {

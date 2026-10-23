@@ -142,3 +142,12 @@ test("dono, 20/10/2026: na dúvida nada vai para a agenda (talvez, vou ver, se d
   assert.equal(compraPrevista("talvez dia 30 eu compro", terca), null);
   assert.equal(compraPrevista("se der, sexta eu fecho", terca), null);
 });
+
+test("Nay (22/10/2026): 'pode separar pra mim ver amanhã' e 'vou aí amanhã pra ver a moto' são visita, não compra fechada", () => {
+  const agora = new Date("2026-10-22T23:45:00Z");
+  const simulacao = "Nay, fiz a simulação pra você 😊 • Moto: *TANK AG11* • No Visa: *21x de R$ 767,86* Posso separar a sua?";
+  assert.equal(detectarMomento({ textoCliente: "Pode separar pra mim ver amanhã aí", ultimaDaLoja: simulacao, conheceModelo: true, agora }), "informou_visita");
+  assert.equal(detectarMomento({ textoCliente: "Eu vou aí amanhã pra ver a moto", ultimaDaLoja: "Você prefere retirar aqui na loja ou receber por entrega? 😊", conheceModelo: true, agora }), "informou_visita");
+  /* sem "pra ver": "pode separar" continua sendo compra decidida */
+  assert.equal(detectarMomento({ textoCliente: "pode separar", ultimaDaLoja: simulacao, conheceModelo: true, agora }), "decidido");
+});
