@@ -9,7 +9,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
-import { faixaDoTexto, faixasDoEstoque, indicarMotos, perguntaPendente, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { faixaDoTexto, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, perguntaPendente, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
@@ -48,9 +48,9 @@ import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { consentirAviso, registrarInteresse } from "@/lib/servicos/interesses";
 import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "@/lib/ia/fila-espera";
 import { respostaSimNao } from "@/lib/ia/fechamento";
-import { detectarMomento, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { comMotoCitada, instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -799,7 +799,7 @@ function cidadeDoTexto(texto: string) {
 
 /** Follow-up para a equipe confirmar entrega fora de Goiana (cidade, taxa e prazo). Um por conversa. */
 async function tarefaEntregaFora(c: CtxWorkflow, clienteId: number | null, negocioId: number | null, cidade: string, detalhe: string) {
-  if (/goiana/i.test(cidade.normalize("NFD").replace(/\p{M}/gu, ""))) return null;
+  if (/goiana/i.test(cidade.normalize("NFD").replace(/\p{M}/gu, "")) || ehSoOEstado(cidade)) return null;
   const [ja] = await db
     .select({ id: schema.followUps.id })
     .from(schema.followUps)
@@ -1362,9 +1362,15 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     if (ultimaResposta) filtros.push(gt(schema.mensagens.id, ultimaResposta.id));
     if (mem?.limpaEm) filtros.push(gt(schema.mensagens.criadoEm, mem.limpaEm));
     const msgs = (await db.select().from(schema.mensagens).where(and(...filtros)).orderBy(desc(schema.mensagens.id)).limit(20)).reverse();
+    /* respondeu em cima da mensagem de uma moto (cartão da indicação, foto): "essa" é aquela moto */
+    const idsCitados = msgs.map((m) => m.respostaA).filter((id): id is number => !!id);
+    const citadas = idsCitados.length
+      ? new Map((await db.select({ id: schema.mensagens.id, conteudo: schema.mensagens.conteudo }).from(schema.mensagens).where(and(eq(schema.mensagens.conversaId, c.conversaId), eq(schema.mensagens.direcao, "outgoing"), inArray(schema.mensagens.id, idsCitados)))).map((x) => [x.id, x.conteudo]))
+      : new Map<number, string | null>();
+    const modelosCat = citadas.size ? (await nomesDoCatalogo()).map((nome) => ({ nome })) : [];
     const textos = msgs
       .filter((m) => m.conteudo?.trim().toLowerCase() !== c.config.palavraLimpar.toLowerCase())
-      .map((m) => (m.id === c.mensagemId ? c.textoEntrada : textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m) })))
+      .map((m) => comMotoCitada(m.id === c.mensagemId ? c.textoEntrada : textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m) }), m.respostaA ? citadas.get(m.respostaA) : null, modelosCat))
       .filter((t) => t.trim());
     /* "usar no seio" é sítio (Simulador, 20/10/2026): a IA lia ao pé da letra */
     const textoBuffer = corrigirDigitacao(textos.join("\n\n") || c.textoEntrada);
@@ -1620,7 +1626,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
           if (foto) itens.push({ tipo: "foto", url: foto.url, legenda: k.legenda });
           else emTexto.push(k.legenda);
         }
-        const texto = [ind.abertura, ...emTexto, ...(itens.length ? [] : [ind.pergunta])].join("\n\n");
+        /* a pergunta da entrega que veio junto não se perde (Sidney, 22/10/2026: "fazem entrega pra Pernambuco?" + 2 perguntas de moto) */
+        const entregaAntes = perguntouEntrega(semAberturaDoSite(c.textoBuffer)) ? [TEXTO_ENTREGA_REGIAO] : [];
+        const texto = [...entregaAntes, ind.abertura, ...emTexto, ...(itens.length ? [] : [ind.pergunta])].join("\n\n");
         const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
         const midiaIndicacao: PlanoMidia | null = itens.length ? { modelo: null, pedido: [], itens, maxItens: 3, depois: ind.pergunta } : null;
         return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaIndicacao, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, cartoes: ind.cartoes.map((k) => k.legenda), qualificacao: { indicou: true, necessidade } } };

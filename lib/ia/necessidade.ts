@@ -56,8 +56,16 @@ export function perguntaPendente(ultimaDaLoja: string): ChavePergunta | null {
 }
 
 /* ---------------- leitura do que o cliente escreveu ---------------- */
+/* pergunta/pedido sobre a entrega da loja: "fazem entrega pra...", "entregam em...", "taxa de entrega", "frete" */
+const RX_ENTREGA_DA_LOJA =
+  /\b(?:(?:voces|vcs|vc|voce|a loja|loja)\s+)?(?:fazem|faz|faria|tem|teria|realizam|realiza|entregam|entrega|entregaria|manda|mandam)\s+(?:a\s+)?(?:entregas?\s+)?(?:pra|para|em|no|na|ate|aqui|ai|a domicilio|em casa)\b|\b(?:taxa|frete|prazo|valor|custo)\s+(?:de|da|do|pra|para)\s+(?:entrega|envio)\b|\bfrete\b|\bentrega\s+(?:gratis|gratuita|em casa)\b|\b(?:retirar|retirada|buscar)\s+(?:na loja\s+)?ou\s+(?:a\s+)?entrega\b|\bcombinar\s+a\s+entrega\b/g;
+/** O cliente perguntou se a loja entrega ("vocês fazem entrega pra Pernambuco?", "entregam em Recife?"). */
+export const perguntouEntrega = (texto: string) => /\?/.test(texto) && /\b(?:fazem|faz|faria|tem|teria|realizam|entregam|entrega|entregaria|mandam|manda)\s+(?:a\s+)?(?:entregas?\s+)?(?:pra|para|em|no|na|ate|aqui|ai)\b|\btaxa\s+de\s+entrega\b|\bfrete\b/.test(norm(texto));
+/** Base de conhecimento ("Entregamos em toda a região. Dependendo da região, a entrega não tem taxa; o vendedor confirma
+ *  para o endereço do cliente"): resposta fixa quando a pergunta chega junto com a indicação, que é texto do sistema. */
+export const TEXTO_ENTREGA_REGIAO = "Sobre a entrega: sim! A loja fica em Goiana, Pernambuco, e a gente entrega em toda a região. Dependendo de onde for, nem tem taxa; o vendedor confirma pro seu endereço 😊";
 const RX_USO: [Uso, RegExp][] = [
-  ["entregas", /\b(?:entregas?|entregador|delivery|ifood|i food|motoboy|rappi|99\s?food|uber\s?eats|fazer frete|frete)\b/],
+  ["entregas", /\b(?:entregas?|entregador|delivery|ifood|i food|motoboy|rappi|99\s?food|uber\s?eats|fazer frete)\b/],
   ["outra_pessoa", /\b(?:pra|para|pro) (?:a |o )?(?:minha|meu) (?:filh\w*|espos\w*|mulher|marido|mae|pai|av[oó]\w*|vo|irm\w*|namorad\w*|sobrinh\w*|net\w*|sogr\w*)\b|\bpra (?:um |uma )?idos\w*|\bpresente\b/],
   ["trabalho", /\b(?:trabalh\w*|servico|emprego|firma|fabrica|usina|trampo|batente|ir e voltar|expediente)\b/],
   ["passeio", /\b(?:passe(?:io|ar)|lazer|fim de semana|final de semana|curtir|dar uma volta|dar um role)\b/],
@@ -161,8 +169,11 @@ export function lerDoCliente(texto: string, anterior: Necessidade = NECESSIDADE_
   const t = norm(texto);
   const pend = perguntaPendente(ultimaDaLoja);
   const n: Necessidade = { ...anterior };
+  /* a entrega DA LOJA não é o uso da moto ("vocês fazem entrega pra Pernambuco?", "Entrega" respondendo retirar ou
+     entrega: Sidney, 22/10/2026, virou "pras entregas") */
+  const tUso = t.replace(RX_ENTREGA_DA_LOJA, " ").replace(/^\s*(?:a\s+)?entrega[\s.!]*$/, " ");
   for (const [uso, rx] of RX_USO)
-    if (rx.test(t)) {
+    if (rx.test(tUso)) {
       /* "trabalho" e "entregas" juntos: entregas é o mais exigente */
       if (!n.uso || uso === "entregas" || (n.uso === "cidade" && uso !== "outra_pessoa")) n.uso = uso;
       break;

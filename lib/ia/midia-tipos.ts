@@ -77,6 +77,15 @@ export function semNomesDeModelo(texto: string, modelos: { nome: string }[]): st
   return t;
 }
 
+/** Resposta em cima da foto/mensagem de uma moto: "essa" é aquela moto (Sidney, 22/10/2026: "Pelo preço gostei dessa" na
+ *  N2 e "Mas queria essa" na M6, e a IA falou da N2). Se o cliente escreveu o nome de uma moto, vale o que ele escreveu. */
+export function comMotoCitada(texto: string, citada: string | null | undefined, modelos: { nome: string }[]): string {
+  if (!citada || !texto.trim() || ultimaCitada(modelos, texto)) return texto;
+  /* o cartão da indicação começa com o nome ("*M6*\nAguenta até 180 kg"): vale a 1ª moto da mensagem citada */
+  const m = modelos.map((x) => ({ x, pos: norm(citada).search(regexDoNome(norm(x.nome))) })).filter((y) => y.pos >= 0).sort((a, b) => a.pos - b.pos)[0]?.x;
+  return m ? `${texto} (respondendo à mensagem da loja sobre a *${m.nome}*)` : texto;
+}
+
 /** A moto citada por último no texto (posição da última menção). */
 export function ultimaCitada<T extends { nome: string }>(modelos: T[], texto: string): T | null {
   const t = corrigirNomes(norm(texto), modelos);

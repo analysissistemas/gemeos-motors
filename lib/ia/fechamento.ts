@@ -14,6 +14,7 @@
 
 import { dataHoraDaVisita, RX_CONVIDOU_VISITA, RX_DIA_INCERTO, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "./agenda.ts";
 import { artigo, ehACombustao } from "./estoque-tipos.ts";
+import { MAX_PARCELAS } from "./simulacao-cartao.ts";
 import { lerDadosDoCliente } from "./dados-cliente.ts";
 
 export type Momento = "pesquisando" | "sem_modelo" | "quer_parcelar" | "pediu_simulacao" | "recusou_simulacao" | "negociar" | "quer_visitar" | "informou_visita" | "interesse" | "decidido" | "objecao_preco" | "objecao" | "informou_km" | "escolheu_entrega" | "escolheu_retirada" | "mandou_dados" | "dados_parciais";
@@ -199,6 +200,10 @@ const RX_PARCELAS_NUM = /(?<![\d,.])(\d{1,2})\s*(?:x|vezes|parcelas?)(?![a-z])/g
 const RX_PARCELAS_EXTENSO = /(?<![a-z])(uma|um|duas|dois|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta)(?:\s+e\s+(uma|um|duas|dois|tres|quatro|cinco|seis|sete|oito|nove))?\s+(?:vezes|parcelas?)(?![a-z])/g;
 /* "parcelar em 12", "dividir em 10 no visa" (sem o "x"); "em 12 mil" e "em 10%" não contam */
 const RX_PARCELAS_VERBO = /(?<![a-z])(?:parcel\w*|divid\w*)\s+(?:(?:ela|a moto|o valor|tudo)\s+)?em\s+(?:ate\s+)?(\d{1,2})(?!\d|[.,]\d|\s*(?:mil|reais|%|por\s*cento))/g;
+/* "o máximo possível", "no máximo de vezes", "em quantas der" (Sidney, 22/10/2026: disse duas vezes e a IA perguntou de novo) */
+/* "no máximo 10 mil" e "aguenta no máximo 150 kg" não contam: "máximo" sozinho só no fim da frase */
+const RX_PARCELAS_MAXIMO =
+  /(?<![a-z])(?:(?:n?o|em)\s+maximo(?:\s+(?:de\s+vezes|de\s+parcelas|possivel|que\s+(?:der|puder|da|pode))|(?=\s*(?:[,.!?)]|$)))|(?:maior|mais)\s+(?:numero\s+de\s+)?(?:vezes|parcelas)\s+(?:possivel|que\s+(?:der|puder|da))|em\s+quantas\s+(?:vezes\s+)?(?:der|puder))(?![a-z])/gm;
 const RX_DEBITO = /(?<![a-z])debito(?![a-z])/;
 /* respondendo "em quantas vezes?": o número sozinho vale ("em 21", "21", "até 18 no visa"; Leandro, 11/10/2026).
    Dinheiro, porcentagem, dias, horas, km e anos não contam */
@@ -218,6 +223,7 @@ export function simulacaoPedida(texto: string, respondendoVezes = false): { parc
     achados.push({ pos: m.index ?? 0, n: NUMEROS[m[1]] + (m[2] ? UNIDADES[m[2]] : 0) });
   }
   for (const m of t.matchAll(RX_PARCELAS_VERBO)) achados.push({ pos: m.index ?? 0, n: Number(m[1]) });
+  for (const m of t.matchAll(RX_PARCELAS_MAXIMO)) achados.push({ pos: m.index ?? 0, n: MAX_PARCELAS });
   const todas = Array.from(new Set(achados.sort((a, b) => a.pos - b.pos).map((a) => a.n).filter((n) => n >= 1 && n <= 36)));
   const bandeira = BANDEIRAS.find(([rx]) => rx.test(t))?.[1] ?? null;
   return { parcelas: todas[0] ?? null, todas, bandeira, debito: RX_DEBITO.test(t) };
@@ -373,7 +379,7 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
   /* entrega: só o que a entrega precisa (sem CPF, nascimento nem referência: o vendedor confirma depois) */
   const campos = [
     "Seu nome completo",
-    ja.cidade?.trim() ? "Endereço (rua, número e bairro)" : "Endereço (rua, número, bairro e cidade)",
+    ja.cidade?.trim() && !ehSoOEstado(ja.cidade) ? "Endereço (rua, número e bairro)" : "Endereço (rua, número, bairro e cidade)",
     /* dia e hora para a entrega virar tarefa e lembrete (dono, 15/10/2026) */
     "Que dia e horário você pode receber?",
     ...(ja.pagamento?.trim() ? [] : ["Forma de pagamento"]),
@@ -382,8 +388,11 @@ export function listaDeDados(modo: "entrega" | "retirada", ja: { cidade?: string
 }
 
 /** Entrega fora de Goiana: a IA não sabe se atende nem a taxa; avisa que a equipe confirma (balão separado). */
+/** "Pernambuco", "PE", "aqui na região" não são cidade: a loja é de Goiana-PE (Sidney, 22/10/2026: "entrega pra
+ *  Pernambuco?" virou tarefa para a equipe confirmar se a loja entrega em Pernambuco). */
+export const ehSoOEstado = (cidade: string) => /^(?:o |a )?(?:pernambuco|pe|estado|regiao|aqui na regiao|nordeste)$/.test(semAcento(cidade).trim().replace(/[.!?]+$/, ""));
 export function notaDeEntrega(cidade: string | null | undefined) {
-  return cidade?.trim() && !/goiana/i.test(semAcento(cidade)) ? `Sobre a entrega em ${cidade.trim()}, a nossa equipe confirma se atende aí e te fala certinho 😊` : null;
+  return cidade?.trim() && !/goiana/i.test(semAcento(cidade)) && !ehSoOEstado(cidade) ?`Sobre a entrega em ${cidade.trim()}, a nossa equipe confirma se atende aí e te fala certinho 😊` : null;
 }
 
 /** A última fala da loja: todas as mensagens da IA ou do vendedor depois da última mensagem do cliente
