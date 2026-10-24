@@ -9,9 +9,11 @@ const H = 3_600_000;
 const FUSO = -3 * H; // Recife, sem horário de verão
 
 /** Dia e hora da retirada. `problema` diz o que perguntar de novo quando não dá para marcar. */
-export function quandoRetirar(texto: string, horario: HorarioLoja, agora = new Date()): { quando: Date | null; problema: "sem_dia" | "sem_hora" | "passou" | "fechada" | null } {
+export function quandoRetirar(texto: string, horario: HorarioLoja, agora = new Date(), exigirDia = false): { quando: Date | null; problema: "sem_dia" | "sem_hora" | "passou" | "fechada" | null } {
   const dh = dataHoraDaVisita(texto, agora);
-  if (!dh.temDia) return { quando: null, problema: "sem_dia" };
+  /* entrega: só a hora não marca o dia (Sidney, 22/10/2026: "a partir das 14:30, e o dia, o mais rápido possível" virou
+     "Anotei que você pode receber sexta, 23/10, às 14h30"; a data não foi dita). A equipe combina o dia. */
+  if (!dh.temDia || (exigirDia && !dh.diaDito)) return { quando: null, problema: "sem_dia" };
   if (!dh.temHora || !dh.quando) return { quando: null, problema: "sem_hora" };
   if (dh.quando.getTime() < agora.getTime() + 15 * 60_000) return { quando: null, problema: "passou" };
   if (!lojaAberta(horario, dh.quando)) return { quando: null, problema: "fechada" };

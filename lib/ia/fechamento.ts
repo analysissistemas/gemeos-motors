@@ -29,10 +29,11 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLow
 const RX_PEDIU_ESCOLHA = /retir\w*[^?]{0,60}entreg|entreg\w*[^?]{0,60}retir|buscar[^?]{0,40}entreg|delivery/;
 const RX_PEDIU_DADOS = /nome completo/;
 /* sem CPF (19/10/2026) o nome completo fecha a lista; "vou ver ainda" não é nome */
-const RX_NAO_E_NOME = /\b(vou|vai|nao|depois|quero|pode|sim|ok|obrigad\w*|pensar|ver|agora|hoje|amanha|ainda|tudo|bem|certo|beleza)\b/;
+/* pergunta também não é nome (Moura, 22/10/2026: "Só me passe quantos anos de garantia" virou o nome do cadastro) */
+const RX_NAO_E_NOME = /\b(vou|vai|nao|depois|quero|pode|sim|ok|obrigad\w*|pensar|ver|agora|hoje|amanha|ainda|tudo|bem|certo|beleza|me|passe?|manda|quant\w*|qual|quais|como|onde|quando|garantia|moto|preco|valor|tem|vem)\b/;
 const nomeCompletoDito = (texto: string) => {
   const n = lerDadosDoCliente(texto).nomeCompleto;
-  return !!n && !RX_NAO_E_NOME.test(semAcento(n));
+  return !!n && !n.includes("?") && !RX_NAO_E_NOME.test(semAcento(n));
 };
 /* "entreg\w*" pega entrega, entregar, entregue, entreguem ("quero que entregue", teste de 05/10/2026) */
 const RX_ENTREGA = /(?<![a-z])(entreg\w*|delivery|receber (em casa|aqui|la em casa)|manda(r)? (pra|para) (mim|casa|ca)|leva(r)? (pra mim|ate mim|aqui)|em casa|na minha casa)(?![a-z])/;
@@ -48,7 +49,7 @@ export const RX_SEPARAR = /(?<![a-z])separ(?:ar|a|e|em)(?![a-z])/;
 /* "pra ver", "pra eu olhar", "conhecer de perto": vai à loja ver antes de decidir */
 const RX_PRA_VER = /(?<![a-z])(?:pra|para|p\/)\s+(?:mim\s+|eu\s+)?(?:ver|olhar|conhecer|dar uma olhada|testar|experimentar)(?![a-z])|(?<![a-z])(?:ver|olhar)\s+(?:ela|ele|a moto|de perto|pessoalmente)(?![a-z])/;
 const RX_PRECO_OBJ =
-  /(?<![a-z])((achei|ta|esta|muito|meio|bem|bastante|um pouco|mt|mto|que) car[oa]|carissim[oa]|salgad[oa]|puxad[oa]|pesad[oa] (no bolso|pra mim)|(nao|n) (tenho|to com|estou com) (esse |todo esse )?(dinheiro|grana|valor)|sem (dinheiro|grana)|desconto|abaix(a|ar|ou) (o preco|o valor|pra|para|um pouco)|faz (por|mais barato)|ta alto|valor alto|fora do (meu )?orcamento|nao cabe no|muito dinheiro)(?![a-z])/;
+  /(?<![a-z])((achei|ta|esta|muito|meio|bem|bastante|um pouco|mt|mto|que) car[oa]|carissim[oa]|salgad[oa]|puxad[oa]|pesad[oa] (no bolso|pra mim)|(nao|n) (tenho|to com|estou com) (esse |todo esse )?(dinheiro|grana|valor)|sem (dinheiro|grana)|desconto|abaix(a|ar|ou) (o preco|o valor|pra|para|um pouco)|faz (por|mais barato)|ta alto|valor alto|fora do (meu )?orcamento|nao cabe no|muito dinheiro|fica (muito |meio |bem )?(alt[oa]|car[oa]|pesad[oa]|salgad[oa]|puxad[oa])|(parcela|valor|prestacao) (muito |meio |bem )?(alt[oa]|pesad[oa]|salgad[oa]))(?![a-z])/;
 /* Pedido de desconto e contraproposta (Andressa Souto, 08/10/2026: "Vc faz 1800 a vista?", a IA disse "sem possibilidade
    de desconto" e o vendedor topou negociar no dia seguinte). Dono, 13/10/2026: primeiro persuadir com os ganhos; se o
    cliente insistir, passar para o vendedor. Texto sem acento. */
@@ -119,8 +120,13 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (sim.bandeira && RX_QUER_PARCELAR.test(t) && /simula/.test(t)) return "pediu_simulacao";
   /* débito: com a bandeira, ou com a moto já escolhida (o sistema pergunta a bandeira) */
   if (sim.debito && (sim.bandeira || p.conheceModelo)) return "pediu_simulacao";
-  /* "Posso separar a sua?" (fecho da simulação) e o cliente disse sim: decidiu */
-  if (/posso separar/.test(loja) && !sim.parcelas && respostaSimNao(p.textoCliente) === "sim" && !RX_PRECO_OBJ.test(t)) return "decidido";
+  /* a loja ofereceu a simulação ("Quer que eu faça uma simulação?") e o cliente topou ("Sim", "Isso", "Master"): o sistema
+     simula ou pergunta o que falta. Antes a IA perguntava de novo ("só para confirmar...", "posso seguir?") e não simulava
+     (Moura, 22/10/2026: "Sim", "Isso", "Master" e "Sim", e simulação nenhuma) */
+  if (RX_OFERECEU_SIMULACAO.test(loja) && !RX_SIMULACAO_ENVIADA.test(loja) && (sim.bandeira || sim.parcelas || aceitou(p.textoCliente))) return "pediu_simulacao";
+  /* "Posso separar a sua?" (fecho da simulação) e o cliente disse sim: decidiu. "Fica alta a parcela, depois vejo melhor"
+     não é sim (Moura, 21/10/2026: o "parcela" contava como sim e ele recebeu "Parabéns! 🎉") */
+  if (/posso separar/.test(loja) && !sim.parcelas && aceitou(p.textoCliente) && !RX_PRECO_OBJ.test(t) && !RX_RECUSA.test(t) && !RX_DUVIDA.test(t)) return "decidido";
   /* perguntou o total depois da simulação (a simulação vai só com a parcela, usuário 12/10/2026) */
   if (RX_SIMULACAO_ENVIADA.test(loja) && RX_PEDE_TOTAL.test(t) && !sim.parcelas) return "pediu_simulacao";
   /* não aceitou a simulação que o sistema mandou: o vendedor consulta a gerência (relatório do dono, 10/10/2026) */
@@ -191,7 +197,15 @@ export const RX_PERGUNTOU_MOTO = /pra qual moto voce quer a simulacao/;
 /* a simulação, ou a conta do total que o cliente pediu depois dela */
 export const RX_SIMULACAO_ENVIADA = /(?:fiz|segue) a simulacao|o total fica assim/;
 const RX_RECUSA =
-  /(?<![a-z])(nao (da|deu|rola|cabe|aceito|compensa|consigo|gostei|fica bom|ficou bom|tenho como)|ficou (caro|alto|pesad[oa]|salgad[oa]|puxad[oa])|(muito|bem|mt|mto) (caro|alto|juros)|juros? (alto|muito|demais)|taxa (alta|muito|demais)|caro demais|achei (caro|alto|salgado|puxado))(?![a-z])/;
+  /(?<![a-z])(nao (da|deu|rola|cabe|aceito|compensa|consigo|gostei|fica bom|ficou bom|tenho como)|ficou (caro|alto|pesad[oa]|salgad[oa]|puxad[oa])|(muito|bem|mt|mto) (caro|alto|juros)|juros? (alto|muito|demais)|taxa (alta|muito|demais)|caro demais|achei (caro|alto|salgado|puxado)|fica (muito |meio |bem )?(alt[oa]|car[oa]|pesad[oa]|salgad[oa]|puxad[oa])|(parcela|prestacao) (muito |meio |bem )?(alt[oa]|pesad[oa]|salgad[oa]))(?![a-z])/;
+/* a loja (a IA) ofereceu fazer a simulação; texto sem acento */
+const RX_OFERECEU_SIMULACAO = /(?:quer|gostaria|posso|prefere)[^?]{0,60}simula[^?]*\?|seguir com a simulacao/;
+/** Disse sim a uma oferta ("sim", "isso", "pode", "quero", "faz"), sem "não", sem "depois" e sem objeção. */
+function aceitou(texto: string) {
+  const t = semAcento(texto).trim();
+  if (/(?<![a-z])(nao|n|nem|negativo|depois)(?![a-z])/.test(t)) return false;
+  return /(?<![a-z])(sim|s|isso|pode|claro|ok|quero|faz|faca|manda|bora|vamos|beleza|blz|certo|por favor|pfv|pf|positivo)(?![a-z])/.test(t);
+}
 /* "não, vou pagar no pix" não é recusa: é outra forma de pagar */
 const RX_VAI_DE_PIX = /(?<![a-z])(pix|dinheiro|a vista|em especie)(?![a-z])/;
 /** "sim" / "não" do cliente à pergunta do Amex ("permite sim", "não permite", "pode", "acho que não"). */
@@ -535,6 +549,22 @@ export function tirarAdiamento(resposta: string[]): string[] {
   const FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu;
   return resposta
     .map((b) => (b.match(FRASES) ?? [b]).filter((f) => !RX_ADIA.test(f)).join("").trim())
+    .filter((b) => /\p{L}/u.test(b));
+}
+
+/* O chefe (23/10/2026): "a IA está fazendo muita pergunta e se confunde". Moura (22/10/2026) pediu a simulação e a IA
+   perguntou "só para confirmar: no Master, certo?", "posso seguir com a simulação?" e, no meio, "retirar ou entrega?";
+   ele respondeu "Entrega", recebeu a lista de dados e a simulação nunca saiu. Sidney (22/10/2026), igual: "Vou encaminhar a
+   simulação. Enquanto isso, prefere retirar ou entrega?". Retirar ou entrega é pergunta do sistema, só depois de o cliente
+   decidir (conduzirFechamento, momento "decidido"); a simulação também (decidirSimulacao). A IA não confirma de novo o que
+   o cliente já disse nem promete "vou simular". */
+const RX_PERGUNTA_RECEBER = /retir\p{L}*[^?]{0,80}entreg|entreg\p{L}*[^?]{0,80}retir|buscar[^?]{0,60}entreg/iu;
+const RX_RECONFIRMA = /s[óo]\s+(?:pra|para)\s+confirmar|posso\s+seguir\s+com|(?:vou|irei)\s+(?:simular|fazer\s+a\s+simula|seguir\s+com\s+a\s+simula|encaminhar[^.!?]{0,60}simula)/iu;
+export function semPerguntasDoSistema(resposta: string[]): string[] {
+  const FRASES = /(?:[^.!?\n]|[.!?](?=\d))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu;
+  const sai = (f: string) => (/\?/.test(f) && RX_PERGUNTA_RECEBER.test(f)) || RX_RECONFIRMA.test(f);
+  return resposta
+    .map((b) => (b.match(FRASES) ?? [b]).filter((f) => !sai(f)).join("").trim())
     .filter((b) => /\p{L}/u.test(b));
 }
 

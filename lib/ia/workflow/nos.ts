@@ -48,7 +48,7 @@ import { lerTaxas } from "@/lib/ia/taxas-maquineta";
 import { consentirAviso, registrarInteresse } from "@/lib/servicos/interesses";
 import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "@/lib/ia/fila-espera";
 import { respostaSimNao } from "@/lib/ia/fechamento";
-import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
+import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, semPerguntasDoSistema, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { comMotoCitada, instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
@@ -689,7 +689,7 @@ async function programarContatoDoDia(c: CtxWorkflow, p: { dia: Dia; periodo: Per
 async function agendarCombinado(c: CtxWorkflow, p: { clienteId: number; negocioId: number | null; modo: "retirada" | "entrega"; horarioDito: string | undefined; nome: string | null; pagamento: string | null; cidade: string | null; endereco: string | null }) {
   const F = schema.followUps;
   const agora = new Date();
-  const ret = quandoRetirar(trechoDeQuando(p.horarioDito, c.textoBuffer), await lerHorario(), agora);
+  const ret = quandoRetirar(trechoDeQuando(p.horarioDito, c.textoBuffer), await lerHorario(), agora, p.modo === "entrega");
   const cv = await carregarConversa(c.conversaId);
   const moto = c.modeloDaConversa ?? "moto";
   const quem = p.nome ?? "o cliente";
@@ -1534,12 +1534,13 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       promptSistema,
       memoria: c.memoria,
       agora: `# AGORA
-Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo até o fechamento (o que falta, entrega ou retirada, dados), como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
+Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo a venda como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
 ${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
 ${instrucaoVariasPerguntas(semAberturaDoSite(c.textoBuffer))}# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
 Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
+Não pergunte se ele quer retirar na loja ou receber por entrega, não peça nome, endereço nem dia (só se o MOMENTO DA COMPRA abaixo mandar), e não diga "vou simular" ou "vou encaminhar a simulação": o sistema faz isso na hora certa (a simulação quando ele pede, a entrega só depois que ele decide comprar). Não confirme de novo o que o cliente já respondeu ("só para confirmar...", "posso seguir?"): se ele disse "sim", "isso" ou a bandeira, siga.
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${emDescoberta ? "" : instrucaoDeFechamento(momento, modeloDaConversa)}
 
@@ -2127,6 +2128,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     if (intencao === "compra") resposta = tirarAdiamento(resposta);
     /* nada de "sem desconto" nem de inventar sobre preço de anúncio (Andressa e Danilo, 08 e 10/10/2026) */
     resposta = tirarFraseProibida(resposta);
+    /* "retirar ou entrega?", "só para confirmar..." e "vou simular" são do sistema, não da IA (o chefe, 23/10/2026: "a IA
+       está fazendo muita pergunta e se confunde"; Moura e Sidney, 22/10/2026) */
+    if (!(c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo)) resposta = semPerguntasDoSistema(resposta);
     /* frase de enchimento sai (Genilso, 18/10/2026: "estou aqui para ajudar" e "estarei aqui para ajudar" em dois balões seguidos) */
     resposta = resposta.map((b) => b.replace(RX_ENCHIMENTO, "").replace(/\s{2,}/g, " ").trim()).filter((b) => /\p{L}{2,}/u.test(b));
     {
@@ -2314,6 +2318,16 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       if (await vendedorRespondeuDepois(c.conversaId, c.mensagemId)) {
         await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
         return { fim: "parou", detalhe: "O vendedor respondeu o cliente enquanto a IA escrevia: a resposta dele vale", saida: { vendedorRespondeu: true } };
+      }
+    }
+    /* um vendedor assumiu enquanto a IA escrevia (Nay, 22/10/2026: o Administrador assumiu às 20:39 e a resposta da IA saiu
+       no mesmo minuto): a conversa é dele, a IA não manda mais nada. Vale para cada bloco. A própria IA passando para a
+       equipe (pipe.humano, avaliação, não é cliente) põe em Humano antes de mandar o aviso: esse segue. */
+    if (!c.pipe?.humano && !c.avaliacao && !c.naoCliente) {
+      const [agoraCv] = await db.select({ modo: schema.conversas.modo }).from(schema.conversas).where(eq(schema.conversas.id, c.conversaId)).limit(1);
+      if (agoraCv?.modo === "humano") {
+        await db.update(schema.conversas).set({ iaDigitandoAte: null }).where(eq(schema.conversas.id, c.conversaId));
+        return { fim: "parou", detalhe: "Um vendedor assumiu a conversa enquanto a IA escrevia: a IA não responde", saida: { vendedorAssumiu: true } };
       }
     }
     const texto = c.blocos[c.indice];
