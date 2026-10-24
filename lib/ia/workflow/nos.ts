@@ -1260,7 +1260,8 @@ const pipeInicial = (mensagemCliente: string, deps: Deps): CtxPipeline => ({ men
    pergunta do cliente, a resposta dela vai antes, só com o que está no catálogo e na base; sem o dado, a equipe confirma. */
 async function comPerguntasSoltas(c: CtxWorkflow, out: ResultadoNo<CtxWorkflow>): Promise<ResultadoNo<CtxWorkflow>> {
   const pipe = out.ctx?.pipe;
-  if (!pipe?.texto || pipe.humano || pipe.texto !== pipe.textoCatalogo) return out;
+  /* "Ainda tem a preta? Uma grandona": as fotos do "É alguma dessas?" já respondem (Simulador, conv 490, 24/10/2026) */
+  if (!pipe?.texto || pipe.humano || pipe.texto !== pipe.textoCatalogo || (out.saida as { fotoDoCliente?: string[] } | undefined)?.fotoDoCliente?.length) return out;
   const midia = out.ctx?.midia;
   const tudo = [pipe.texto, ...(midia?.itens.map((i) => i.legenda) ?? []), midia?.depois ?? ""].join("\n\n");
   const faltam = perguntasSemResposta(semAberturaDoSite(c.textoBuffer), tudo).slice(0, 2);
@@ -2170,7 +2171,10 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
        aparece na conversa, a foto da cor e o vídeo. Resposta-padrão (confirmar, fora do horário) não leva. */
     const respostaDaIa = !!c.pipe?.texto && ![TEXTO_FORA_HORARIO, TEXTO_CONFIRMAR, TEXTO_TRANSFERENCIA].includes(c.pipe.texto);
     /* o cliente pediu (mesmo sem arquivo para mandar): vale o que a IA já sabia ao escrever */
-    let midia: PlanoMidia | null = intencao === "compra" ? c.midia : null;
+    /* fotos que o próprio sistema escolheu com o texto dele ("pode ser uma dessas:") vão em qualquer intenção (Simulador,
+       conv 490, 24/10/2026: "Ainda tem a preta? Uma grandona" recebeu só o texto, sem as fotos) */
+    const midiaDoSistema = !!c.pipe?.texto && c.pipe.texto === c.pipe.textoCatalogo && !!c.midia?.itens.length;
+    let midia: PlanoMidia | null = intencao === "compra" || midiaDoSistema ? c.midia : null;
     const jaEnviadas = await midiasJaEnviadas(c.conversaId);
     /* a resposta apresenta 2 ou 3 motos e o pedido era de OUTRA (teste real de 06/10/2026: "uma opção mais em conta" mandou a T3):
        vale o que a resposta apresenta */
