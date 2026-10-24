@@ -735,7 +735,7 @@ async function agendarCombinado(c: CtxWorkflow, p: { clienteId: number; negocioI
 async function salvarDadosDoPedido(c: CtxWorkflow, clienteId: number | null, negocioId: number | null) {
   if (!clienteId || (c.momento !== "mandou_dados" && c.momento !== "dados_parciais")) return null;
   const d = lerDadosDoCliente(c.textoBuffer);
-  const modo = pediuDadosDeRetirada(c.ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
+  const modo = pediuDadosDeRetirada(listaDeDadosPedida(c.ultimaDaLoja, c.memoria.historico)) ? ("retirada" as const) : ("entrega" as const);
   const fatos = { ...c.memoria.fatos, ...c.aprendido.fatos };
   const cidade = d.cidade ?? fatos.cidade ?? null;
   const [cli] = await db.select().from(schema.clientes).where(eq(schema.clientes.id, clienteId)).limit(1);
@@ -1194,6 +1194,12 @@ function jaPerguntouONome(historico: string | null | undefined) {
 }
 
 /** As últimas falas da loja (IA ou vendedor), de trás para frente, sem parar no cliente: de que motos se falou por último. */
+/** A fala da loja com a lista de dados: a última, ou uma das anteriores quando o cliente perguntou algo no meio (a
+ *  retirada pede "que dia você pretende vir"; sem isso, o modo ficava entrega). */
+function listaDeDadosPedida(ultimaDaLoja: string, historico: string | null | undefined) {
+  if (/nome completo/i.test(ultimaDaLoja)) return ultimaDaLoja;
+  return ultimasFalasDaLoja(historico, 4).split(/\n(?=(?:Agente IA|Vendedor):)/).reverse().find((b) => /nome completo/i.test(b)) ?? ultimaDaLoja;
+}
 function ultimasFalasDaLoja(historico: string | null | undefined, n: number) {
   const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^(Agente IA|Vendedor):/.test(b));
   return blocos.slice(-n).join("\n");
@@ -1259,17 +1265,19 @@ async function comPerguntasSoltas(c: CtxWorkflow, out: ResultadoNo<CtxWorkflow>)
   const tudo = [pipe.texto, ...(midia?.itens.map((i) => i.legenda) ?? []), midia?.depois ?? ""].join("\n\n");
   const faltam = perguntasSemResposta(semAberturaDoSite(c.textoBuffer), tudo).slice(0, 2);
   if (!faltam.length) return out;
-  const extra = await responderPerguntasSoltas(faltam, pipe.deps).catch(() => faltam.map(textoConfirmoComEquipe).join("\n"));
+  const extra = await responderPerguntasSoltas(faltam, pipe.deps, out.ctx?.modeloDaConversa ?? c.modeloDaConversa ?? null).catch(() => faltam.map(textoConfirmoComEquipe).join("\n"));
   const texto = `${extra}\n\n${pipe.texto}`;
   return { ...out, ctx: { ...out.ctx, pipe: { ...pipe, texto, textoCatalogo: texto } }, saida: { ...((out.saida as object) ?? {}), perguntasSoltas: faltam, respostaSolta: extra } };
 }
 
-async function responderPerguntasSoltas(perguntas: string[], deps: Deps): Promise<string> {
+/* `modelo`: a moto da conversa. "Quanto tempo de garantia?" não diz qual (Simulador, 24/10/2026: a M6 tem garantia de 1
+   ano no catálogo e a resposta foi "confirmo com a equipe") */
+async function responderPerguntasSoltas(perguntas: string[], deps: Deps, modelo: string | null): Promise<string> {
   const semDado = perguntas.map(textoConfirmoComEquipe).join("\n");
   const { resposta } = await gerarObjeto({
     schema: z.object({ resposta: z.string() }),
     sistema: `${deps.promptSistema}\n\n# CATÁLOGO E BASE DA LOJA (a única fonte)\n${deps.fontesAutorizadas.join("\n\n")}`,
-    prompt: `Responda SÓ ${perguntas.length > 1 ? "estas perguntas" : "esta pergunta"} do cliente, uma frase curta para cada, sem cumprimentar e sem fazer pergunta: ${perguntas.map((p) => `"${p}"`).join(" e ")}. Use só o que está no CATÁLOGO E BASE DA LOJA. Se a informação não estiver lá, escreva exatamente: ${semDado}`,
+    prompt: `${modelo ? `O cliente está falando da *${modelo}*: pergunta sem o nome da moto é sobre ela. ` : ""}Responda SÓ ${perguntas.length > 1 ? "estas perguntas" : "esta pergunta"} do cliente, uma frase curta para cada, sem cumprimentar e sem fazer pergunta: ${perguntas.map((p) => `"${p}"`).join(" e ")}. Use só o que está no CATÁLOGO E BASE DA LOJA. Se a informação não estiver lá, escreva exatamente: ${semDado}`,
     maxTokens: 250,
   });
   const t = resposta.trim();
@@ -1483,7 +1491,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     /* tem visita marcada na agenda (não só nas últimas mensagens: os follow-ups empurram o "Agendado" para trás) */
     const jaAgendou = RX_AGENDADO.test(ultimasFalasDaLoja(c.memoria.historico, 3)) || !!(await visitaAbertaDaConversa(c.conversaId));
     const falaDeVisita = RX_QUER_VISITAR.test(c.textoBuffer) || RX_PEDIU_HORARIO_VISITA.test(ultimaDaLoja) || RX_CONVIDOU_VISITA.test(ultimaDaLoja) || jaAgendou || (RX_PERGUNTA_ENDERECO.test(c.textoBuffer) && intencao !== "assistencia");
-    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes), jaAgendou }) : null;
+    const momento = intencao === "compra" || falaDeVisita ? detectarMomento({ textoCliente: c.textoBuffer, ultimaDaLoja, conheceModelo: !!modeloDaConversa, objecoesAntes: objecoesDePrecoAntes(leadAntes), jaAgendou, pediuDadosAntes: /nome completo/i.test(ultimasFalasDaLoja(c.memoria.historico, 4)) }) : null;
     const horario = await lerHorario();
     const agora = agoraNaLoja();
     const aberta = lojaAberta(horario);
@@ -1893,7 +1901,7 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, visitaAgendada: v.quando, mandarLocal: !!v.quando, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, momento, visita: v } };
     }
     if (momento === "mandou_dados") {
-      const modo = pediuDadosDeRetirada(ultimaDaLoja) ? ("retirada" as const) : ("entrega" as const);
+      const modo = pediuDadosDeRetirada(listaDeDadosPedida(ultimaDaLoja, c.memoria.historico)) ? ("retirada" as const) : ("entrega" as const);
       const nome = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
       /* retirada com dia e hora ("amanhã às 10h"): confirma a data certa e promete o lembrete só se ele vai sair (dono, 15/10/2026) */
       const dados = lerDadosDoCliente(c.textoBuffer);

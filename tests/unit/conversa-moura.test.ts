@@ -23,10 +23,20 @@ test("'Fica alta a parcela, depois vejo melhor' não é 'sim' ao 'Posso separar 
   assert.equal(m("Sim, pode separar", simulacao), "decidido");
 });
 
+test("'quero a M6 no Pix, pode separar' depois de 'simular em mais vezes' é decisão, não 6 parcelas", () => {
+  const loja = "Entendo, Moura! Vamos achar um jeito que caiba no seu bolso 😊\n• No *Pix ou dinheiro* a *M6* sai por R$ 11.900,00\n• Dá pra simular em mais vezes, com a parcela menor (até 21 vezes)\nQual dessas fica melhor pra você?";
+  assert.equal(m("Pensei melhor, quero a M6 no Pix, pode separar", loja), "decidido");
+  assert.equal(m("em 18", loja), "pediu_simulacao");
+});
+
 test("pergunta não é o nome completo da lista de dados", () => {
   const lista = "Show! Pra combinar a entrega, me manda só:\n• Seu nome completo\n• Endereço (rua, número, bairro e cidade)\n• Que dia e horário você pode receber?";
   assert.notEqual(m("Só me passe quantos anos de garantia", lista), "mandou_dados");
   assert.equal(m("José Luiz de Moura neto\nRua 07 bairro novo\nCarpina-PE\nQualquer horário", lista), "mandou_dados");
+  /* os dados chegaram depois de uma pergunta no meio: a lista não é mais a última fala da loja */
+  const dados = "José Luiz de Moura Teste\nRua 07, 12, bairro novo, Goiana\nNo período da tarde a partir das 14:30";
+  assert.equal(detectarMomento({ textoCliente: dados, ultimaDaLoja: "A *M6* tem 1 ano de garantia, Moura 😊", conheceModelo: true, pediuDadosAntes: true }), "mandou_dados");
+  assert.notEqual(detectarMomento({ textoCliente: dados, ultimaDaLoja: "A *M6* tem 1 ano de garantia, Moura 😊", conheceModelo: true }), "mandou_dados");
 });
 
 test("a IA não pergunta retirar ou entrega, não reconfirma e não promete simular", () => {

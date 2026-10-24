@@ -89,7 +89,7 @@ export function ehRemarcacao(texto: string) {
   return RX_FALA_DE_IR.test(t) || t.replace(RX_SO_QUANDO, " ").replace(/\s+/g, "").length <= 2;
 }
 
-export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number; jaAgendou?: boolean }): Momento | null {
+export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string; conheceModelo: boolean; agora?: Date; objecoesAntes?: number; jaAgendou?: boolean; pediuDadosAntes?: boolean }): Momento | null {
   const t = semAcento(p.textoCliente);
   const loja = semAcento(p.ultimaDaLoja);
   /* respondendo a lista de dados (com "•"; a pergunta da visita também fala em nome completo, mas é agenda) */
@@ -97,6 +97,10 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
     if (RX_CPF.test(t) || nomeCompletoDito(p.textoCliente)) return "mandou_dados";
     if (RX_OUTRO_DADO.test(t) || t.split(/\n/).filter((l) => l.trim()).length >= 3) return "dados_parciais";
   }
+  /* mandou os dados depois de uma pergunta no meio (Simulador, 24/10/2026: lista, "Só me passe quantos anos de garantia",
+     resposta da garantia e só então nome e endereço; a IA respondeu "anotei" e nada foi salvo): nome completo e endereço
+     em linhas separadas são os dados, mesmo sem a lista ser a última fala da loja */
+  if (p.pediuDadosAntes && nomeCompletoDito(p.textoCliente) && RX_OUTRO_DADO.test(t) && t.split(/\n/).filter((l) => l.trim()).length >= 2) return "mandou_dados";
   /* "pode separar pra mim ver amanhã", "vou aí amanhã pra ver a moto": é visita, não compra fechada (Nay, 22/10/2026:
      recebeu "Parabéns pela escolha 🎉", "retirar ou entrega?" e a lista de nome completo, dia e horário) */
   if (RX_PRA_VER.test(t) && (RX_SEPARAR.test(t) || RX_QUER_VISITAR.test(p.textoCliente) || RX_PEDIU_ESCOLHA.test(loja))) {
@@ -231,8 +235,9 @@ const RX_PARCELAS_MAXIMO =
 const RX_DEBITO = /(?<![a-z])debito(?![a-z])/;
 /* respondendo "em quantas vezes?": o número sozinho vale ("em 21", "21", "até 18 no visa"; Leandro, 11/10/2026).
    Dinheiro, porcentagem, dias, horas, km e anos não contam */
+/* número grudado em letra é nome de moto, não parcela (Simulador, 24/10/2026: "quero a M6 no Pix" virou 6 parcelas) */
 const RX_PARCELAS_SOLTAS =
-  /(?<![\d,.$]|\$\s)(?:(?:em|ate)\s+)?(\d{1,2})(?![\d%]|[.,]\d)(?!\s*(?:mil|reais|real|por\s*cento|dias?|horas?|h|min\w*|km|anos?|kg|de entrada)(?![a-z]))/g;
+  /(?<![\d,.$a-z]|\$\s)(?:(?:em|ate)\s+)?(\d{1,2})(?![\d%a-z]|[.,]\d)(?!\s*(?:mil|reais|real|por\s*cento|dias?|horas?|h|min\w*|km|anos?|kg|de entrada)(?![a-z]))/g;
 
 /** Parcelas e bandeira que o cliente escreveu ("12x no Visa", "em 10 vezes", "doze vezes", "master", "no débito").
  *  `todas` = todas as quantidades citadas ("12x ou 18x"), na ordem, sem repetir; `parcelas` = a primeira.
