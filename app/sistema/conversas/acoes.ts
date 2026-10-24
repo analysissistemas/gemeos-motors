@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { autorizar } from "@/lib/auth/dal";
 import { executar, ErroRegra } from "@/lib/acao";
-import { STATUS_CONVERSA, type StatusConversa } from "@/lib/dominio";
+import { pode, STATUS_CONVERSA, type StatusConversa } from "@/lib/dominio";
 import { contextoDaConversa, listarConversas, mensagensDaConversa, notasDaConversa, temMaisAntigas, type FiltroConversa } from "@/lib/consultas/conversas";
 import {
   abrirConversaComNumero,
@@ -143,6 +143,18 @@ export async function acaoAvaliarIa(mensagemId: number, nota: string, motivo: st
     const u = await autorizar("conversas.ver");
     const { avaliarRespostaDaIa } = await import("@/lib/ia/avaliacao-ia");
     return avaliarRespostaDaIa(u, z.number().int().positive().parse(mensagemId), z.enum(["legal", "nao_legal"]).parse(nota), z.string().max(500).nullable().parse(motivo));
+  });
+}
+
+/** "Reportar conversa": o erro da conversa vai para a fila de Melhorias (no lugar do print no chat). */
+export async function acaoReportarConversa(conversaId: number, descricao: string) {
+  return executar(async () => {
+    const u = await autorizar("conversas.ver");
+    const { reportarConversa } = await import("@/lib/ia/chamados");
+    const admin = pode(u.papel, "config.gerenciar");
+    const id = await reportarConversa({ ...u, admin }, z.number().int().positive().parse(conversaId), z.string().max(1000).parse(descricao));
+    revalidatePath("/sistema/melhorias");
+    return { id, admin };
   });
 }
 

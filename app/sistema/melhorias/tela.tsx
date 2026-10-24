@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, FlaskConical, Lightbulb, RotateCcw, ScanSearch, X } from "lucide-react";
+import { Check, ChevronDown, FlaskConical, Lightbulb, RotateCcw, ScanSearch, Star, X } from "lucide-react";
 import type { ChamadoTela, RelatorioTela } from "@/lib/ia/chamados";
 import { AREAS_SUGESTAO } from "@/lib/ia/analista-regras";
 import { aplicaSozinho, STATUS_CHAMADO, TIPOS_CHAMADO, type PropostaChamado, type StatusChamado, type TipoChamado } from "@/lib/ia/chamados-regras";
@@ -14,10 +14,13 @@ import { Botao } from "@/components/ui/botao";
 import { AreaTexto, Campo, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { acaoDesbloquearConfig } from "@/app/sistema/configuracoes/desbloqueio";
-import { acaoAprovarChamado, acaoConcluirPlano, acaoDesfazerChamado, acaoGerarChamados, acaoRecusarChamado, acaoTreinarChamado } from "./acoes";
+import { acaoAprovarChamado, acaoConcluirPlano, acaoDesfazerChamado, acaoGerarChamados, acaoPrioridade, acaoRecusarChamado, acaoTreinarChamado } from "./acoes";
 import type { TreinoSonix } from "@/lib/ia/sonix-treino";
 
 type Aba = "relatorio" | "chamados" | "plano" | "historico";
+/* plano de ação em duas filas: o que se corrige no sistema (código/IA) e o que é da loja (estoque, equipe, preço) */
+type FiltroPlano = "todos" | "sistema" | "loja";
+const doSistema = (c: ChamadoTela) => c.area === "sistema" || c.area === "ia";
 const fDia = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "2-digit" });
 const nomeDia = (d: string) => fDia.format(new Date(`${d}T12:00:00Z`)).replace(".", "");
 const minutos = (m: number | null) => (m == null ? "—" : m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
@@ -40,6 +43,8 @@ export function TelaMelhorias({
   const plano = chamados.filter((c) => c.status === "plano");
   const historico = chamados.filter((c) => !["novo", "plano"].includes(c.status));
   const [aba, setAba] = useState<Aba>(novos.length ? "chamados" : "relatorio");
+  const [filtro, setFiltro] = useState<FiltroPlano>("todos");
+  const planoVisto = plano.filter((c) => filtro === "todos" || (filtro === "sistema") === doSistema(c));
   const [gerando, iniciarGerar] = useTransition();
   /* já tem chamado do dia esperando: o botão refaz (troca os não decididos) em vez de só somar */
   const refazer = novos.length > 0;
@@ -109,7 +114,20 @@ export function TelaMelhorias({
       {aba === "plano" &&
         (plano.length ? (
           <div className="flex flex-col gap-3">
-            {plano.map((c) => (
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["todos", "Tudo", plano.length],
+                  ["sistema", "Corrigir no sistema", plano.filter(doSistema).length],
+                  ["loja", "Loja e equipe", plano.filter((c) => !doSistema(c)).length],
+                ] as const
+              ).map(([id, rotulo, n]) => (
+                <Botao key={id} tamanho="sm" variante={filtro === id ? "primario" : "fantasma"} onClick={() => setFiltro(id)}>
+                  {rotulo} <span className="num ml-1 opacity-70">{n}</span>
+                </Botao>
+              ))}
+            </div>
+            {planoVisto.map((c) => (
               <ItemPlano key={c.id} c={c} />
             ))}
           </div>
@@ -282,6 +300,7 @@ function CartaoChamado({ c, liberadaIa, comSenha }: { c: ChamadoTela; liberadaIa
           {c.clientes} cliente{c.clientes > 1 ? "s" : ""}
         </Selo>
         <span className="ml-auto text-[11.5px] text-ink-3">#{c.id} · {dataHora(c.criadoEm)}</span>
+        <BotaoPrioridade c={c} />
       </div>
       <h3 className="text-[16px] font-semibold">{c.titulo}</h3>
       <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{c.problema}</p>
@@ -364,6 +383,30 @@ function Provas({ c }: { c: ChamadoTela }) {
   );
 }
 
+/** Estrela: o dono marca os piores do dia; eles sobem para o topo da fila. */
+function BotaoPrioridade({ c }: { c: ChamadoTela }) {
+  const router = useRouter();
+  const [pendente, iniciar] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pendente}
+      title={c.prioridade ? "Tirar a prioridade" : "Marcar como prioridade (sobe para o topo)"}
+      aria-pressed={c.prioridade}
+      onClick={() =>
+        iniciar(async () => {
+          const r = await acaoPrioridade(c.id, !c.prioridade);
+          if (!r.ok) return void toast.error(r.erro);
+          router.refresh();
+        })
+      }
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium transition ${c.prioridade ? "bg-[color-mix(in_oklab,var(--marca)_25%,transparent)] text-ink" : "text-ink-3 hover:text-ink"}`}
+    >
+      <Star className={`size-3.5 ${c.prioridade ? "fill-current" : ""}`} /> {c.prioridade ? "Prioridade" : "Priorizar"}
+    </button>
+  );
+}
+
 function ItemPlano({ c }: { c: ChamadoTela }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
@@ -377,6 +420,7 @@ function ItemPlano({ c }: { c: ChamadoTela }) {
           <span className="text-[11.5px] text-ink-3">
             #{c.id} · aprovado {c.decididoEm ? dataHora(c.decididoEm) : ""} · {c.clientes} cliente{c.clientes > 1 ? "s" : ""}
           </span>
+          <BotaoPrioridade c={c} />
         </div>
         <p className="font-semibold">{c.titulo}</p>
         <p className="mt-1 text-[13.5px] leading-relaxed">{c.proposta.acao}</p>

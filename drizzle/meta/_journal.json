@@ -337,6 +337,13 @@
       "when": 1792601481351,
       "tag": "0047_garantias_novos_modelos",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792800465493,
+      "tag": "0048_chamado_prioridade",
+      "breakpoints": true
     }
   ]
 }

@@ -985,6 +985,8 @@ export const chamadosMelhoria = pgTable(
     /* conversas diferentes que mostram o problema */
     clientes: integer().notNull().default(0),
     status: text().notNull().default("novo"), // novo | aplicado | plano | feito | recusado | desfeito
+    /* o dono marca os piores do dia: sobem para o topo da fila (plano de 23/10/2026) */
+    prioridade: boolean().notNull().default(false),
     resultado: jsonb().$type<Record<string, unknown>>(),
     observacao: text(),
     decididoPor: integer().references(() => usuarios.id, { onDelete: "set null" }),

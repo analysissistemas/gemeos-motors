@@ -8,7 +8,7 @@ import { autorizar } from "@/lib/auth/dal";
 import { autorizarConfig } from "@/lib/auth/desbloqueio";
 import { executar, ErroRegra } from "@/lib/acao";
 import { IaIndisponivel } from "@/lib/ia/cliente";
-import { aprovarChamado, refazerChamados, concluirPlano, desfazerChamado, diasComFichas, gerarChamados, listarChamados, recusarChamado, relatorioDoDia } from "@/lib/ia/chamados";
+import { aprovarChamado, refazerChamados, concluirPlano, desfazerChamado, diasComFichas, gerarChamados, listarChamados, marcarPrioridade, recusarChamado, relatorioDoDia } from "@/lib/ia/chamados";
 import { aplicaSozinho, type TipoChamado } from "@/lib/ia/chamados-regras";
 
 /* Tela Melhorias (só administrador). O que muda a IA (aprovar ou desfazer resposta e regra) pede a mesma senha da
@@ -73,6 +73,16 @@ export async function acaoConcluirPlano(id: number, observacao?: string) {
     revalidatePath("/sistema/melhorias");
     return null;
   }, "Marcado como feito");
+}
+
+/** Marca (ou tira) a prioridade: os piores do dia sobem para o topo da fila. */
+export async function acaoPrioridade(id: number, prioridade: boolean) {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    await marcarPrioridade(u, z.number().int().positive().parse(id), z.boolean().parse(prioridade));
+    revalidatePath("/sistema/melhorias");
+    return null;
+  }, prioridade ? "Marcado como prioridade" : "Prioridade tirada");
 }
 
 /** Gera os chamados de um dia agora, sem esperar as 18:45; `refazer` troca todos os não decididos (últimos 7 dias). */

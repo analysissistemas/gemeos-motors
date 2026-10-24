@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleAlert, Clock, Copy, FileText, Info, MapPin, MessageCircle, Phone, Reply, StickyNote, ThumbsDown, ThumbsUp, Trash2, UserCheck, UserRound } from "lucide-react";
+import { ArrowDown, ArrowLeft, Ban, Bot, Check, CheckCheck, ChevronDown, CircleAlert, Clock, Copy, FileText, Flag, Info, MapPin, MessageCircle, Phone, Reply, StickyNote, ThumbsDown, ThumbsUp, Trash2, UserCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { MensagemChat, NotaChat } from "@/lib/consultas/conversas";
 import type { ContextoConversa } from "@/lib/consultas/conversas";
@@ -9,7 +9,8 @@ import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Botao } from "@/components/ui/botao";
 import { AreaTexto } from "@/components/ui/campos";
-import { acaoAvaliarIa } from "@/app/sistema/conversas/acoes";
+import { acaoAvaliarIa, acaoReportarConversa } from "@/app/sistema/conversas/acoes";
+import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { AudioMensagem } from "./audio-mensagem";
 import { Compositor, type EnvioChat, type Resposta } from "./compositor";
 import { comLinks, ETIQUETA_ETAPA, rotuloDia } from "./util";
@@ -184,6 +185,7 @@ export function Chat({
             <UserCheck className="size-4" /> Assumir
           </Botao>
         )}
+        <ReportarConversa conversaId={c.id} />
         <button className={cn("grid size-10 place-items-center rounded-full text-ink-2 hover:bg-trilho", painelAberto && "xl:bg-trilho xl:text-ink")} onClick={aoInfo} aria-label={painelAberto ? "Recolher dados do cliente e negócio" : "Mostrar dados do cliente e negócio"} aria-expanded={painelAberto}>
           <Info className="size-5" />
         </button>
@@ -722,5 +724,39 @@ function ModoAtendimento({ modo, aoMudar }: { modo: string; aoMudar: (m: "ia" | 
         </button>
       ))}
     </div>
+  );
+}
+
+/** "Reportar conversa" (fila única de Melhorias, 23/10/2026): o erro da conversa vai para Melhorias, no lugar do print
+ *  no chat. Do administrador entra direto no plano de ação com prioridade; do vendedor, espera o dono aprovar. */
+function ReportarConversa({ conversaId }: { conversaId: number }) {
+  const [aberto, setAberto] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [pendente, iniciar] = useTransition();
+  const enviar = () =>
+    iniciar(async () => {
+      const r = await acaoReportarConversa(conversaId, texto);
+      if (!r.ok) return void toast.error(r.erro);
+      toast.success(r.dados.admin ? `Foi para Melhorias → Plano de ação, com prioridade (#${r.dados.id})` : `Foi para Melhorias, para o dono aprovar (#${r.dados.id})`);
+      setTexto("");
+      setAberto(false);
+    });
+  return (
+    <>
+      <button className="grid size-10 place-items-center rounded-full text-ink-2 hover:bg-trilho" onClick={() => setAberto(true)} aria-label="Reportar um erro nesta conversa" title="Reportar um erro nesta conversa">
+        <Flag className="size-5" />
+      </button>
+      <Dialogo aberto={aberto} aoMudar={setAberto} titulo="Reportar esta conversa" descricao="O que deu errado? Vai para a aba Melhorias, junto com a conversa, para ser corrigido." largura="sm">
+        <AreaTexto rows={4} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder='Ex.: a cliente escreveu "Tnk 11" (a Tank AG11) e a IA entendeu orçamento de 11 mil' autoFocus />
+        <RodapeDialogo>
+          <Botao type="button" variante="fantasma" onClick={() => setAberto(false)}>
+            Cancelar
+          </Botao>
+          <Botao type="button" variante="primario" carregando={pendente} disabled={texto.trim().length < 10} onClick={enviar}>
+            <Flag className="size-4" /> Reportar
+          </Botao>
+        </RodapeDialogo>
+      </Dialogo>
+    </>
   );
 }

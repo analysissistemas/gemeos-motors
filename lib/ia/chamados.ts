@@ -322,10 +322,53 @@ export async function concluirPlano(u: Quem, id: number, observacao?: string | n
   await registrarLog(u, { acao: "melhoria.feita", entidade: "chamado_melhoria", entidadeId: id, descricao: `Marcou como feito o item #${id} do plano de ação: ${c.titulo}` });
 }
 
+/* ---------------- fila única (plano de 23/10/2026) ----------------
+   Os erros chegavam por print no chat, pelo Analista e pelo "Não legal". Agora tudo vira chamado aqui: o dono marca
+   os piores do dia (prioridade, vão para o topo) e reporta uma conversa inteira direto do Atendimento. */
+
+export async function marcarPrioridade(u: Quem, id: number, prioridade: boolean) {
+  const c = await buscar(id);
+  await db.update(C).set({ prioridade, atualizadoEm: new Date() }).where(eq(C.id, id));
+  await registrarLog(u, { acao: "melhoria.prioridade", entidade: "chamado_melhoria", entidadeId: id, descricao: `${prioridade ? "Marcou" : "Tirou"} a prioridade do chamado #${id}: ${c.titulo}` });
+}
+
+/** "Reportar conversa" no Atendimento: o erro da conversa inteira (não só de uma resposta) vira chamado para corrigir
+ *  no sistema. Do administrador vai direto para o plano, já com prioridade; do vendedor, espera a aprovação do dono. */
+export async function reportarConversa(u: Quem & { admin: boolean }, conversaId: number, descricao: string) {
+  const texto = descricao.replace(/\s+/g, " ").trim();
+  if (texto.length < 10) throw new ErroRegra("Conte em uma frase o que deu errado na conversa.");
+  const [cv] = await db.select({ contato: schema.conversas.contatoNome }).from(schema.conversas).where(eq(schema.conversas.id, conversaId)).limit(1);
+  if (!cv) throw new ErroRegra("Conversa não encontrada.");
+  const [ultima] = await db
+    .select({ id: schema.mensagens.id, conteudo: schema.mensagens.conteudo, criadoEm: schema.mensagens.criadoEm })
+    .from(schema.mensagens)
+    .where(and(eq(schema.mensagens.conversaId, conversaId), eq(schema.mensagens.direcao, "outgoing")))
+    .orderBy(desc(schema.mensagens.id))
+    .limit(1);
+  const [c] = await db
+    .insert(C)
+    .values({
+      tipo: "plano_acao",
+      area: "sistema",
+      titulo: `Conversa reportada: ${texto}`.slice(0, 120),
+      problema: `${u.nome} reportou a conversa com ${cv.contato ?? "o cliente"}: ${texto}`,
+      proposta: { acao: `Corrigir no sistema: ${texto}` },
+      evidencias: [{ conversaId, dia: diaDaLoja(ultima?.criadoEm ? new Date(ultima.criadoEm) : new Date()), mensagemId: ultima?.id ?? null, trecho: anonimizar(ultima?.conteudo ?? "").slice(0, 300), contato: cv.contato }],
+      clientes: 1,
+      status: u.admin ? "plano" : "novo",
+      prioridade: u.admin,
+      decididoPor: u.admin ? u.id : null,
+      decididoEm: u.admin ? new Date() : null,
+    })
+    .returning({ id: C.id });
+  await registrarLog(u, { acao: "melhoria.reportada", entidade: "conversa", entidadeId: conversaId, descricao: `Reportou a conversa para Melhorias (chamado #${c.id}): ${texto}`, dados: { chamadoId: c.id } });
+  return c.id;
+}
+
 /* ---------------- leitura (tela Melhorias) ---------------- */
 
 export async function listarChamados() {
-  return db.select().from(C).orderBy(desc(C.clientes), desc(C.atualizadoEm)).limit(300);
+  return db.select().from(C).orderBy(desc(C.prioridade), desc(C.clientes), desc(C.atualizadoEm)).limit(300);
 }
 
 export type ChamadoTela = Awaited<ReturnType<typeof listarChamados>>[number];
