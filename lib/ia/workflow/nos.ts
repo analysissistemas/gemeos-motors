@@ -65,7 +65,8 @@ import { ROTULO_TEMPERATURA, temTroca, temperaturaDaIntencao, temperaturaDoLead,
 import { mensagemSistema } from "@/lib/mensageria/anotacoes";
 import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
-import type { ImplNo } from "./motor";
+import type { ImplNo, ResultadoNo } from "./motor";
+import { instrucaoVariasPerguntas, perguntasSemResposta, textoConfirmoComEquipe } from "@/lib/ia/perguntas-soltas";
 import { corNoTexto, PREFIXO_MODELO_NA_FOTO, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
@@ -1248,6 +1249,34 @@ async function montarDeps(c: CtxWorkflow, gerar: Deps["gerar"]): Promise<Deps> {
 
 const pipeInicial = (mensagemCliente: string, deps: Deps): CtxPipeline => ({ mensagemCliente, deps, saida: null, estoque: null, texto: null, humano: false, motivo: null, violacoes: [], chamouModelo: false, chamouEstoque: false });
 
+/* Pergunta solta (plano de 23/10/2026; Sidney, 22/10/2026: "Ela vem com porta trecos?" veio junto com "Entrega" e só a
+   entrega teve resposta). Quando a resposta é texto pronto do sistema (entrega, simulação, indicação...) e não tocou numa
+   pergunta do cliente, a resposta dela vai antes, só com o que está no catálogo e na base; sem o dado, a equipe confirma. */
+async function comPerguntasSoltas(c: CtxWorkflow, out: ResultadoNo<CtxWorkflow>): Promise<ResultadoNo<CtxWorkflow>> {
+  const pipe = out.ctx?.pipe;
+  if (!pipe?.texto || pipe.humano || pipe.texto !== pipe.textoCatalogo) return out;
+  const midia = out.ctx?.midia;
+  const tudo = [pipe.texto, ...(midia?.itens.map((i) => i.legenda) ?? []), midia?.depois ?? ""].join("\n\n");
+  const faltam = perguntasSemResposta(semAberturaDoSite(c.textoBuffer), tudo).slice(0, 2);
+  if (!faltam.length) return out;
+  const extra = await responderPerguntasSoltas(faltam, pipe.deps).catch(() => faltam.map(textoConfirmoComEquipe).join("\n"));
+  const texto = `${extra}\n\n${pipe.texto}`;
+  return { ...out, ctx: { ...out.ctx, pipe: { ...pipe, texto, textoCatalogo: texto } }, saida: { ...((out.saida as object) ?? {}), perguntasSoltas: faltam, respostaSolta: extra } };
+}
+
+async function responderPerguntasSoltas(perguntas: string[], deps: Deps): Promise<string> {
+  const semDado = perguntas.map(textoConfirmoComEquipe).join("\n");
+  const { resposta } = await gerarObjeto({
+    schema: z.object({ resposta: z.string() }),
+    sistema: `${deps.promptSistema}\n\n# CATÁLOGO E BASE DA LOJA (a única fonte)\n${deps.fontesAutorizadas.join("\n\n")}`,
+    prompt: `Responda SÓ ${perguntas.length > 1 ? "estas perguntas" : "esta pergunta"} do cliente, uma frase curta para cada, sem cumprimentar e sem fazer pergunta: ${perguntas.map((p) => `"${p}"`).join(" e ")}. Use só o que está no CATÁLOGO E BASE DA LOJA. Se a informação não estiver lá, escreva exatamente: ${semDado}`,
+    maxTokens: 250,
+  });
+  const t = resposta.trim();
+  const v = validarResposta(t, { promptSistema: deps.promptSistema, fontesAutorizadas: deps.fontesAutorizadas });
+  return t && v.aprovada && !afirmaDisponibilidade(t) && !afirmacoesSemFonte(t, deps.fontesAutorizadas).length ? t : semDado;
+}
+
 /* ---------------- os nós ---------------- */
 export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
   gatilho: (c) => ({ entrada: { conversa: c.conversaId, mensagem: c.mensagemId, origem: c.gatilho }, saida: { simulado: c.simulado } }),
@@ -1435,7 +1464,8 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     return { saida: { tamanho: c.textoBuffer.length, aprovada: true } };
   },
 
-  agente: async (c) => {
+  /* resposta pronta do sistema que pulou uma pergunta do cliente ganha a resposta dela (comPerguntasSoltas) */
+  agente: async (c) => comPerguntasSoltas(c, await (async (): Promise<ResultadoNo<CtxWorkflow>> => {
     const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
     /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
     const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
@@ -1508,7 +1538,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
 
 ${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
 
-# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
+${instrucaoVariasPerguntas(semAberturaDoSite(c.textoBuffer))}# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
 Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${emDescoberta ? "" : instrucaoDeFechamento(momento, modeloDaConversa)}
@@ -1889,7 +1919,7 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     if (qualificacao && pipe.humano && pipe.motivo === "modelo_pediu_transferencia" && !RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer))) pipe = { ...pipe, humano: false, motivo: null };
     if (qualificacao && !pipe.humano) return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, qualificacao, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, qualificacao: { pergunta: qualificacao.pergunta, abertura: qualificacao.abertura, necessidade } } };
     return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: segurou ? null : ultimo?.motivoTransferencia ?? (pipe.humano ? "Estoque não confirmado: um vendedor confirma" : null) }, entrada: { texto: c.textoBuffer }, saida: { ...saida, midiaPedida, momento, modeloDaConversa, ...(segurou ? { transferenciaSegurada: "fechamento em andamento: o sistema passa ao vendedor quando os dados chegarem" } : {}) } };
-  },
+  })()),
 
   trava_fatos: async (c) => {
     const pipe = c.pipe!;
