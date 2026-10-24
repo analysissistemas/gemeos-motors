@@ -46,3 +46,8 @@ test("Arine — reclamação do atendimento é reconhecida", () => {
   assert.ok(reclamouDoAtendimento("Acho que tô falando com atendente virtual. Depois passo aí pessoalmente"));
   assert.ok(!reclamouDoAtendimento("você é robô?"));
 });
+
+test("Simulador 24/10 — pagamento e entrega são compra (a IA pulava 'Quais as formas de pagamento?')", () => {
+  assert.equal(intencaoDoTexto("Boa tarde. Quais as formas de pagamento? E vocês entregam em Itambé?", NOMES), "compra");
+  assert.equal(intencaoDoTexto("Vocês fazem entrega em Goiana?", NOMES), "compra");
+});
