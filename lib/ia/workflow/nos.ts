@@ -1687,8 +1687,11 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     if (r.ctx.texto && (fotoNaMensagem || descreveSemNome)) {
       const comMidia = await motosComMidia(c);
       const precos = await motosParaIndicar(c);
-      const daConversa = modeloDaConversa && fotoNaMensagem ? comMidia.find((m) => m.nome === modeloDaConversa) : null;
-      let escolhidas: string[] = daConversa ? [daConversa.nome] : [];
+      /* foto "dessa que mandei" logo depois de a loja mostrar 2 ou 3 motos: é uma delas, não a moto da conversa (conv 487,
+         24/10/2026: cartões da T3 e da T5 RETRÔ, a IA escolheu a T3 e o cliente disse "Não é essa, é a outra") */
+      const mostradas = fotoNaMensagem ? comMidia.filter((m) => ultimaCitada([m], ultimasFalasDaLoja(c.memoria.historico, 6))).slice(0, 3) : [];
+      const daConversa = modeloDaConversa && fotoNaMensagem && mostradas.length < 2 ? comMidia.find((m) => m.nome === modeloDaConversa) : null;
+      let escolhidas: string[] = mostradas.length >= 2 ? mostradas.map((m) => m.nome) : daConversa ? [daConversa.nome] : [];
       if (!escolhidas.length) {
         const v = schema.veiculos;
         const cores = await db.select({ modeloId: v.modeloId, cor: v.cor }).from(v).where(and(eq(v.status, "disponivel"), c.conversa?.demo ? undefined : eq(v.teste, false)));
@@ -1700,6 +1703,20 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
         escolhidas = (candidatosPorPista(motos, [escritoPeloCliente(c.textoBuffer), leadAntes.replace(/^Lead:\s*/gm, "")].join("\n")) ?? []).map((m) => m.nome);
       }
       const jaEnviadas = await midiasJaEnviadas(c.conversaId);
+      /* a foto já foi há pouco (não vai de novo): sem "Olha ela aqui:" sem foto nenhuma (conv 487, 24/10/2026: saiu só
+         "Recebi a sua foto! Olha ela aqui:" e "É essa?", e o cliente achou que era a foto dele de volta). Nome e preço em texto */
+      const jaFoi = (nome: string) => !!comMidia.find((x) => x.nome === nome)?.fotos.some((f) => jaEnviadas.includes(f.url));
+      if (escolhidas.length && escolhidas.some(jaFoi)) {
+        const abre = fotoNaMensagem ? "Recebi a sua foto! 😊 " : "";
+        const valor = (nome: string) => precos.find((x) => x.nome === nome)?.preco;
+        const nome0 = escolhidas[0];
+        const texto =
+          escolhidas.length === 1
+            ? `${abre}${artigo(nome0) === "o" ? "O" : "A"} *${nome0}*, que te mandei ali em cima 👆${valor(nome0) ? `, sai por *${reais(valor(nome0)!)}*` : ""}. É ${artigo(nome0) === "o" ? "esse" : "essa"}? 😊`
+            : `${abre}${fotoNaMensagem ? "Pela foto eu não consigo ter certeza de qual é. Das que te mandei ali em cima 👆:" : "Pelo que você falou, pode ser uma das que te mandei ali em cima 👆:"}\n${escolhidas.map((n) => `• *${n}*${valor(n) ? `: ${reais(valor(n)!)}` : ""}`).join("\n")}\n${fotoNaMensagem ? "Qual delas é a da foto? 😊" : "É alguma dessas? 😊"}`;
+        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: escolhidas.length === 1 ? nome0 : null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, fotoDoCliente: escolhidas } };
+      }
       const itens: ItemMidia[] = escolhidas.flatMap((nome) => {
         const m = comMidia.find((x) => x.nome === nome);
         const foto = m?.fotos.find((f) => !jaEnviadas.includes(f.url)) ?? m?.fotos[0];
