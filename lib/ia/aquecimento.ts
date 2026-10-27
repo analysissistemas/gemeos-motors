@@ -12,11 +12,9 @@
 import { artigo, ehACombustao } from "./estoque-tipos.ts";
 import { lojaAberta, type HorarioLoja } from "./horario.ts";
 
-export const ETAPAS_AQUECIMENTO = [
-  { etapa: 1, minutos: 60, rotulo: "1 h" },
-  { etapa: 2, minutos: 3 * 60, rotulo: "3 h" },
-  { etapa: 3, minutos: 23 * 60, rotulo: "23 h" },
-] as const;
+/* UM follow-up só, 20 h depois (27/10/2026: em 4 dias a IA mandou 202 follow-ups, 21% de tudo o que saiu; Milton: "ela manda
+   muitas mensagens"). Antes eram 3 (1 h, 3 h e 23 h). Fica dentro da janela de 24 h do WhatsApp com folga. */
+export const ETAPAS_AQUECIMENTO = [{ etapa: 1, minutos: 20 * 60, rotulo: "20 h" }] as const;
 
 /** Janela do WhatsApp: depois de 24 h sem mensagem do cliente, texto livre é recusado. Margem de 3 min. */
 export const LIMITE_JANELA_MIN = 24 * 60 - 3;
@@ -70,7 +68,7 @@ export const aquecimentoFixo = (etapa: number, modelo: string | null) => etapa =
 export function mensagemPadraoAquecimento(p: { etapa: number; nome: string | null; modelo: string | null }): string {
   const N = (t: string) => (p.nome ? `${p.nome}, ${t}` : `${t[0].toUpperCase()}${t.slice(1)}`);
   const m = p.modelo ? `${artigo(p.modelo)} *${p.modelo}*` : null;
-  if (p.etapa === 1) return m ? N(`${PERGUNTA_DO_DONO.replace("?", ` d${artigo(p.modelo)} *${p.modelo}*?`)} 😊`) : N("ainda está por aí? Me conta o que você está procurando que eu te ajudo 😊");
+  if (p.etapa === 1) return m ? N(`${PERGUNTA_DO_DONO.replace("?", ` d${artigo(p.modelo)} *${p.modelo}*?`)} 😊`) : N("ficou alguma dúvida? Tô por aqui pra te ajudar 😊");
   if (p.etapa === 2 && ehACombustao(p.modelo)) return N(`${m} ainda está aqui, com a documentação em dia e pronta pra rodar. Quer que eu te explique como fica pra você? 😊`);
   if (p.etapa === 2)
     return m

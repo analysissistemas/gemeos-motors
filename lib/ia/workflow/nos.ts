@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { TREINAMENTO_MILTON } from "@/lib/ia/treinamento";
 import { db, schema } from "@/lib/db";
 import { analisarMidia, gerarObjeto, lerTextoDaImagem, MODELO_IA } from "@/lib/ia/cliente";
 import { consultarEstoque } from "@/lib/ia/estoque";
@@ -839,7 +840,8 @@ async function lembretesSemResposta(c: CtxWorkflow, clienteId: number | null, ne
     /* Mayna (11/10/2026): virou recado antes e o assunto não é compra agora; ou ela encerrou ("Já resolveu!") */
     !(conversaForaDaVenda(c.memoria.historico) && c.intencao !== "compra") &&
     !clienteEncerrou(c.textoBuffer);
-  const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome));
+  /* só o nome que o CLIENTE disse, nunca o do perfil do WhatsApp (usuário, 27/10/2026: "nunca ler o contato do cliente") */
+  const nome = primeiroNome(c.memoria.fatos.nome || c.aprendido.fatos.nome);
   /* moto sem unidade Disponível não entra no follow-up (Simulador, 14/10/2026: "o que está faltando para concluirmos a sua
      compra do Patinete 350W?" com o patinete em falta); vai a pergunta geral */
   const modelo = c.intencao === "compra" && !clienteRecusouOModelo(c.textoBuffer) && c.modeloDaConversa && (await temUnidadeDisponivel(c.modeloDaConversa, !!c.conversa?.demo)) ? c.modeloDaConversa : null;
@@ -996,6 +998,10 @@ async function nomesDoCatalogo() {
 }
 
 /** O que o cliente quer, pelo que ELE escreveu (esta mensagem, as anteriores e o interesse já anotado). */
+/** Pergunta que não é sobre qual moto escolher: a resposta é só ela (sem a pergunta da qualificação junto). */
+export const RX_PERGUNTA_DE_LADO =
+  /(?<![\p{L}])(?:onde\s+(?:fica|ficam|[ée]|est[aã]o|voc[eê]s)|de\s+onde|endere[çc]o|localiza\p{L}*|como\s+(?:chego|chegar)|hor[áa]rio|que\s+horas|abrem?|fecham?|funcionam?|aberto|entregam?|entrega|frete|garantia|assist[êe]ncia|cart[ãa]o|pix|parcel\p{L}*|financ\p{L}*|boleto|troca|aceitam?)(?![\p{L}])/iu;
+
 async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
   const texto = textoDoCliente(c);
   const nomes = await nomesDoCatalogo();
@@ -1509,7 +1515,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
 
   /* resposta pronta do sistema que pulou uma pergunta do cliente ganha a resposta dela (comPerguntasSoltas) */
   agente: async (c) => comPerguntasSoltas(c, await (async (): Promise<ResultadoNo<CtxWorkflow>> => {
-    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto].filter(Boolean).join("\n\n");
+    const promptSistema = [await montarPromptSistema(), (await catalogoParaIa({ incluirTeste: !!c.conversa?.demo, kmSemana: kmDoCliente(c), gasolina: await gasolinaDoCliente(c) })).texto, TREINAMENTO_MILTON].filter(Boolean).join("\n\n");
     /* o cliente pediu foto/vídeo? A IA sabe antes de escrever o que vai (ou não) junto */
     const leadAntes = (c.memoria.historico ?? "").split(/\n\s*\n/).filter((l) => l.startsWith("Lead:")).join("\n");
     const midia = planejarPedido({ modelos: await motosComMidia(c, true), textoCliente: c.textoBuffer, historicoCliente: leadAntes, interesse: c.memoria.fatos.interesse ?? null, ultimasDaLoja: ultimasFalasDaLoja(c.memoria.historico, 3) });
@@ -1562,7 +1568,10 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
         })
       : null;
     let qualificacao: CtxWorkflow["qualificacao"];
-    if (passo?.acao === "perguntar") {
+    /* perguntou outra coisa (onde fica, horário, entrega, pagamento, garantia): responde só isso, sem puxar o orçamento
+       (usuário, 27/10/2026: "a pessoa só perguntou a localização" e ouviu o endereço + "você pensa em investir até 6 mil...?") */
+    const perguntaDeLado = RX_PERGUNTA_DE_LADO.test(textoQualif) && !RX_PERGUNTOU_VALOR.test(textoQualif) && !pediuOpcoes(textoQualif);
+    if (passo?.acao === "perguntar" && !perguntaDeLado) {
       const doTipo = motosQualif.filter((x) => (necessidade.tipo === "patinete" ? x.tipo === "patinete" : x.tipo === "moto_eletrica") && x.preco);
       const precos = doTipo.map((x) => x.preco!);
       /* perguntou valor ou as opções: "temos a partir de" (a mais em conta, do estoque) antes da pergunta, como o vendedor faz */
@@ -2350,7 +2359,9 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     const comAbertura = abertura && resposta.length ? [`${corrigirCumprimento(abertura.trim())}\n\n${resposta[0]}`, ...resposta.slice(1)] : [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta];
     const blocos = comAbertura.map(limparEmojis).filter((b) => /\p{L}/u.test(b));
     /* a resposta cita a mensagem do cliente */
-    const citar = c.config.citarMensagem && resposta.length ? 0 : -1;
+    /* sem citar a mensagem do cliente (usuário, 27/10/2026: "responde a mensagem errada"): com várias mensagens dele no buffer,
+       a citação caía numa só e a resposta parecia ser de outra coisa */
+    const citar = -1;
     const vaiMidia = midia?.itens.length ? midia : null;
     const midiaSaida = vaiMidia ? vaiMidia.itens.map((i) => `${i.tipo}: ${i.legenda}`) : null;
     return blocos.length ? { ctx: { blocos, indice: 0, citar, midia: vaiMidia }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null, midia: midiaSaida } } : { ramo: "vazio", ctx: { midia: null }, saida: { blocos: [] } };

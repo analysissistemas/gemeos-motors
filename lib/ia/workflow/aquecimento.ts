@@ -11,6 +11,7 @@ import { lojaAberta } from "@/lib/ia/horario";
 import { limparEmojis } from "@/lib/ia/validador";
 import {
   aquecimentoFixo,
+  ETAPAS_AQUECIMENTO,
   clienteVaiRetornar,
   decidirAquecimento,
   instrucaoAquecimento,
@@ -116,7 +117,7 @@ export async function agendarAquecimento(p: {
       negocioId: p.negocioId,
       usuarioId: p.usuarioId,
       agendadoPara: e.quando,
-      notas: `Aquecimento ${e.etapa}/3 (${e.rotulo} sem resposta): a IA chama ${p.nome ?? "o cliente"} de novo${p.modelo ? ` sobre a ${p.modelo}` : ""}. Cancele se não quiser que saia.`,
+      notas: `Follow-up (${e.rotulo} sem resposta): a IA chama ${p.nome ?? "o cliente"} de novo${p.modelo ? ` sobre a ${p.modelo}` : ""}. Cancele se não quiser que saia.`,
       tipo: "aquecimento",
       motivo: `Cliente sem responder (${e.rotulo})`,
       origem: "ia",
@@ -161,6 +162,12 @@ export async function enviarAquecimentos(agora = new Date()) {
       if (!meu || !f.conversaId) continue;
       const ctx = (f.contexto ?? {}) as { etapa?: number; mensagemId?: number; nome?: string | null; modelo?: string | null };
       const etapa = ctx.etapa ?? 1;
+      /* agendados antes de 27/10/2026 (eram 3 tentativas): só a 1ª sai */
+      if (etapa > ETAPAS_AQUECIMENTO.length) {
+        await db.update(F).set({ status: "cancelado", notas: `${f.notas ?? ""} Não enviado: agora é um follow-up só.`.slice(0, 1000) }).where(eq(F.id, f.id));
+        r.pulados++;
+        continue;
+      }
       const [cv] = await db.select({ telefone: C.contatoTelefone, demo: C.demo, modo: C.modo, status: C.status }).from(C).where(eq(C.id, f.conversaId)).limit(1);
       const [ultima] = await db.select({ id: M.id, em: M.criadoEm }).from(M).where(and(eq(M.conversaId, f.conversaId), eq(M.direcao, "incoming"))).orderBy(desc(M.id)).limit(1);
       const [pendente] = await db
@@ -202,7 +209,7 @@ export async function enviarAquecimentos(agora = new Date()) {
         continue;
       }
       const { texto, daIa } = await escreverMensagem(f.conversaId, etapa, ctx.nome ?? null, ctx.modelo ?? null);
-      const enviar = (t: string) => enviarRespostaDaIa(db, { conversaId: f.conversaId!, telefone: cv!.telefone, texto: t, origem: `follow-up de aquecimento ${etapa}/3`, simulado: cv!.demo });
+      const enviar = (t: string) => enviarRespostaDaIa(db, { conversaId: f.conversaId!, telefone: cv!.telefone, texto: t, origem: `follow-up ${etapa}`, simulado: cv!.demo });
       let env = await enviar(texto);
       let final = texto;
       /* o validador barrou o texto da IA: vai a mensagem pronta */
@@ -211,8 +218,8 @@ export async function enviarAquecimentos(agora = new Date()) {
         env = await enviar(final);
       }
       if (env.enviada) {
-        await db.update(F).set({ notas: `Aquecimento ${etapa}/3 enviado pela IA: "${final}"`.slice(0, 1000) }).where(eq(F.id, f.id));
-        await mensagemSistema(db, f.conversaId, `Follow-up de aquecimento ${etapa}/3 enviado pela IA (o cliente estava sem responder).${etapa === 3 ? " Foi a última tentativa automática." : ""}`, { aquecimento: true, etapa });
+        await db.update(F).set({ notas: `Aquecimento ${etapa} enviado pela IA: "${final}"`.slice(0, 1000) }).where(eq(F.id, f.id));
+        await mensagemSistema(db, f.conversaId, `Follow-up enviado pela IA (o cliente estava sem responder). Foi a única tentativa automática.`, { aquecimento: true, etapa });
         r.enviados++;
       } else {
         /* vira tarefa comum para a equipe (o vigia não tenta de novo em loop) */

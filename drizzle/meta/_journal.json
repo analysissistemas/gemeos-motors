@@ -344,6 +344,13 @@
       "when": 1792800465493,
       "tag": "0048_chamado_prioridade",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793119639288,
+      "tag": "0049_sem_moto_a_gasolina",
+      "breakpoints": true
     }
   ]
 }

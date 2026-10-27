@@ -115,7 +115,7 @@ test("próximo passo: uma pergunta por vez, só o que falta, e indica quando sab
 test("perguntas: a faixa sai dos preços do estoque", () => {
   assert.deepEqual(faixasDoEstoque(PRECOS), [7000, 11000]);
   const f = textoPergunta("faixa", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 });
-  assert.equal(f, "Pra eu te mostrar as opções certas: você pensa em investir até 6 mil, até 8 mil, até 11 mil ou até 13 mil?");
+  assert.equal(f, "Quanto você pretende investir pra que eu possa te passar as opções?");
   assert.equal(perguntaPendente(f), "faixa");
   assert.equal(perguntaPendente(textoPergunta("uso", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0 })), "uso");
   assert.equal(perguntaPendente(textoPergunta("km", { n: NECESSIDADE_VAZIA, precos: PRECOS, sorte: 0.9 })), "km");
@@ -322,4 +322,13 @@ test("Nay (22/10/2026): '12' depois das opções é orçamento; triciclo só par
   const onze = indicarMotos({ ...NECESSIDADE_VAZIA, faixaAte: 11000 }, [...ESTOQUE, fox], 3).map((x) => x.moto.nome);
   assert.ok(!onze.includes(fox.nome), onze.join());
   assert.deepEqual(indicarMotos({ ...NECESSIDADE_VAZIA, tipo: "triciclo" }, [...ESTOQUE, fox], 3).map((x) => x.moto.nome), [fox.nome]);
+});
+
+test("pergunta aberta do orçamento (27/10/2026): a resposta solta vira a faixa", () => {
+  const p = "Quanto você pretende investir pra que eu possa te passar as opções?";
+  assert.equal(perguntaPendente(p), "faixa");
+  assert.equal(lerDoCliente("uns 8 mil", NECESSIDADE_VAZIA, p).faixaAte, 8000);
+  assert.equal(lerDoCliente("até 10 mil", NECESSIDADE_VAZIA, p).faixaAte, 10000);
+  assert.equal(lerDoCliente("R$ 6.000", NECESSIDADE_VAZIA, p).faixaAte, 6000);
+  assert.equal(lerDoCliente("12k", NECESSIDADE_VAZIA, p).faixaAte, 12000);
 });

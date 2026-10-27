@@ -33,7 +33,11 @@ export function perguntasDoCliente(texto: string): string[] {
 /** As perguntas que a resposta não tocou: menos da metade das palavras do assunto aparece nela. */
 export function perguntasSemResposta(textoCliente: string, resposta: string): string[] {
   const r = norm(resposta);
+  /* pergunta de preço ("valor a vista?") com o preço na resposta já foi respondida (Gilson, 24/10/2026: os cartões da T3 e
+     da T5 tinham "R$ 11.000" e mesmo assim saiu "Sobre a sua pergunta (anuncio retro valor), eu confirmo com a equipe") */
+  const temPreco = /R\$\s*\d/.test(resposta);
   return perguntasDoCliente(textoCliente).filter((p) => {
+    if (temPreco && /(?<![\p{L}])(?:valor|pre[çc]o|quanto|vista|custa|sai por)(?![\p{L}])/iu.test(p)) return false;
     const chaves = palavrasChave(p);
     const achou = chaves.filter((k) => r.includes(k.length > 5 ? k.slice(0, -1) : k)).length;
     return achou * 2 < chaves.length;

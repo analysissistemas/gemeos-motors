@@ -7,7 +7,7 @@ import { semRepeticao } from "../../lib/ia/workflow/util.ts";
 import { validarResposta } from "../../lib/ia/validador.ts";
 
 test("3 tentativas: 1 h, 3 h e 23 h (Milton, 12/10/2026), a última dentro da janela de 24 h do WhatsApp", () => {
-  assert.deepEqual(ETAPAS_AQUECIMENTO.map((e) => e.minutos), [60, 180, 1380]);
+  assert.deepEqual(ETAPAS_AQUECIMENTO.map((e) => e.minutos), [1200]);
   assert.ok(ETAPAS_AQUECIMENTO.every((e) => e.minutos < LIMITE_JANELA_MIN));
 });
 
@@ -103,13 +103,13 @@ test("Heverton: só com a loja aberta, 50 min entre uma e outra, e a última den
   const recife = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Recife", weekday: "short", hour: "2-digit", minute: "2-digit" });
   /* domingo 21:43 (loja fechada; abre segunda 8h): 8:00, 2 h depois (10:00) e a última antes de fechar (a janela acaba segunda 21:40) */
   const domingo = planejarAquecimento(new Date("2026-10-12T00:43:00Z"), HORARIO_PADRAO);
-  assert.deepEqual(domingo.map((e) => recife(e.quando)), ["seg., 08:00", "seg., 10:00", "seg., 17:55"]);
+  assert.deepEqual(domingo.map((e) => recife(e.quando)), ["seg., 17:43"]); // um follow-up só, 20 h depois (27/10/2026)
   /* terça 10:00 (aberta): 11:00, 13:00 e quarta 9:00 (1 h, 3 h e 23 h; Milton, 12/10/2026) */
   const terca = planejarAquecimento(new Date("2026-10-13T13:00:00Z"), HORARIO_PADRAO);
-  assert.deepEqual(terca.map((e) => recife(e.quando)), ["ter., 11:00", "ter., 13:00", "qua., 09:00"]);
+  assert.deepEqual(terca.map((e) => recife(e.quando)), ["qua., 08:00"]); // 6:00 com a loja fechada: na abertura
   /* terça 17:45: a de 1 h cairia às 18:45 (fechada) e vai para quarta 8:00; a de 3 h, 2 h depois; a última às 16:45 */
   const fim = planejarAquecimento(new Date("2026-10-13T20:45:00Z"), HORARIO_PADRAO);
-  assert.deepEqual(fim.map((e) => recife(e.quando)), ["qua., 08:00", "qua., 10:00", "qua., 16:45"]);
+  assert.deepEqual(fim.map((e) => recife(e.quando)), ["qua., 13:45"]);
   /* sábado 21:00: domingo fechado e segunda 8h passa da janela; nada sai */
   assert.deepEqual(planejarAquecimento(new Date("2026-10-18T00:00:00Z"), HORARIO_PADRAO), []);
 });
@@ -131,7 +131,7 @@ test("(81) 7301-7155: 'vou mostrar a ele, solicito a você' — só a última te
     assert.equal(clienteVaiRetornar(t), true, t);
   for (const t of ["Certo", "quanto custa a DF17?", "vou querer", "Valor dos patinetes elétricos?", "pode mandar", "Divide no cartão?"]) assert.equal(clienteVaiRetornar(t), false, t);
   const so = planejarAquecimento(new Date("2026-10-13T13:00:00Z"), HORARIO_PADRAO, { soUltima: true });
-  assert.deepEqual(so.map((e) => e.etapa), [3]);
+  assert.deepEqual(so.map((e) => e.etapa), [1]);
 });
 
 test("Milton: a 1ª tentativa com moto é sempre a pergunta do dono, sem a IA reescrever (12/10/2026)", async () => {
@@ -189,5 +189,5 @@ test("Milton (19/10/2026): respondeu o cliente e devolveu para a IA; o follow-up
   const recife = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Recife", weekday: "short", hour: "2-digit", minute: "2-digit" });
   /* cliente terça 10:00, Milton respondeu às 14:00: 15:00, 17:00 e a última na quarta, pouco antes de a janela de 24 h do cliente fechar */
   const p = planejarAquecimento(new Date("2026-10-13T13:00:00Z"), HORARIO_PADRAO, { desde: new Date("2026-10-13T17:00:00Z") });
-  assert.deepEqual(p.map((e) => recife(e.quando)), ["ter., 15:00", "ter., 17:00", "qua., 09:57"]);
+  assert.deepEqual(p.map((e) => recife(e.quando)), ["qua., 09:57"]); // pouco antes de a janela do cliente fechar
 });

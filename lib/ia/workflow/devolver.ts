@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import { analisarMidia } from "@/lib/ia/cliente";
 import { lerBytes } from "@/lib/mensageria/midia";
 import { agendarAquecimento } from "./aquecimento";
-import { nomeDoPerfil, primeiroNome, type FatosLead } from "./util";
+import { primeiroNome, type FatosLead } from "./util";
 
 /* O vendedor respondeu e devolveu a conversa para a IA (Milton, 19/10/2026: "se eu tô no atendimento humano e respondo o
    cliente, pós minha resposta eu jogo pra IA, a IA vai responder o cliente ou vai aguardar mensagem para continuar ou até
@@ -57,7 +57,8 @@ export async function depoisDeDevolverParaIa(conversaId: number) {
     negocioId: cv.negocioId,
     usuarioId: null,
     qualifica: true,
-    nome: primeiroNome(fatos.nome) ?? primeiroNome(nomeDoPerfil(cv.contatoNome)),
+    /* só o nome que o cliente disse, nunca o do perfil do WhatsApp (usuário, 27/10/2026) */
+    nome: primeiroNome(fatos.nome),
     modelo: null,
     desde: new Date(ultima.em),
   });

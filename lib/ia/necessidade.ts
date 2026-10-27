@@ -290,10 +290,10 @@ export function textoPergunta(chave: ChavePergunta, p: { n: Necessidade; precos:
         : escolher(["Você costuma levar alguém na garupa ou alguma carga, tipo compras?", "E vai levar alguém na garupa ou carga com você?"]);
     case "tipo":
       return "Pra eu te mostrar as opções certas: você procura moto elétrica, bicicleta elétrica ou patinete elétrico? 😊";
-    case "faixa": {
-      const [a, b, c, d] = FAIXAS_DA_LOJA.map(mil);
-      return `Pra eu te mostrar as opções certas: você pensa em investir até ${a}, até ${b}, até ${c} ou até ${d}?`;
-    }
+    /* pergunta aberta (usuário, 27/10/2026: "Quanto você pretende investir pra que eu possa te passar as opções? vc pode
+       mandar assim, pra ir afunilando"); a resposta solta ("uns 8 mil", "até 10") vira a faixa em faixaDoTexto */
+    case "faixa":
+      return "Quanto você pretende investir pra que eu possa te passar as opções?";
   }
 }
 
