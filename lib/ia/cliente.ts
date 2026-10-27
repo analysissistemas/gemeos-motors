@@ -8,14 +8,16 @@ import { iaLigada } from "./controle";
    PORTA ÚNICA PARA A IA
    Toda chamada passa por aqui: modelo, limites e tradução de erro ficam
    num lugar só. Com OPENAI_API_KEY no ambiente (EasyPanel → Ambiente), fala
-   direto com a OpenAI (modelo IA_MODELO, padrão gpt-4.1-mini). Sem a chave,
+   direto com a OpenAI (modelo IA_MODELO, padrão gpt-4.1). Sem a chave,
    cai no AI Gateway da Vercel (que não é mais usado desde a saída da Vercel).
 
    Regra de ouro dos prompts deste sistema: a IA SÓ usa os dados que
    recebe. Quando falta informação, ela diz que falta — nunca completa.
    ============================================================ */
 const COM_OPENAI = !!process.env.OPENAI_API_KEY;
-const NOME_OPENAI = process.env.IA_MODELO || "gpt-4.1-mini";
+/* gpt-4.1 desde 27/10/2026 (Milton: "às vezes entende totalmente errado"); o mini errava a leitura do cliente. Para
+   voltar ao mais barato: IA_MODELO=gpt-4.1-mini no Ambiente do EasyPanel */
+const NOME_OPENAI = process.env.IA_MODELO || "gpt-4.1";
 /** Nome do modelo em uso (aparece nos registros e em Configurações). */
 export const MODELO_IA = COM_OPENAI ? `openai/${NOME_OPENAI}` : process.env.IA_MODELO || "anthropic/claude-sonnet-5";
 const modelo = () => (COM_OPENAI ? openai(NOME_OPENAI) : MODELO_IA);

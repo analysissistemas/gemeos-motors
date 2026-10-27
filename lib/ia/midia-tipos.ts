@@ -145,20 +145,22 @@ export function planejarApresentacao(p: { modelos: ModeloComMidia[]; textoClient
   if (!modelo) return null;
   const ja = new Set(p.jaEnviadas);
   if (modelo.videoUrl && ja.has(modelo.videoUrl)) return null;
-  const itens = itensDe(modelo, ["foto", "video"]).filter((i) => !ja.has(i.url));
+  /* sem pedido, só a foto (Milton, 27/10/2026: "ela manda muitas mensagens"); o vídeo vai quando o cliente pede */
+  if (modelo.fotos.some((f) => ja.has(f.url))) return null;
+  const itens = itensDe(modelo, ["foto"]).filter((i) => !ja.has(i.url));
   return itens.length ? { modelo, pedido: [], itens } : null;
 }
 
 /** Indicação da qualificação (dono, 18/10/2026: "por que ele não enviou a foto e o vídeo das motos que ele fez a
- *  curadoria?"): a foto e o vídeo de cada moto indicada (no máximo 2 motos, 4 arquivos), na ordem da indicação, sem
- *  repetir o que já foi na conversa. */
+ *  curadoria?"): a foto de cada moto indicada (no máximo 2), na ordem da indicação, sem repetir o que já foi na
+ *  conversa. O vídeo saiu em 27/10/2026 (Milton: "ela manda muitas mensagens"): vai quando o cliente pede. */
 export function planejarIndicacao(p: { modelos: ModeloComMidia[]; nomes: string[]; jaEnviadas: string[] }): PlanoMidia | null {
   const ja = new Set(p.jaEnviadas);
   const itens = p.nomes
     .slice(0, 2)
     .flatMap((n) => {
       const m = p.modelos.find((x) => x.nome.trim().toLowerCase() === n.trim().toLowerCase());
-      return m ? itensDe(m, ["foto", "video"]) : [];
+      return m ? itensDe(m, ["foto"]) : [];
     })
     .filter((i) => !ja.has(i.url));
   return itens.length ? { modelo: null, pedido: [], itens, maxItens: 4 } : null;

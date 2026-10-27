@@ -151,6 +151,9 @@ export function pagamentoDoTexto(texto: string) {
 }
 
 export const PREFIXO_MODELO_NA_FOTO = "modelo escrito na foto:";
+/* figurinha (sticker) chega como imagem (webhook): para a IA é "[figurinha]", nunca foto de moto (Milton, 27/10/2026: "mandou
+   uma figurinha, ela viu que era uma foto e começou a mandar um bocado de coisa") */
+export const MARCA_FIGURINHA = "[figurinha]";
 
 export type MensagemMemoria ={ autor: string; tipo: string; conteudo: string | null; transcricao?: string | null; criadoEm: Date };
 
@@ -159,6 +162,7 @@ export type MensagemMemoria ={ autor: string; tipo: string; conteudo: string | n
  *  fica só a legenda que o cliente escreveu (lib/ia/foto-cliente.ts). */
 export function textoDaMensagem(m: Pick<MensagemMemoria, "tipo" | "conteudo" | "transcricao">) {
   if (m.tipo === "texto") return m.conteudo ?? "";
+  if (m.transcricao === MARCA_FIGURINHA) return MARCA_FIGURINHA;
   const rotulo = { audio: "áudio", imagem: "imagem", documento: "documento", video: "vídeo", localizacao: "localização", contato: "contato" }[m.tipo] ?? m.tipo;
   if (m.transcricao && m.tipo !== "imagem") return `[${rotulo}] ${m.transcricao}`;
   /* foto: só o nome de modelo da loja que está ESCRITO nela (print do Instagram, Nay, 21/10/2026), nunca a descrição */
@@ -208,7 +212,7 @@ export function semRepeticao(resposta: string[], ultimaDaLoja = ""): string[] {
 /** Perguntar o nome de novo? (dono, 07/10/2026: "a IA pergunta o nome, o cliente não responde, a IA segue o baile e não
  *  pergunta mais"). Conta quantas vezes a loja já perguntou e quantas mensagens o cliente mandou depois da última vez.
  *  Pergunta de novo depois de 2 mensagens do cliente sem o nome, no máximo 3 vezes na conversa. */
-export const MAX_PERGUNTAS_NOME = 3;
+export const MAX_PERGUNTAS_NOME = 2; // Milton, 27/10/2026: "ela manda muitas perguntas" (antes 3)
 export function deveRepetirPerguntaDoNome(historico: string | null | undefined): boolean {
   const blocos = (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   let vezes = 0;

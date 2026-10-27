@@ -2,7 +2,7 @@
    está oferecendo as motos nada a ver". Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { instrucaoDeFoto, respostaParaMidia, TEXTO_CATALOGO_FOTO, TEXTO_CATALOGO_AUDIO, TEXTO_FOTO_NAO_CONFIRMA, TEXTO_DA_RESPOSTA } from "../../lib/ia/foto-cliente.ts";
+import { instrucaoDeFoto, respostaParaMidia, temFotoNoBuffer, TEXTO_CATALOGO_FOTO, TEXTO_CATALOGO_AUDIO, TEXTO_FOTO_NAO_CONFIRMA, TEXTO_DA_RESPOSTA } from "../../lib/ia/foto-cliente.ts";
 import { textoDaMensagem } from "../../lib/ia/workflow/util.ts";
 import { validarResposta } from "../../lib/ia/validador.ts";
 
@@ -125,4 +125,14 @@ test("Nay (22/10/2026): print com 'a preta, uma grandona' mostra as maiores pret
   ];
   assert.deepEqual(candidatosPorPista(motos, "Ainda tem a preta? Uma grandona, nesse estilo")?.map((m) => m.nome), ["TANK AG11", "AG08", "N2"]);
   assert.equal(candidatosPorPista(motos, "tem essa?"), null);
+});
+
+test("figurinha não é foto (Milton, 27/10/2026: \"mandou uma figurinha, ela viu que era uma foto e começou a mandar um bocado de coisa\")", async () => {
+  const { textoDaMensagem, MARCA_FIGURINHA } = await import("../../lib/ia/workflow/util.ts");
+  const t = textoDaMensagem({ tipo: "imagem", conteudo: null, transcricao: MARCA_FIGURINHA });
+  assert.equal(t, "[figurinha]");
+  assert.equal(temFotoNoBuffer(t), false);
+  assert.equal(respostaParaMidia({ textoBuffer: t, ultimaDaLoja: "Qual delas te agradou mais?", modelos: ["AG08", "DF17"], foraDaVenda: false }), null);
+  /* foto de verdade continua sendo foto */
+  assert.equal(temFotoNoBuffer(textoDaMensagem({ tipo: "imagem", conteudo: null, transcricao: null })), true);
 });

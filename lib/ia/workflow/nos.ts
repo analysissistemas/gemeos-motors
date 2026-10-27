@@ -67,7 +67,7 @@ import { lerBytes } from "@/lib/mensageria/midia";
 import type { ConfigWorkflow } from "./grafo";
 import type { ImplNo, ResultadoNo } from "./motor";
 import { instrucaoVariasPerguntas, perguntasSemResposta, textoConfirmoComEquipe } from "@/lib/ia/perguntas-soltas";
-import { corNoTexto, PREFIXO_MODELO_NA_FOTO, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
+import { corNoTexto, MARCA_FIGURINHA, PREFIXO_MODELO_NA_FOTO, mensagensRepetidas, umaPerguntaSo, deveRepetirPerguntaDoNome, jaChamouPeloNome, respondeuSoONome, formatarHistorico, nomeDoPerfil, REPERGUNTAS_NOME, semRepeticao, RX_PERGUNTA_NOME, saudacaoComNome, variar, mesclarFatos, primeiroNome, quebrarEmBlocos, soCumprimento, tempoDigitando, textoDaMensagem, tirarCumprimentoRepetido, tirarEmojiDoInicio, type FatosLead } from "./util";
 import { obterProvedor } from "@/lib/mensageria/provedores";
 import { organizarTexto } from "@/lib/ia/organizar";
 import { ETAPAS_ABERTAS, TIPOS_VENDA_IA } from "@/lib/dominio";
@@ -165,7 +165,10 @@ async function mostrarDigitando(c: CtxWorkflow, ms: number) {
   const simulada = c.simulado || !!c.conversa?.demo;
   if (!simulada && c.mensagem?.externoId && c.mensagem.direcao === "incoming") await (await obterProvedor({ demo: false })).digitando(c.mensagem.externoId);
 }
-const transcricaoDe = (m: Pick<Mensagem, "metadados">) => ((m.metadados ?? {}) as { transcricao?: string }).transcricao ?? null;
+const transcricaoDe = (m: Pick<Mensagem, "metadados">) => {
+  const meta = (m.metadados ?? {}) as { transcricao?: string; figurinha?: boolean };
+  return meta.figurinha ? MARCA_FIGURINHA : (meta.transcricao ?? null);
+};
 
 async function carregarConversa(id: number) {
   const [c] = await db.select().from(schema.conversas).where(eq(schema.conversas.id, id)).limit(1);
@@ -1007,7 +1010,35 @@ async function intencaoDoCliente(c: CtxWorkflow): Promise<Intencao | null> {
      (Cyanthya, 19/10/2026, T3 Retrô: virou pedido de relato de defeito); pós-venda só com sinal claro ("minha moto", defeito) */
   if (intencao === "assistencia" && !assistenciaClara(texto) && (veioDoSite(texto) || c.modeloDaConversa)) return "compra";
   /* veio pelo botão do site e ainda não disse o quê: é quem quer comprar (o "consultor" é o Milton) */
-  return intencao ?? (veioDoSite(texto) || jaIndicou(c.memoria.historico ?? "") ? "compra" : null);
+  const pelasRegras = intencao ?? (veioDoSite(texto) || jaIndicou(c.memoria.historico ?? "") ? "compra" : null);
+  return pelasRegras ?? (await intencaoPelaIa(c));
+}
+
+/* o que as regras não reconhecem, a IA lê (Milton, 27/10/2026: "às vezes entende totalmente errado"). Sem intenção, o
+   sistema tirava a resposta e mandava "Como posso te ajudar?" para quem já tinha dito o que queria, com outras palavras.
+   Uma leitura por mensagem; falhou, fica como antes (sem intenção) */
+export const SISTEMA_INTENCAO = `Você lê a mensagem de um cliente no WhatsApp da Gêmeos Motors, loja de motos elétricas em Goiana-PE. A loja vende motos elétricas, scooters, patinetes, bicicletas elétricas, triciclos e acessórios; compra e pega na troca moto a combustão e carro; e tem assistência técnica própria.
+Diga o que o cliente quer NESTA conversa:
+- compra: quer comprar, saber preço, modelo, cor, foto, vídeo, autonomia, garantia ou forma de pagamento de um produto, entrega, troca, financiamento, visitar a loja para ver as motos, ou disse quanto quer gastar. Pergunta de onde fica a loja ou a assistência, sem falar de defeito, também é compra.
+- assistencia: problema, defeito, conserto, revisão, peça ou garantia de uma moto que ELE JÁ TEM.
+- outro: recado pessoal, oferece produto ou serviço para a loja, cobrança, assunto que não é de cliente.
+- indefinido: só cumprimentou, disse o nome, mandou figurinha, agradeceu, ou não dá para saber.
+Na dúvida entre compra e indefinido, quando ele fala de algum produto, é compra.`;
+const esquemaIntencao = z.object({ intencao: z.enum(["compra", "assistencia", "outro", "indefinido"]) });
+const intencoesLidas = new Map<string, Promise<Intencao | null>>();
+function intencaoPelaIa(c: CtxWorkflow): Promise<Intencao | null> {
+  const texto = semAberturaDoSite(c.textoBuffer).replace(/\[(?:figurinha|imagem|vídeo|documento|localização|contato)[^\]]*\]/gu, "").trim();
+  if (!/\p{L}{3,}/u.test(texto)) return Promise.resolve(null);
+  const chave = `${c.conversaId}:${c.mensagemId}:${texto}`;
+  const ja = intencoesLidas.get(chave);
+  if (ja) return ja;
+  if (intencoesLidas.size > 300) intencoesLidas.clear();
+  const conversa = (c.memoria.historico ?? "").split(/\n\s*\n/).slice(-6).join("\n");
+  const lida = gerarObjeto({ schema: esquemaIntencao, maxTokens: 40, sistema: SISTEMA_INTENCAO, prompt: `<conversa_antes>\n${conversa || "(primeira mensagem)"}\n</conversa_antes>\n<mensagem_do_cliente>\n${texto}\n</mensagem_do_cliente>` })
+    .then((r): Intencao | null => (r.intencao === "compra" || r.intencao === "assistencia" ? r.intencao : null))
+    .catch(() => null);
+  intencoesLidas.set(chave, lida);
+  return lida;
 }
 
 /* Pedido do dono (02/10/2026): na abordagem, primeiro ENTENDER o que o cliente quer. Quem só cumprimentou
@@ -1411,7 +1442,10 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       .map((m) => comMotoCitada(m.id === c.mensagemId ? c.textoEntrada : textoDaMensagem({ tipo: m.tipo, conteudo: m.conteudo, transcricao: transcricaoDe(m) }), m.respostaA ? citadas.get(m.respostaA) : null, modelosCat))
       .filter((t) => t.trim());
     /* "usar no seio" é sítio (Simulador, 20/10/2026): a IA lia ao pé da letra */
-    const textoBuffer = corrigirDigitacao(textos.join("\n\n") || c.textoEntrada);
+    /* só figurinha depois de a loja já ter falado: o cliente só reagiu, ninguém responde figurinha. Com texto junto, ela sai */
+    if (textos.length && textos.every((t) => t.trim() === MARCA_FIGURINHA) && ultimaResposta)
+      return { fim: "parou", detalhe: "Só figurinha: a IA não responde (o cliente só reagiu)", saida: { figurinha: true } };
+    const textoBuffer = corrigirDigitacao(textos.filter((t) => t.trim() !== MARCA_FIGURINHA || textos.every((x) => x.trim() === MARCA_FIGURINHA)).join("\n\n") || c.textoEntrada);
     /* mensagem repetida que a IA acabou de responder (teste de 12/10/2026: "Valor dos patinetes elétricos?" entrou duas
        vezes e saíram duas respostas quase iguais; cliente que reenvia achando que não foi): não responde de novo */
     /* a mensagem desta execução pode ter chegado antes da resposta anterior sair (aí não está em msgs) */
@@ -2311,9 +2345,12 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     resposta = semRepeticao(resposta, ultimaFalaDaLoja(c.memoria.historico));
     /* emoji fora da lista (👇 dos textos do sistema) sai do balão, em vez de o validador barrar a resposta inteira e passar o
        cliente ao vendedor (Simulador, 19/10/2026: a indicação do Edimilson caiu por um 👇) */
-    const blocos = [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta].map(limparEmojis).filter((b) => /\p{L}/u.test(b));
-    /* como no WhatsApp da loja: a saudação vai solta e a resposta cita a mensagem do cliente */
-    const citar = c.config.citarMensagem && resposta.length ? (saudacao ? 1 : 0) : -1;
+    /* a saudação vai no MESMO balão da resposta (Milton, 27/10/2026: "ela manda muitas mensagens"): cumprimento solto era
+       um balão a mais em todo primeiro contato */
+    const comAbertura = abertura && resposta.length ? [`${corrigirCumprimento(abertura.trim())}\n\n${resposta[0]}`, ...resposta.slice(1)] : [...(abertura ? [corrigirCumprimento(abertura.trim())] : []), ...resposta];
+    const blocos = comAbertura.map(limparEmojis).filter((b) => /\p{L}/u.test(b));
+    /* a resposta cita a mensagem do cliente */
+    const citar = c.config.citarMensagem && resposta.length ? 0 : -1;
     const vaiMidia = midia?.itens.length ? midia : null;
     const midiaSaida = vaiMidia ? vaiMidia.itens.map((i) => `${i.tipo}: ${i.legenda}`) : null;
     return blocos.length ? { ctx: { blocos, indice: 0, citar, midia: vaiMidia }, saida: { blocos, citaMensagemDoCliente: citar >= 0 ? citar + 1 : null, midia: midiaSaida } } : { ramo: "vazio", ctx: { midia: null }, saida: { blocos: [] } };
@@ -2417,6 +2454,7 @@ async function analisarNo(c: CtxWorkflow, tipo: "audio" | "imagem" | "documento"
      mandou o catálogo duas vezes). Só o texto escrito; a moto não é reconhecida pelo formato */
   if (tipo === "imagem") {
     const ja = transcricaoDe(m);
+    if (ja === MARCA_FIGURINHA) return { ctx: { textoEntrada: MARCA_FIGURINHA }, saida: { texto: "figurinha (não é foto de moto)" } };
     let escrito = ja?.startsWith(PREFIXO_MODELO_NA_FOTO) ? ja : null;
     if (!ja && m.midiaUrl) {
       const arq = await lerBytes(m.midiaUrl);

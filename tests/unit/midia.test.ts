@@ -43,19 +43,17 @@ test("pedido sem arquivo cadastrado: nada vai e a IA é avisada para não promet
   assert.match(instrucaoDeMidia(p!), /NÃO diga que está mandando/);
 });
 
-test("apresentação: 1ª vez que a moto aparece leva foto e vídeo; depois não repete", () => {
+test("apresentação: 1ª vez que a moto aparece leva só a foto (vídeo só se o cliente pedir: Milton, 27/10/2026); depois não repete", () => {
   const p = planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "quanto custa a AG08?", resposta: "A AG08 custa...", jaEnviadas: [] });
-  assert.deepEqual(p?.itens.map((i) => i.tipo), ["foto", "video"]);
+  assert.deepEqual(p?.itens.map((i) => i.tipo), ["foto"]);
   assert.equal(p?.itens[0].legenda, "*AG08* na cor Cinza");
   assert.equal(planejarApresentacao({ modelos: [AG08], textoCliente: "e a AG08?", resposta: "", jaEnviadas: [AG08.videoUrl!] }), null);
   /* a resposta apresenta duas motos: não escolhe sozinho */
   assert.equal(planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "quais motos?", resposta: "Temos a AG08 e a TANK AG11.", jaEnviadas: [] }), null);
 });
 
-test("apresentação depois das opções: a foto já foi, então vai só o vídeo", () => {
-  const p = planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "gostei da AG08", resposta: "", jaEnviadas: [AG08.fotos[0].url, TANK.fotos[0].url] });
-  assert.deepEqual(p?.itens.map((i) => i.tipo), ["video"]);
-  /* sem vídeo cadastrado e a foto já foi: nada repete */
+test("apresentação depois das opções: a foto já foi, nada vai de novo (o vídeo, só pedido)", () => {
+  assert.equal(planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "gostei da AG08", resposta: "", jaEnviadas: [AG08.fotos[0].url, TANK.fotos[0].url] }), null);
   assert.equal(planejarApresentacao({ modelos: [AG08, TANK], textoCliente: "e a tank?", resposta: "", jaEnviadas: [TANK.fotos[0].url] }), null);
 });
 
@@ -103,12 +101,11 @@ test("a frase do site não é cortada no ponto de 'gemeosmotors.com.br' (12/10/2
   assert.doesNotMatch(t, /(?<![\p{L}])com\.br/u);
 });
 
-test("indicação da qualificação: foto e vídeo de cada moto indicada, até 4 arquivos, sem repetir", () => {
+test("indicação da qualificação: uma foto de cada moto indicada, sem vídeo e sem repetir (Milton, 27/10/2026)", () => {
   const p = planejarIndicacao({ modelos: [AG08, TANK, DF17], nomes: ["AG08", "TANK AG11"], jaEnviadas: [] })!;
-  assert.deepEqual(p.itens.map((i) => i.legenda), ["*AG08* na cor Cinza", "Vídeo da *AG08*", "*TANK AG11* na cor Preta"]);
-  assert.equal(p.maxItens, 4);
-  /* a foto da AG08 já foi: vai o resto */
-  assert.deepEqual(planejarIndicacao({ modelos: [AG08, TANK], nomes: ["AG08", "TANK AG11"], jaEnviadas: [AG08.fotos[0].url] })!.itens.map((i) => i.tipo), ["video", "foto"]);
+  assert.deepEqual(p.itens.map((i) => i.legenda), ["*AG08* na cor Cinza", "*TANK AG11* na cor Preta"]);
+  /* a foto da AG08 já foi: vai a outra */
+  assert.deepEqual(planejarIndicacao({ modelos: [AG08, TANK], nomes: ["AG08", "TANK AG11"], jaEnviadas: [AG08.fotos[0].url] })!.itens.map((i) => i.legenda), ["*TANK AG11* na cor Preta"]);
   /* sem arquivo nenhum (DF17): nada */
   assert.equal(planejarIndicacao({ modelos: [DF17], nomes: ["DF17"], jaEnviadas: [] }), null);
 });
