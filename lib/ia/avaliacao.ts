@@ -32,7 +32,11 @@ export function itemDoTexto(texto: string): ItemAvaliacao | null {
 const RX_TROCA_OUTRA =
   /\btroc\w*\s+(?:de|a|o|da|do|na|no)?\s*(?:cor|horario|hora|dia|data|bateria|peca|pneu|oleo|camara|pastilha|garantia|carregador|modelo|endereco|numero|ideia)\b|\b(?:em|na)\s+troca\s+(?:da|do|de)\s+(?:bateria|peca|pneu|garantia)\b/;
 const RX_TROCA_GERAL =
-  /\b(?:aceita\w*|faz|fazem|faria|trabalha\w*\s+com|tem|rola|pega\w*)\s+(?:uma\s+|a\s+|com\s+)?troca\b|\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|da\s+pra\s+dar|botar|colocar|entra\w*)\b.{0,40}\b(?:de|como|na|pra)\s+entrada\b|\b(?:de|como)\s+entrada\b.{0,30}\b(?:pega\w*|aceita\w*)\b|\babat\w*\b|\bcomo\s+parte\s+do\s+pagamento\b|\bparte\s+do\s+pagamento\b|\bvenda\s+facilitada\b/;
+  /\b(?:aceita\w*|faz|fazem|faria|trabalha\w*\s+com|tem|rola|pega\w*)\s+(?:uma\s+|a\s+|com\s+)?troca\b|\babat\w*\b|\bcomo\s+parte\s+do\s+pagamento\b|\bparte\s+do\s+pagamento\b|\bvenda\s+facilitada\b/;
+/* "entrada" sozinha pode ser dinheiro: só é troca quando a mensagem diz O QUE ele dá (Milton, 29/10/2026: "Tenho que dar
+   quanto de entrada pra sair com ela?" virou moto na troca, e o cliente queria saber da entrada em dinheiro) */
+const RX_ENTRADA_TROCA =
+  /\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|da\s+pra\s+dar|botar|colocar|entra\w*)\b.{0,40}\b(?:de|como|na|pra)\s+entrada\b|\b(?:de|como)\s+entrada\b.{0,30}\b(?:pega\w*|aceita\w*)\b/;
 const RX_TROCA = /\b(?:troca|trocar|troco|trocaria|trocam|trocaram)\b/;
 const RX_ENTRADA_COM_ITEM = /\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|botar|colocar)\b.{0,50}\b(?:entrada|troca)\b/;
 /* "posso trocar a moto se der defeito?": é garantia, não troca de entrada */
@@ -48,7 +52,11 @@ export function pedidoDeAvaliacao(texto: string, antes = ""): PedidoAvaliacao | 
   const tudo = norm(`${antes}\n${texto}`);
   const item = itemDoTexto(t) ?? itemDoTexto(tudo);
   const semOutra = t.replace(RX_TROCA_OUTRA, " ");
-  const troca = RX_TROCA_GERAL.test(semOutra) || (RX_TROCA.test(semOutra) && !!itemDoTexto(semOutra) && !RX_DEFEITO.test(semOutra)) || (RX_ENTRADA_COM_ITEM.test(semOutra) && !!item);
+  const itemAgora = itemDoTexto(semOutra);
+  const troca =
+    RX_TROCA_GERAL.test(semOutra) ||
+    (RX_TROCA.test(semOutra) && !!itemAgora && !RX_DEFEITO.test(semOutra)) ||
+    ((RX_ENTRADA_TROCA.test(semOutra) || RX_ENTRADA_COM_ITEM.test(semOutra)) && !!itemAgora);
   if (troca) return { tipo: "troca", item: item ?? "outro" };
   const compra = (RX_LOJA_COMPRA.test(t) && !!item) || (RX_QUERO_VENDER.test(t) && !!item);
   if (compra) return { tipo: "compra", item: item ?? "outro" };
@@ -62,6 +70,32 @@ const DADOS: Record<ItemAvaliacao, string[]> = {
   outro: ["O que é, marca e modelo", "Há quanto tempo você tem e se tem algum defeito", "Tem caixa, nota fiscal e acessórios?", "Quanto você quer nele?", "Fotos do produto"],
 };
 const DO_ITEM: Record<ItemAvaliacao, string> = { moto: "a sua moto", carro: "o seu carro", celular: "o seu celular", outro: "o seu produto" };
+/* ---------- "entrada": dinheiro ou veículo na troca? (Milton, 29/10/2026: "bom saber se é um veículo usado ou entrada") ---------- */
+const RX_ENTRADA = /\bentrada\b/;
+/* entrada do carregador, da tomada: é a moto, não pagamento */
+const RX_ENTRADA_PECA = /\bentrada\s+(?:do|da|de)\s+(?:carregador|tomada|usb|cabo|chave|bateria|loja)\b/;
+/* já disse que é dinheiro (ou o valor): a IA responde, não precisa perguntar */
+const RX_ENTRADA_DINHEIRO = /\b(?:dinheiro|pix|especie|cash|a\s*vista|cartao|debito|credito)\b|r\$|\b\d+[.,]?\d*\s*(?:mil|k|reais|conto)\b|\b\d{3,}\b/;
+
+/** Falou em entrada sem dizer se é dinheiro ou um veículo/produto na troca. */
+export function duvidaDeEntrada(texto: string) {
+  const t = norm(texto);
+  return RX_ENTRADA.test(t) && !RX_ENTRADA_PECA.test(t) && !RX_DEFEITO.test(t) && !RX_ENTRADA_DINHEIRO.test(t) && !itemDoTexto(t);
+}
+
+const PERGUNTA_ENTRADA = "essa entrada seria em dinheiro ou você tem algum veículo pra dar na troca?";
+export const textoDuvidaEntrada = (nome: string | null) => (nome ? `${nome}, ${PERGUNTA_ENTRADA} 😊` : `E${PERGUNTA_ENTRADA.slice(1)} 😊`);
+export const perguntouEntrada = (ultimaDaLoja: string | null | undefined) => !!ultimaDaLoja && norm(ultimaDaLoja).includes(norm(PERGUNTA_ENTRADA));
+
+/** Resposta à pergunta da entrada: veículo/produto (ou "troca", "usada") vira pedido de avaliação; dinheiro segue com a IA. */
+export function respostaDaEntrada(texto: string): PedidoAvaliacao | null {
+  const t = norm(texto);
+  const item = itemDoTexto(t);
+  if (item) return { tipo: "troca", item };
+  if (/\b(?:veiculo|troca|usad[oa]|minha|meu)\b/.test(t) && !/\b(?:dinheiro|pix|especie|cash)\b/.test(t)) return { tipo: "troca", item: "outro" };
+  return null;
+}
+
 export const ROTULO_ITEM: Record<ItemAvaliacao, string> = { moto: "moto", carro: "carro", celular: "celular", outro: "produto" };
 
 /** Texto do sistema: aceita, pede os dados daquele tipo de item e diz quando a equipe responde. Sem valor. */

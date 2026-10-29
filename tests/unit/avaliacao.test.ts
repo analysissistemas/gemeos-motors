@@ -73,3 +73,25 @@ test("motivo para o vendedor", () => {
   assert.ok(m.startsWith("AVALIAR MOTO NA TROCA") && m.includes("da AG08"));
   assert.ok(motivoAvaliacao({ tipo: "compra", item: "carro", modeloDeInteresse: null, relato: "x" }).startsWith("COMPRA DE CARRO"));
 });
+
+test("entrada sem dizer o quê: pergunta se é dinheiro ou veículo (Milton, 29/10/2026)", async () => {
+  const { duvidaDeEntrada, respostaDaEntrada, perguntouEntrada, textoDuvidaEntrada } = await import("../../lib/ia/avaliacao.ts");
+  /* André: queria saber a entrada em dinheiro e recebeu o pedido de dados da moto na troca */
+  assert.equal(pedidoDeAvaliacao("Tenho que dar quanto de entrada Pra sair com ela??", "quero a AG08\nessa moto é top"), null);
+  for (const f of ["Tenho que dar quanto de entrada Pra sair com ela??", "aceita entrada?", "posso dar uma entrada?", "qual a entrada?"]) assert.ok(duvidaDeEntrada(f), f);
+  for (const f of ["dou 3 mil de entrada", "entrada no pix", "a entrada do carregador quebrou", "dou minha CG de entrada", "quanto custa a T1?"]) assert.ok(!duvidaDeEntrada(f), f);
+  assert.ok(perguntouEntrada(textoDuvidaEntrada("André")));
+  assert.deepEqual(respostaDaEntrada("tenho uma bros 2019"), { tipo: "troca", item: "moto" });
+  assert.deepEqual(respostaDaEntrada("veículo"), { tipo: "troca", item: "outro" });
+  assert.equal(respostaDaEntrada("dinheiro"), null);
+  /* com o item na mensagem continua troca */
+  assert.deepEqual(pedidoDeAvaliacao("Pega Twister de entrada?"), { tipo: "troca", item: "moto" });
+});
+
+test("quem atende: o Milton, agente de IA (Milton, 29/10/2026)", async () => {
+  const { perguntouQuemAtende, textoQuemAtende, jaDisseQuemAtende } = await import("../../lib/ia/identidade.ts");
+  for (const f of ["Pra saber com quem eu mantive o contato", "Você perguntou meu nome aí te falei você não pode falar o seu?", "quem é você?", "com quem eu falo?", "vc é robô?", "é um bot?"]) assert.ok(perguntouQuemAtende(f), f);
+  for (const f of ["quanto custa a T1?", "👍👏👏", "qual moto é melhor pra subida?"]) assert.ok(!perguntouQuemAtende(f), f);
+  assert.ok(jaDisseQuemAtende(textoQuemAtende("Ana")));
+  assert.match(textoQuemAtende(null), /agente de IA/);
+});

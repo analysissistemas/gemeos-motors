@@ -12,7 +12,8 @@ import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
 import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
-import { jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, ROTULO_ITEM, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
+import { duvidaDeEntrada, jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, perguntouEntrada, respostaDaEntrada, ROTULO_ITEM, textoDuvidaEntrada, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
+import { jaDisseQuemAtende, perguntouQuemAtende, textoQuemAtende } from "@/lib/ia/identidade";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_CONVIDOU_VISITA, RX_DIA_INCERTO, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
@@ -1649,7 +1650,23 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* venda facilitada com troca ou compra do que o cliente tem (dono, 17/10/2026: "a IA está dizendo que não pega moto
        como entrada... pede pra pessoa enviar os dados para avaliação e transfere já para um humano"). Texto do sistema
        com os dados daquele item (moto, carro, celular, outro), nunca valor; vai para um vendedor na hora. */
-    const avaliacao = jaPediuAvaliacao(c.memoria.historico ?? "") ? null : pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
+    const textoCli = semAberturaDoSite(c.textoBuffer);
+    const nomeDoCliente = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+    /* quem atende (Milton, 29/10/2026: "você não pode falar o seu?" e a IA desconversou): o Milton, agente de IA da loja */
+    if (!r.ctx.humano && perguntouQuemAtende(textoCli) && !jaDisseQuemAtende(ultimaDaLoja)) {
+      const texto = textoQuemAtende(nomeDoCliente);
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, quemAtende: true } };
+    }
+    /* "entrada" sem dizer o quê (Milton, 29/10/2026: "Tenho que dar quanto de entrada pra sair com ela?" virou moto na
+       troca): pergunta se é dinheiro ou veículo. Respondeu veículo, vai a avaliação; dinheiro, a IA segue. */
+    const respondeuEntrada = perguntouEntrada(ultimaDaLoja);
+    if (!r.ctx.humano && !respondeuEntrada && duvidaDeEntrada(textoCli) && !pedidoDeAvaliacao(textoCli, leadAntes)) {
+      const texto = textoDuvidaEntrada(nomeDoCliente);
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, duvidaDeEntrada: true } };
+    }
+    const avaliacao = jaPediuAvaliacao(c.memoria.historico ?? "") ? null : ((respondeuEntrada ? respostaDaEntrada(textoCli) : null) ?? pedidoDeAvaliacao(textoCli, leadAntes));
     if (avaliacao) {
       const texto = textoPedidoAvaliacao({ ...avaliacao, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
       const relato = semAberturaDoSite(c.textoBuffer).replace(/\s+/g, " ").trim().slice(0, 300);
