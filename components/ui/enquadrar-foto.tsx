@@ -125,7 +125,8 @@ export function useEnquadrarFoto() {
   const [img, setImg] = useState<ImageBitmap | null>(null);
   const [ajuste, setAjuste] = useState<Enquadre>({ zoom: 1, x: 0, y: 0 });
   const resolver = useRef<((f: Enquadrado | null) => void) | null>(null);
-  const tela = useRef<HTMLCanvasElement>(null);
+  /* o quadro entra na tela depois da janela abrir: guardado em estado para desenhar assim que existir */
+  const [tela, setTela] = useState<HTMLCanvasElement | null>(null);
   const arrasto = useRef<{ x: number; y: number; a: Enquadre; fator: number } | null>(null);
 
   const enquadrar = useCallback(async (fonte: File | string, salvo?: Enquadre | null) => {
@@ -147,9 +148,9 @@ export function useEnquadrarFoto() {
   );
 
   useEffect(() => {
-    const ctx = tela.current?.getContext("2d");
+    const ctx = tela?.getContext("2d");
     if (img && ctx) desenharNoQuadro(ctx, img, ajuste);
-  }, [img, ajuste]);
+  }, [img, ajuste, tela]);
 
   const zoomPor = (fator: number) =>
     img && setAjuste((a) => limitar(img, { ...a, zoom: Math.max(zoomMinimo(img.width, img.height), Math.min(4, a.zoom * fator)) }));
@@ -181,7 +182,7 @@ export function useEnquadrarFoto() {
     >
       <div className="flex flex-col items-center gap-3">
         <canvas
-          ref={tela}
+          ref={setTela}
           width={LADO_CARD}
           height={LADO_CARD}
           className="aspect-square w-full max-w-[340px] cursor-grab touch-none rounded-xl ring-1 ring-linha active:cursor-grabbing"
