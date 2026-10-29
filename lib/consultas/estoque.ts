@@ -124,6 +124,8 @@ export async function listarCatalogo() {
       ficha: m.ficha,
       descricao: m.descricao,
       fotoUrl: m.fotoUrl,
+      fotoVitrineUrl: m.fotoVitrineUrl,
+      fotoEnquadre: m.fotoEnquadre,
       videoUrl: m.videoUrl,
       fotoWhatsappUrl: m.fotoWhatsappUrl,
       mostrarNoSite: m.mostrarNoSite,
@@ -203,7 +205,7 @@ export async function listarVeiculosVendaveis(opcoes: { incluirTeste?: boolean }
 export async function listarCoresModelos() {
   const c = schema.modeloCores;
   return db
-    .select({ id: c.id, modeloId: c.modeloId, nome: c.nome, hex: c.hex, fotoUrl: c.fotoUrl, ordem: c.ordem, ativo: c.ativo })
+    .select({ id: c.id, modeloId: c.modeloId, nome: c.nome, hex: c.hex, fotoUrl: c.fotoUrl, fotoVitrineUrl: c.fotoVitrineUrl, fotoEnquadre: c.fotoEnquadre, ordem: c.ordem, ativo: c.ativo })
     .from(c)
     .orderBy(asc(c.modeloId), asc(c.ordem), asc(c.id));
 }

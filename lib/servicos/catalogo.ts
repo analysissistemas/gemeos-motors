@@ -188,6 +188,24 @@ export async function salvarModelo(u: Quem, id: number | null, entrada: unknown)
 }
 
 /** Troca, põe ou tira a foto principal. A foto antiga só é apagada depois de gravar a nova. */
+/** Foto do card do site: a principal enquadrada só na moto (quadrada). A original fica para o WhatsApp. */
+export async function enquadrarFotoModelo(u: Quem, id: number, fotoVitrineUrl: string, fotoEnquadre: { zoom: number; x: number; y: number }) {
+  let antes;
+  try {
+    antes = await modeloPorId(id);
+    if (!antes.fotoUrl) throw new ErroRegra("Ponha a foto principal antes de enquadrar.");
+  } catch (e) {
+    await apagarFotoCatalogo(fotoVitrineUrl);
+    throw e;
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(m).set({ fotoVitrineUrl, fotoEnquadre }).where(eq(m.id, id));
+    await registrarLog(u, { acao: "modelo.foto_enquadrada", entidade: "modelo", entidadeId: id, descricao: `Enquadrou a foto do ${antes.nome} no card do site` }, tx);
+  });
+  await apagarFotoCatalogo(antes.fotoVitrineUrl);
+  return { fotoVitrineUrl, fotoEnquadre };
+}
+
 export async function trocarFotoModelo(u: Quem, id: number, fotoUrl: string | null) {
   let antes;
   try {
@@ -197,7 +215,8 @@ export async function trocarFotoModelo(u: Quem, id: number, fotoUrl: string | nu
     throw e;
   }
   await db.transaction(async (tx) => {
-    await tx.update(m).set({ fotoUrl }).where(eq(m.id, id));
+    /* foto nova = enquadramento novo: o do card antigo não vale para ela */
+    await tx.update(m).set({ fotoUrl, fotoVitrineUrl: null, fotoEnquadre: null }).where(eq(m.id, id));
     await registrarLog(
       u,
       {
@@ -210,6 +229,7 @@ export async function trocarFotoModelo(u: Quem, id: number, fotoUrl: string | nu
     );
   });
   if (antes.fotoUrl !== fotoUrl) await apagarFotoCatalogo(antes.fotoUrl);
+  await apagarFotoCatalogo(antes.fotoVitrineUrl);
   return { fotoUrl };
 }
 

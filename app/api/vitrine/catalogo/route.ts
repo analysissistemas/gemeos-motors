@@ -39,7 +39,8 @@ export async function GET() {
         preco: m.precoTabela,
         ficha: m.ficha,
         descricao: m.descricao,
-        foto: m.fotoUrl,
+        /* o card mostra a foto enquadrada só na moto; sem enquadrar, a original */
+        foto: sql<string | null>`coalesce(${m.fotoVitrineUrl}, ${m.fotoUrl})`,
         disponibilidade: m.disponibilidade,
         lancamento: m.lancamento,
         lancamentoTexto: m.lancamentoTexto,
@@ -65,7 +66,7 @@ export async function GET() {
     const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
     const cores = ids.length
       ? await db
-          .select({ modeloId: c.modeloId, nome: c.nome, hex: c.hex, foto: c.fotoUrl })
+          .select({ modeloId: c.modeloId, nome: c.nome, hex: c.hex, foto: sql<string | null>`coalesce(${c.fotoVitrineUrl}, ${c.fotoUrl})` })
           .from(c)
           .where(and(inArray(c.modeloId, ids), eq(c.ativo, true), ne(c.nome, "")))
           .orderBy(asc(c.ordem), asc(c.id))

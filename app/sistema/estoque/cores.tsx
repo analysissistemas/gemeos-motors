@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Check, Eye, EyeOff, ImageOff, ImageUp, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Eye, EyeOff, ImageOff, ImageUp, Palette, Pencil, Plus, Trash2, X, Crop } from "lucide-react";
 import type { CorModelo } from "@/lib/consultas/estoque";
 import { PALETA_CORES, corClara, normalizarHex } from "@/lib/cores";
 import { cn } from "@/lib/cn";
@@ -10,13 +10,11 @@ import { EstadoVazio, Selo } from "@/components/ui/basicos";
 import { Botao } from "@/components/ui/botao";
 import { Campo, Entrada } from "@/components/ui/campos";
 import { LIMITE_FOTO, TIPOS_FOTO, reduzirFoto } from "@/components/ui/editor-foto";
-import { adicionarCor, alternarCor, editarCor, enviarFotoCor, moverCor, removerCor, removerFotoCor } from "./acoes-cores";
+import { useEnquadrarFoto, type Enquadrado } from "@/components/ui/enquadrar-foto";
+import { adicionarCor, alternarCor, editarCor, enquadrarFotoCor, enviarFotoCor, moverCor, removerCor, removerFotoCor } from "./acoes-cores";
 
 type ModeloCatalogo = { id: number; nome: string };
 type Resposta = { ok: true; mensagem?: string } | { ok: false; erro: string; campos?: Record<string, string> };
-
-/* A foto do catálogo é a moto inteira: mantém a proporção, lado maior até 1200 px. */
-export const LADO_CATALOGO = 1200;
 
 /** Bolinha com a cor. Cor clara ganha contorno, senão some no fundo branco. */
 export function BolinhaCor({ hex, tamanho = "md", className }: { hex: string; tamanho?: "sm" | "md" | "lg"; className?: string }) {
@@ -87,19 +85,35 @@ function LinhaCor({
   const [hex, setHex] = useState(cor.hex);
   const [enviando, setEnviando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
+  const { enquadrar, janela } = useEnquadrarFoto();
 
   async function escolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     e.target.value = "";
     if (!arquivo) return;
     if (!TIPOS_FOTO.includes(arquivo.type)) return void toast.error("Use uma foto JPG, PNG ou WebP.");
+    /* a original fica para o WhatsApp; o card do site recebe a moto enquadrada */
+    const original = await reduzirFoto(arquivo, { ladoMaior: 1200 });
+    if (original.size > LIMITE_FOTO) return void toast.error("A foto passa de 2 MB. Escolha uma menor.");
+    const card = await enquadrar(original);
+    if (!card) return;
     setEnviando(true);
     try {
-      const pronto = await reduzirFoto(arquivo, { ladoMaior: LADO_CATALOGO });
-      if (pronto.size > LIMITE_FOTO) return void toast.error("A foto passa de 2 MB. Escolha uma menor.");
       const dados = new FormData();
-      dados.set("foto", pronto);
-      await rodar(() => enviarFotoCor(cor.id, dados));
+      dados.set("foto", original);
+      if (await rodar(() => enviarFotoCor(cor.id, dados))) await rodar(() => enquadrarFotoCor(cor.id, dadosDoCard(card)));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function reenquadrar() {
+    if (!cor.fotoUrl) return;
+    const card = await enquadrar(cor.fotoUrl, cor.fotoEnquadre);
+    if (!card) return;
+    setEnviando(true);
+    try {
+      await rodar(() => enquadrarFotoCor(cor.id, dadosDoCard(card)));
     } finally {
       setEnviando(false);
     }
@@ -110,7 +124,7 @@ function LinhaCor({
       <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-trilho ring-1 ring-linha">
         {cor.fotoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- foto pública do catálogo (/api/vitrine/foto)
-          <img src={cor.fotoUrl} alt={`Foto na cor ${cor.nome}`} className="size-full object-contain" />
+          <img src={cor.fotoVitrineUrl ?? cor.fotoUrl} alt={`Foto na cor ${cor.nome}`} className="size-full object-contain" />
         ) : (
           <ImageOff className="size-5 text-ink-3" aria-label="Sem foto" />
         )}
@@ -158,6 +172,7 @@ function LinhaCor({
           </span>
           {!cor.ativo && <Selo tom="neutro">Escondida</Selo>}
           {!cor.fotoUrl && cor.ativo && <Selo tom="atencao">Sem foto</Selo>}
+          {cor.fotoUrl && !cor.fotoVitrineUrl && cor.ativo && <Selo tom="atencao">Falta enquadrar</Selo>}
         </div>
       )}
 
@@ -167,7 +182,19 @@ function LinhaCor({
             <ImageUp className="size-4" /> {cor.fotoUrl ? "Trocar foto" : "Pôr foto"}
           </Botao>
           {cor.fotoUrl && (
-            <Botao tamanho="icone" variante="fantasma" aria-label={`Remover a foto da cor ${cor.nome}`} title="Remover foto" disabled={pendente} onClick={() => rodar(() => removerFotoCor(cor.id))}>
+            <Botao tamanho="sm" variante="secundario" carregando={enviando} disabled={pendente} onClick={() => void reenquadrar()}>
+              <Crop className="size-4" /> Enquadrar
+            </Botao>
+          )}
+          {cor.fotoUrl && (
+            <Botao
+              tamanho="icone"
+              variante="fantasma"
+              aria-label={`Remover a foto da cor ${cor.nome}`}
+              title="Remover foto"
+              disabled={pendente}
+              onClick={() => window.confirm(`Remover a foto da cor ${cor.nome}? Ela sai do site.`) && rodar(() => removerFotoCor(cor.id))}
+            >
               <ImageOff className="size-4" />
             </Botao>
           )}
@@ -203,6 +230,7 @@ function LinhaCor({
             <Trash2 className="size-4 text-critico" />
           </Botao>
           <input ref={entrada} type="file" accept={TIPOS_FOTO.join(",")} className="sr-only" tabIndex={-1} aria-label={`Foto da cor ${cor.nome}`} onChange={escolherFoto} />
+          {janela}
         </div>
       )}
     </li>
@@ -317,4 +345,11 @@ function NovaCor({
       <p className="mt-2 text-[12px] text-ink-3">Depois de acrescentar, use &quot;Pôr foto&quot; na cor para mostrar a moto naquela cor.</p>
     </div>
   );
+}
+
+function dadosDoCard(card: Enquadrado) {
+  const d = new FormData();
+  d.set("foto", card.arquivo);
+  d.set("enquadre", JSON.stringify(card.enquadre));
+  return d;
 }

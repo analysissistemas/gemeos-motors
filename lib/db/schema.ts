@@ -132,6 +132,10 @@ export const modelos = pgTable(
     descricao: text(),
     /* foto principal do card (/api/vitrine/foto/...; pública) */
     fotoUrl: text(),
+    /* a mesma foto enquadrada só na moto, quadrada, para o card do site (o WhatsApp continua com a original);
+       fotoEnquadre guarda a posição para reabrir e ajustar (usuário, 29/10/2026) */
+    fotoVitrineUrl: text(),
+    fotoEnquadre: jsonb().$type<{ zoom: number; x: number; y: number }>(),
     /* vídeo da moto (MP4 no volume de mídia, /api/midia/...): a IA manda no WhatsApp junto com a ficha */
     videoUrl: text(),
     /* foto só do WhatsApp (ex.: o panfleto com a ficha), diferente da do site. Com ela, a IA manda esta
@@ -167,6 +171,8 @@ export const modeloCores = pgTable(
     nome: text().notNull(),
     hex: text().notNull(), // "#6d1f33"
     fotoUrl: text(),
+    fotoVitrineUrl: text(),
+    fotoEnquadre: jsonb().$type<{ zoom: number; x: number; y: number }>(),
     ordem: integer().notNull().default(0),
     ativo: boolean().notNull().default(true),
     criadoEm: criadoEm(),
@@ -717,6 +723,21 @@ export const iaExecucoes = pgTable(
     criadoEm: criadoEm(),
   },
   (t) => [index("ia_execucoes_criado_idx").on(t.criadoEm), index("ia_execucoes_conversa_idx").on(t.conversaId)],
+);
+
+/* ---------- gasto da IA: cada chamada à OpenAI, para a barrinha de crédito da Visão geral (lib/ia/consumo.ts) ---------- */
+export const iaConsumo = pgTable(
+  "ia_consumo",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    modelo: text().notNull(),
+    tipo: text().notNull(), // texto | imagem | audio
+    tokensEntrada: integer(),
+    tokensSaida: integer(),
+    custoUsd: numeric({ precision: 10, scale: 6, mode: "number" }).notNull(),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("ia_consumo_criado_idx").on(t.criadoEm)],
 );
 
 /* ---------- workflow de atendimento da IA: cada execução, nó a nó (lib/ia/workflow) ---------- */

@@ -43,6 +43,7 @@ export function ListaConversas({
   podeSimular?: boolean;
 }) {
   const naoLidas = itens.reduce((s, i) => s + i.naoLidas, 0);
+  const naoRespondidas = itens.filter((i) => i.ultimaMensagemDirecao === "incoming").length;
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-linha px-4 pb-3 pt-4">
@@ -85,6 +86,7 @@ export function ListaConversas({
               {f === "testes" && <FlaskConical className="size-3.5" />}
               {FILTROS_CONVERSA[f]}
               {f === "nao_lidas" && naoLidas > 0 ? ` · ${naoLidas}` : ""}
+              {f === "nao_respondidas" && filtro === f && naoRespondidas > 0 ? ` · ${naoRespondidas}` : ""}
             </button>
           ))}
         </div>

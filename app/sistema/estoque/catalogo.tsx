@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Eye, EyeOff, Film, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, Crop, Eye, EyeOff, Film, ImageOff, ImageUp, Palette, Pencil, Plus, Power, Rocket, Trash2, Truck } from "lucide-react";
 import type { CorModelo, ItemCatalogo } from "@/lib/consultas/estoque";
 import { CAMPOS_FICHA, DISPONIBILIDADES, TIPOS_CATALOGO, type Disponibilidade, type TipoCatalogo } from "@/lib/dominio";
 import { brl } from "@/lib/formato";
@@ -12,8 +12,10 @@ import { Botao } from "@/components/ui/botao";
 import { Alternar, AreaTexto, Campo, CampoDinheiro, Entrada, Selecao } from "@/components/ui/campos";
 import { Dialogo, RodapeDialogo } from "@/components/ui/dialogo";
 import { LIMITE_FOTO, TIPOS_FOTO, reduzirFoto } from "@/components/ui/editor-foto";
-import { BolinhaCor, CoresDoModelo, LADO_CATALOGO } from "./cores";
-import { acaoAlternarAtivo, acaoAlternarSite, acaoEnviarFotoModelo, acaoEnviarFotoWhatsapp, acaoExcluirModelo, acaoMoverModelo, acaoRemoverFotoModelo, acaoRemoverFotoWhatsapp, acaoSalvarModelo } from "./acoes-catalogo";
+import { abrirFoto, arquivoDoQuadro, enquadreAutomatico, useEnquadrarFoto, type Enquadrado } from "@/components/ui/enquadrar-foto";
+import { BolinhaCor, CoresDoModelo } from "./cores";
+import { enquadrarFotoCor } from "./acoes-cores";
+import { acaoAlternarAtivo, acaoAlternarSite, acaoEnquadrarFotoModelo, acaoEnviarFotoModelo, acaoEnviarFotoWhatsapp, acaoExcluirModelo, acaoMoverModelo, acaoRemoverFotoModelo, acaoRemoverFotoWhatsapp, acaoSalvarModelo } from "./acoes-catalogo";
 
 type Resposta = { ok: true; mensagem?: string; dados?: unknown } | { ok: false; erro: string; campos?: Record<string, string> };
 
@@ -25,6 +27,7 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
   const [coresDe, setCoresDe] = useState<number | null>(null);
   const modeloCores = itens.find((i) => i.id === coresDe) ?? null;
   const ativos = itens.filter((i) => i.ativo);
+  const [padronizando, setPadronizando] = useState(false);
 
   function rodar(acao: () => Promise<Resposta>) {
     return new Promise<boolean>((fim) =>
@@ -41,6 +44,40 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
     );
   }
 
+  /* fotos que ainda não têm o enquadramento do card ganham o automático (a moto, quadrada); quem quiser
+     ajustar abre o modelo e usa "Enquadrar". A foto original não muda (o WhatsApp continua com ela). */
+  async function padronizarFotos() {
+    const fotos = [
+      ...itens.filter((i) => i.fotoUrl && !i.fotoVitrineUrl).map((i) => ({ url: i.fotoUrl!, enviar: (d: FormData) => acaoEnquadrarFotoModelo(i.id, d) })),
+      ...cores.filter((c) => c.fotoUrl && !c.fotoVitrineUrl).map((c) => ({ url: c.fotoUrl!, enviar: (d: FormData) => enquadrarFotoCor(c.id, d) })),
+    ];
+    if (!fotos.length) return void toast.success("Todas as fotos já estão enquadradas no card do site");
+    setPadronizando(true);
+    let feitas = 0, falhas = 0;
+    try {
+      for (const f of fotos) {
+        try {
+          const img = await abrirFoto(f.url);
+          if (!img) throw new Error("sem foto");
+          const enquadre = enquadreAutomatico(img);
+          const arquivo = await arquivoDoQuadro(img, enquadre);
+          img.close();
+          if (!arquivo) throw new Error("sem canvas");
+          const r = await f.enviar(dadosDoCard({ arquivo, enquadre }));
+          if (!r.ok) throw new Error(r.erro);
+          feitas++;
+        } catch {
+          falhas++;
+        }
+      }
+    } finally {
+      setPadronizando(false);
+      router.refresh();
+    }
+    if (falhas) toast.error(`${feitas} foto${feitas === 1 ? "" : "s"} enquadrada${feitas === 1 ? "" : "s"}; ${falhas} não deu. Tente de novo.`);
+    else toast.success(`${feitas} foto${feitas === 1 ? "" : "s"} enquadrada${feitas === 1 ? "" : "s"} no card do site`);
+  }
+
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -49,9 +86,14 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
           lançamento para o cliente reservar.
         </p>
         {editar && (
-          <Botao variante="primario" onClick={() => setEditando("novo")}>
-            <Plus className="size-4" /> Novo modelo
-          </Botao>
+          <div className="flex flex-wrap gap-2">
+            <Botao variante="secundario" carregando={padronizando} disabled={pendente} onClick={() => void padronizarFotos()} title="Enquadra só a moto, no quadrado do card do site, as fotos que ainda não foram enquadradas">
+              <ImageUp className="size-4" /> Enquadrar fotos do site
+            </Botao>
+            <Botao variante="primario" onClick={() => setEditando("novo")}>
+              <Plus className="size-4" /> Novo modelo
+            </Botao>
+          </div>
         )}
       </div>
 
@@ -68,7 +110,7 @@ export function Catalogo({ itens, cores, editar }: { itens: ItemCatalogo[]; core
                   <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-trilho ring-1 ring-linha">
                     {m.fotoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element -- foto pública do catálogo (/api/vitrine/foto)
-                      <img src={m.fotoUrl} alt={`Foto do ${m.nome}`} className="size-full object-contain" />
+                      <img src={m.fotoVitrineUrl ?? m.fotoUrl} alt={`Foto do ${m.nome}`} className="size-full object-contain" />
                     ) : (
                       <ImageOff className="size-5 text-ink-3" aria-label="Sem foto principal" />
                     )}
@@ -211,8 +253,11 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
   const [reposicaoEm, setReposicaoEm] = useState(item?.reposicaoEm ?? "");
   const [reposicaoQtd, setReposicaoQtd] = useState(item?.reposicaoQtd != null ? String(item.reposicaoQtd) : "");
   const [fotoUrl, setFotoUrl] = useState(item?.fotoUrl ?? null);
+  const [fotoCard, setFotoCard] = useState(item?.fotoVitrineUrl ?? null);
+  const [enquadre, setEnquadre] = useState(item?.fotoEnquadre ?? null);
   const [enviando, setEnviando] = useState(false);
   const entradaFoto = useRef<HTMLInputElement>(null);
+  const { enquadrar, janela } = useEnquadrarFoto();
   const [fotoWhats, setFotoWhats] = useState(item?.fotoWhatsappUrl ?? null);
   const [enviandoWhats, setEnviandoWhats] = useState(false);
   const entradaWhats = useRef<HTMLInputElement>(null);
@@ -247,21 +292,46 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
     aoTerminar();
   }
 
+  /* foto nova: guarda a original (o WhatsApp manda ela) e o enquadramento do card do site */
   async function escolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     e.target.value = "";
     if (!arquivo || !item) return;
     if (!TIPOS_FOTO.includes(arquivo.type)) return void toast.error("Use uma foto JPG, PNG ou WebP.");
+    const original = await reduzirFoto(arquivo, { ladoMaior: 1200 });
+    if (original.size > LIMITE_FOTO) return void toast.error("A foto passa de 2 MB. Escolha uma menor.");
+    const card = await enquadrar(original);
+    if (!card) return;
     setEnviando(true);
     try {
-      const pronto = await reduzirFoto(arquivo, { ladoMaior: LADO_CATALOGO });
-      if (pronto.size > LIMITE_FOTO) return void toast.error("A foto passa de 2 MB. Escolha uma menor.");
       const dados = new FormData();
-      dados.set("foto", pronto);
+      dados.set("foto", original);
       const r = await acaoEnviarFotoModelo(item.id, dados);
       if (!r.ok) return void toast.error(r.erro);
       setFotoUrl(r.dados.fotoUrl);
-      await rodar(async () => ({ ok: true, mensagem: r.mensagem }));
+      setFotoCard(null);
+      await salvarCard(card);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function salvarCard(card: Enquadrado) {
+    if (!item) return;
+    const r = await acaoEnquadrarFotoModelo(item.id, dadosDoCard(card));
+    if (!r.ok) return void toast.error(r.erro);
+    setFotoCard(r.dados.fotoVitrineUrl);
+    setEnquadre(r.dados.fotoEnquadre);
+    await rodar(async () => ({ ok: true, mensagem: "Foto guardada e enquadrada no card do site" }));
+  }
+
+  async function reenquadrar() {
+    if (!fotoUrl) return;
+    const card = await enquadrar(fotoUrl, enquadre);
+    if (!card) return;
+    setEnviando(true);
+    try {
+      await salvarCard(card);
     } finally {
       setEnviando(false);
     }
@@ -319,29 +389,41 @@ function FormModelo({ item, aoTerminar, rodar, pendente }: { item: ItemCatalogo 
         <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-trilho ring-1 ring-linha">
           {fotoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- foto pública do catálogo (/api/vitrine/foto)
-            <img src={fotoUrl} alt="Foto principal" className="size-full object-contain" />
+            <img src={fotoCard ?? fotoUrl} alt="Foto principal como aparece no card do site" className="size-full object-contain" />
           ) : (
             <ImageOff className="size-6 text-ink-3" aria-label="Sem foto principal" />
           )}
         </span>
         <div className="min-w-0 flex-1 text-[13px]">
           <p className="font-semibold">Foto principal do card</p>
-          <p className="text-ink-3">{item ? "A moto inteira, de preferência com fundo claro. JPG, PNG ou WebP até 2 MB." : "Salve o modelo primeiro; depois dá para pôr a foto."}</p>
+          <p className="text-ink-3">{item ? (fotoUrl && !fotoCard ? "Falta enquadrar a moto no card do site: use Enquadrar." : "No site aparece só a moto, no quadrado do card; o WhatsApp recebe a foto inteira. JPG, PNG ou WebP até 2 MB.") : "Salve o modelo primeiro; depois dá para pôr a foto."}</p>
         </div>
         {item && (
           <div className="flex gap-1">
             <input ref={entradaFoto} type="file" accept={TIPOS_FOTO.join(",")} className="hidden" onChange={escolherFoto} aria-label="Escolher foto principal" />
+            {janela}
             <Botao tamanho="sm" variante="secundario" carregando={enviando} disabled={pendente} onClick={() => entradaFoto.current?.click()}>
               <ImageUp className="size-4" /> {fotoUrl ? "Trocar foto" : "Pôr foto"}
             </Botao>
+            {fotoUrl && (
+              <Botao tamanho="sm" variante={fotoCard ? "secundario" : "primario"} carregando={enviando} disabled={pendente} onClick={() => void reenquadrar()}>
+                <Crop className="size-4" /> Enquadrar
+              </Botao>
+            )}
             {fotoUrl && (
               <Botao
                 tamanho="icone"
                 variante="fantasma"
                 aria-label="Remover foto principal"
+                title="Remover foto"
                 disabled={pendente}
                 onClick={async () => {
-                  if (await rodar(() => acaoRemoverFotoModelo(item.id))) setFotoUrl(null);
+                  /* remover sem querer tirava a foto do site na hora (29/10/2026): pede confirmação */
+                  if (!window.confirm("Remover a foto principal deste modelo? Ela sai do site.")) return;
+                  if (await rodar(() => acaoRemoverFotoModelo(item.id))) {
+                    setFotoUrl(null);
+                    setFotoCard(null);
+                  }
                 }}
               >
                 <ImageOff className="size-4" />
@@ -560,4 +642,11 @@ function SituacaoNoSite({ m }: { m: ItemCatalogo }) {
     return <Selo tom="atencao">No site: chegando {m.reposicaoEm.split("-").reverse().slice(0, 2).join("/")}{m.reposicaoQtd ? ` (${m.reposicaoQtd})` : ""}</Selo>;
   if (m.disponibilidade === "sob_encomenda") return <Selo tom="info">No site: sob encomenda</Selo>;
   return <Selo tom="critico">No site: esgotado</Selo>;
+}
+
+function dadosDoCard(card: Enquadrado) {
+  const d = new FormData();
+  d.set("foto", card.arquivo);
+  d.set("enquadre", JSON.stringify(card.enquadre));
+  return d;
 }

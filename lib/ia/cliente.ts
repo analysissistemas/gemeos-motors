@@ -3,6 +3,8 @@ import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
 import type { z } from "zod";
 import { iaLigada } from "./controle";
+import { marcarSemCredito, registrarConsumo } from "./consumo";
+import { custoAudioUsd, custoUsd } from "./credito";
 
 /* ============================================================
    PORTA ÚNICA PARA A IA
@@ -22,6 +24,12 @@ const NOME_OPENAI = process.env.IA_MODELO || "gpt-4.1";
 export const MODELO_IA = COM_OPENAI ? `openai/${NOME_OPENAI}` : process.env.IA_MODELO || "anthropic/claude-sonnet-5";
 const modelo = () => (COM_OPENAI ? openai(NOME_OPENAI) : MODELO_IA);
 
+/* cada chamada que deu certo entra na conta do crédito (barrinha da Visão geral) */
+function contar(tipo: "texto" | "imagem", uso: { inputTokens?: number; outputTokens?: number } | undefined) {
+  if (!COM_OPENAI) return;
+  registrarConsumo({ modelo: NOME_OPENAI, tipo, tokensEntrada: uso?.inputTokens, tokensSaida: uso?.outputTokens, custoUsd: custoUsd(NOME_OPENAI, uso?.inputTokens, uso?.outputTokens) });
+}
+
 export class IaIndisponivel extends Error {}
 
 /* Chave geral: com a IA desligada, nenhuma chamada ao modelo acontece, para nada. */
@@ -32,6 +40,7 @@ async function exigirIaLigada() {
 function traduzirErro(e: unknown): IaIndisponivel {
   const texto = String((e as { message?: string })?.message ?? e);
   if (texto.includes("insufficient_quota") || texto.includes("exceeded your current quota")) {
+    marcarSemCredito();
     return new IaIndisponivel("A conta da OpenAI está sem crédito. Coloque crédito em platform.openai.com → Billing.");
   }
   if (texto.includes("Incorrect API key") || texto.includes("invalid_api_key")) {
@@ -77,6 +86,7 @@ export async function gerarObjetoComUso<S extends z.ZodType>(p: { schema: S; sis
       timeout: 60_000,
       maxRetries: 1,
     });
+    contar("texto", r.usage);
     return { objeto: r.output as z.infer<S>, tokensEntrada: r.usage?.inputTokens ?? null, tokensSaida: r.usage?.outputTokens ?? null };
   } catch (e) {
     throw traduzirErro(e);
@@ -113,6 +123,7 @@ export async function lerTextoDaImagem(bytes: Buffer, mime: string): Promise<str
       timeout: 30_000,
       maxRetries: 1,
     });
+    contar("imagem", r.usage);
     const t = r.text.trim();
     return /^sem texto\.?$/i.test(t) ? "" : t;
   } catch (e) {
@@ -128,6 +139,7 @@ export async function analisarMidia(tipo: "audio" | "imagem" | "documento", byte
     if (tipo === "audio") {
       const { experimental_transcribe } = await import("ai");
       const r = await experimental_transcribe({ model: openai.transcription("gpt-4o-mini-transcribe"), audio: bytes, providerOptions: { openai: { language: "pt" } }, abortSignal: AbortSignal.timeout(60_000) });
+      registrarConsumo({ modelo: "gpt-4o-mini-transcribe", tipo: "audio", custoUsd: custoAudioUsd(bytes.length) });
       return r.text.trim();
     }
     const parte = tipo === "imagem" ? { type: "image" as const, image: bytes, mediaType: mime } : { type: "file" as const, data: bytes, mediaType: mime || "application/pdf", filename: "documento.pdf" };
@@ -138,6 +150,7 @@ export async function analisarMidia(tipo: "audio" | "imagem" | "documento", byte
       timeout: 60_000,
       maxRetries: 1,
     });
+    contar("imagem", r.usage);
     return r.text.trim();
   } catch (e) {
     throw traduzirErro(e);

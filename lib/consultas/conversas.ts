@@ -58,6 +58,7 @@ export async function listarConversas(f: { filtro?: FiltroConversa; q?: string; 
   const filtros: (SQL | undefined)[] = [];
   switch (f.filtro) {
     case "nao_lidas": filtros.push(gt(c.naoLidas, 0)); break;
+    case "nao_respondidas": filtros.push(eq(c.ultimaMensagemDirecao, "incoming"), sql`${c.status} <> 'encerrada'`); break;
     case "minhas": filtros.push(eq(c.responsavelId, f.usuarioId)); break;
     case "sem_responsavel": filtros.push(isNull(c.responsavelId)); break;
     case "em_atendimento": filtros.push(inArray(c.status, ["nova", "em_atendimento"])); break;

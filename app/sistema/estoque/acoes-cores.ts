@@ -8,6 +8,7 @@ import { executar, ErroRegra } from "@/lib/acao";
 import { registrarLog } from "@/lib/logs";
 import { normalizarHex } from "@/lib/cores";
 import { apagarFotoCatalogo, guardarFotoCatalogo } from "@/lib/fotos";
+import { esquemaEnquadre } from "@/lib/servicos/enquadre";
 
 /* Cores de cada modelo do catálogo, com a foto da moto naquela cor. Quem edita o
    estoque edita as cores (a vitrine lê de /api/vitrine/cores). Toda mudança fica
@@ -44,7 +45,7 @@ async function modeloDe(modeloId: number) {
 
 async function corDe(id: number) {
   const [cor] = await db
-    .select({ id: c.id, modeloId: c.modeloId, nome: c.nome, hex: c.hex, fotoUrl: c.fotoUrl, ordem: c.ordem, ativo: c.ativo, modelo: schema.modelos.nome })
+    .select({ id: c.id, modeloId: c.modeloId, nome: c.nome, hex: c.hex, fotoUrl: c.fotoUrl, fotoVitrineUrl: c.fotoVitrineUrl, ordem: c.ordem, ativo: c.ativo, modelo: schema.modelos.nome })
     .from(c)
     .innerJoin(schema.modelos, eq(schema.modelos.id, c.modeloId))
     .where(eq(c.id, id))
@@ -156,7 +157,7 @@ async function trocarFotoCor(id: number, fotoUrl: string | null) {
     throw e;
   }
   await db.transaction(async (tx) => {
-    await tx.update(c).set({ fotoUrl }).where(eq(c.id, cor.id));
+    await tx.update(c).set({ fotoUrl, fotoVitrineUrl: null, fotoEnquadre: null }).where(eq(c.id, cor.id));
     await registrarLog(
       u,
       {
@@ -170,8 +171,27 @@ async function trocarFotoCor(id: number, fotoUrl: string | null) {
     );
   });
   await apagarFotoCatalogo(cor.fotoUrl);
+  await apagarFotoCatalogo(cor.fotoVitrineUrl);
   atualizarTelas();
   return { fotoUrl };
+}
+
+/** Foto da cor enquadrada só na moto para o card do site; a original fica para o WhatsApp. */
+export async function enquadrarFotoCor(id: number, dados: FormData) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const enquadre = esquemaEnquadre.parse(JSON.parse(String(dados.get("enquadre") ?? "null")));
+    const cor = await corDe(Number(id));
+    if (!cor.fotoUrl) throw new ErroRegra("Ponha a foto da cor antes de enquadrar.");
+    const url = await guardarFotoCatalogo(dados.get("foto"), cor.modeloId);
+    await db.transaction(async (tx) => {
+      await tx.update(c).set({ fotoVitrineUrl: url, fotoEnquadre: enquadre }).where(eq(c.id, cor.id));
+      await registrarLog(u, { acao: "modelo.cor_foto_enquadrada", entidade: "modelo", entidadeId: cor.modeloId, descricao: `Enquadrou a foto do ${cor.modelo} na cor ${cor.nome} no card do site`, dados: { corId: cor.id } }, tx);
+    });
+    await apagarFotoCatalogo(cor.fotoVitrineUrl);
+    atualizarTelas();
+    return { fotoVitrineUrl: url };
+  }, "Foto enquadrada no card do site");
 }
 
 export async function enviarFotoCor(id: number, dados: FormData) {

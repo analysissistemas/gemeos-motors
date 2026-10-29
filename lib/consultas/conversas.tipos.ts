@@ -2,6 +2,9 @@
 export const FILTROS_CONVERSA = {
   todas: "Todas",
   nao_lidas: "Não lidas",
+  /* a última mensagem é do cliente: ele está esperando resposta, mesmo que alguém já tenha aberto a conversa
+     (usuário, 29/10/2026: "além do Não visto, o Não respondido") */
+  nao_respondidas: "Não respondidas",
   minhas: "Minhas",
   sem_responsavel: "Sem responsável",
   em_atendimento: "Em atendimento",

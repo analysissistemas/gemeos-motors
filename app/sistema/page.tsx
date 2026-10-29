@@ -13,6 +13,9 @@ import { classesBotao } from "@/components/ui/botao";
 import { Filtros } from "@/components/ui/filtros";
 import { BarrasHorizontais } from "@/components/graficos/barras";
 import { ColunasTempo } from "@/components/graficos/colunas";
+import { lerSituacaoCredito } from "@/lib/ia/consumo";
+import { textoDoCredito } from "@/lib/ia/credito";
+import { BarraCreditoIa } from "./_credito/barra";
 
 export const metadata: Metadata = { title: "Visão geral" };
 
@@ -31,7 +34,10 @@ export default async function Painel_({ searchParams }: { searchParams: Promise<
   const periodo = (["hoje", "7d", "30d", "mes", "custom"].includes(b.periodo ?? "") ? b.periodo : "30d") as Periodo;
   const { inicio, fim, rotulo } = intervalo(periodo, b.de, b.ate);
   const verLucro = pode(u.papel, "custo.ver");
-  const d = await carregarPainel(inicio, fim, verLucro);
+  const [d, credito] = await Promise.all([carregarPainel(inicio, fim, verLucro), lerSituacaoCredito().catch(() => null)]);
+  const admin = pode(u.papel, "config.gerenciar");
+  /* crédito da IA: o admin vê sempre (e informa o saldo); a equipe só quando está baixo ou acabou */
+  const mostrarCredito = credito && (admin || ["baixo", "acabando", "acabou"].includes(credito.nivel));
   const k = d.kpi;
   const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
   const at = d.atencao;
@@ -76,6 +82,8 @@ export default async function Painel_({ searchParams }: { searchParams: Promise<
           </form>
         </Filtros>
       </div>
+
+      {mostrarCredito && <BarraCreditoIa nivel={credito.nivel} texto={textoDoCredito(credito)} podeAtualizar={admin} />}
 
       {/* o que pede ação agora */}
       <Painel className="mb-4 p-4">

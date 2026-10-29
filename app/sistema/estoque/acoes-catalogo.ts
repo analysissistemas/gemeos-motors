@@ -4,7 +4,8 @@ import { z } from "zod";
 import { autorizar } from "@/lib/auth/dal";
 import { executar } from "@/lib/acao";
 import { apagarFotoCatalogo, guardarFotoCatalogo } from "@/lib/fotos";
-import { alternarAtivo, alternarSite, excluirModelo, modeloPorId, moverModelo, salvarModelo, trocarFotoModelo, trocarFotoWhatsappModelo } from "@/lib/servicos/catalogo";
+import { esquemaEnquadre } from "@/lib/servicos/enquadre";
+import { alternarAtivo, alternarSite, enquadrarFotoModelo, excluirModelo, modeloPorId, moverModelo, salvarModelo, trocarFotoModelo, trocarFotoWhatsappModelo } from "@/lib/servicos/catalogo";
 
 /* Aba "Catálogo" do estoque: quem edita o estoque edita o catálogo do site.
    Permissão conferida aqui em cada ação; o histórico é gravado no serviço. */
@@ -35,6 +36,19 @@ export async function acaoEnviarFotoModelo(id: number, dados: FormData) {
       throw e;
     }
   }, "Foto do modelo atualizada");
+}
+
+/** Foto do card enquadrada no navegador (quadrada, só a moto) + a posição, para reabrir e ajustar. */
+export async function acaoEnquadrarFotoModelo(id: number, dados: FormData) {
+  return executar(async () => {
+    const u = await autorizar("estoque.editar");
+    const enquadre = esquemaEnquadre.parse(JSON.parse(String(dados.get("enquadre") ?? "null")));
+    const modelo = await modeloPorId(idValido.parse(id));
+    const url = await guardarFotoCatalogo(dados.get("foto"), modelo.id);
+    const r = await enquadrarFotoModelo(u, modelo.id, url, enquadre);
+    atualizarTelas();
+    return r;
+  }, "Foto enquadrada no card do site");
 }
 
 export async function acaoRemoverFotoModelo(id: number) {

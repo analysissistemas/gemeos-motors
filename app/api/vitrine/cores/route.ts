@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 
 /* Público de propósito (a vitrine lê daqui, sem login): as cores ativas de cada
@@ -15,7 +15,7 @@ export async function GET() {
   const m = schema.modelos;
   try {
     const linhas = await db
-      .select({ modelo: m.nome, nome: c.nome, hex: c.hex, foto: c.fotoUrl })
+      .select({ modelo: m.nome, nome: c.nome, hex: c.hex, foto: sql<string | null>`coalesce(${c.fotoVitrineUrl}, ${c.fotoUrl})` })
       .from(c)
       .innerJoin(m, eq(m.id, c.modeloId))
       .where(and(eq(c.ativo, true), eq(m.ativo, true)))
