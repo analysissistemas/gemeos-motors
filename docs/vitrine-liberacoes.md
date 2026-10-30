@@ -45,3 +45,6 @@ voltou a valer depois de cada uma:
 - 18/10/2026 (estoque no site, visual) — a pedido do dono ("está com cara de feito por IA, deixa mais profissional"):
   "Pronta entrega" sai da foto e vira linha discreta com ponto verde embaixo do nome; "Esgotado" vira faixa escura no
   pé da foto (foto acinzentada); "Chegando" vira faixa preta e amarela "Chega dia dd/mm". Autorizado pelo dono.
+- 29/10/2026 (foto do card cortada) — a pedido do Milton ("o cliente só vê metade no celular"): a foto do card crescia
+  mais que o quadro e a arte em pé mostrava só a metade de cima. `.prod-foto img` passa a ocupar o quadro (posição
+  absoluta, `object-fit:contain`, margem do quadro herdada). Autorizado pelo usuário ("corrige, pode corrigir").

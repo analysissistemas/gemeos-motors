@@ -14,6 +14,7 @@ import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO,
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { duvidaDeEntrada, jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, perguntouEntrada, respostaDaEntrada, ROTULO_ITEM, textoDuvidaEntrada, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { jaDisseQuemAtende, perguntouQuemAtende, textoQuemAtende } from "@/lib/ia/identidade";
+import { falouDeIphone, textoIphone } from "@/lib/ia/iphone";
 import { clienteEncerrou, clienteRecusouOModelo, clienteVaiRetornar, conversaForaDaVenda } from "@/lib/ia/aquecimento";
 import { compraPrevista, dataHoraDaVisita, diaClaro, diaPorExtenso, LOCAL_LOJA, quandoPorExtenso, remarcarPara, RX_CONVIDOU_VISITA, RX_DIA_INCERTO, RX_PEDIU_HORARIO_VISITA, RX_PERGUNTA_ENDERECO, RX_QUER_VISITAR } from "@/lib/ia/agenda";
 import { criarTestDrive, reagendarTestDrive } from "@/lib/servicos/test-drive";
@@ -1652,6 +1653,12 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
        com os dados daquele item (moto, carro, celular, outro), nunca valor; vai para um vendedor na hora. */
     const textoCli = semAberturaDoSite(c.textoBuffer);
     const nomeDoCliente = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+    /* iPhone é com a Gêmeos do iPhone (Milton, 29/10/2026): não trata, nem na troca; indica o Instagram (lib/ia/iphone.ts) */
+    if (!r.ctx.humano && falouDeIphone(textoCli)) {
+      const texto = textoIphone(nomeDoCliente);
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, iphone: true } };
+    }
     /* quem atende (Milton, 29/10/2026: "você não pode falar o seu?" e a IA desconversou): o Milton, agente de IA da loja */
     if (!r.ctx.humano && perguntouQuemAtende(textoCli) && !jaDisseQuemAtende(ultimaDaLoja)) {
       const texto = textoQuemAtende(nomeDoCliente);

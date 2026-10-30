@@ -14,7 +14,7 @@ test("troca: reconhece o pedido e o tipo do item", () => {
     ["dou minha CG 160 de entrada na T1", "moto"],
     ["aceita carro como entrada?", "carro"],
     ["tenho um gol 2015 pra dar na troca", "carro"],
-    ["pega iPhone 13 na troca?", "celular"],
+    ["pega Samsung A54 na troca?", "celular"],
     ["posso dar uma JBL de entrada?", "outro"],
     ["vcs trabalham com troca?", "outro"],
     ["dá pra abater meu celular no valor?", "celular"],
@@ -94,4 +94,11 @@ test("quem atende: o Milton, agente de IA (Milton, 29/10/2026)", async () => {
   for (const f of ["quanto custa a T1?", "👍👏👏", "qual moto é melhor pra subida?"]) assert.ok(!perguntouQuemAtende(f), f);
   assert.ok(jaDisseQuemAtende(textoQuemAtende("Ana")));
   assert.match(textoQuemAtende(null), /agente de IA/);
+});
+
+test("iPhone vai para a Gêmeos do iPhone (Milton, 29/10/2026)", async () => {
+  const { falouDeIphone, textoIphone } = await import("../../lib/ia/iphone.ts");
+  for (const f of ["pega iPhone 13 na troca?", "vcs vendem iphone?", "tenho um IPHONE 11"]) assert.ok(falouDeIphone(f), f);
+  for (const f of ["tenho um samsung pra dar na troca", "quanto custa a T1?"]) assert.ok(!falouDeIphone(f), f);
+  assert.match(textoIphone("Anderso"), /@gemeosdoiphone/);
 });
