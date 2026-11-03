@@ -151,3 +151,13 @@ test("Simulador (22/10/2026): com triciclo no catálogo, 'esse triciclo de três
   assert.doesNotMatch(tirarTriciclo(["O triciclo mais indicado é a T3 RETRÔ."], tri, ["T3 RETRÔ"])[0], /triciclo/);
   assert.doesNotMatch(tirarTriciclo(["O triciclo elétrico mais indicado é a *T3 RETRÔ*."], tri)[0], /triciclo/);
 });
+
+test("falou mal do atendimento: pede desculpa e passa para uma pessoa (Gabriel e Milton, 03/11/2026)", async () => {
+  const { falouMalDoAtendimento, reclamouDoAtendimento, textoQueixa } = await import("../../lib/ia/intencao.ts");
+  const ruins = ["Que atendimento péssimo", "Que atendimento péssimo\nOr\nVou comprar\nNão tô pedindo não", "atendimento horrível", "péssimo atendimento", "esse atendimento tá muito ruim", "atendimento uma merda", "robô burro", "você é inútil", "vc não entende nada", "não sabe responder", "que falta de respeito", "resposta ridícula"];
+  for (const t of ruins) assert.ok(falouMalDoAtendimento(t) && reclamouDoAtendimento(t), t);
+  const boas = ["ótimo atendimento", "gostei do atendimento", "qual o horário de atendimento?", "a estrada aqui é péssima", "minha moto antiga era ruim", "tô com um problema péssimo na bateria", "Vou comprar", "quanto custa a T1?", "o atendimento de vocês é bom?"];
+  for (const t of boas) assert.ok(!falouMalDoAtendimento(t), t);
+  assert.equal(textoQueixa({ nome: "Gabriel", lojaAberta: true, falouMal: true }), "Peço desculpas pelo atendimento, Gabriel 🙏 Vou transferir agora a nossa conversa para uma pessoa da nossa equipe, que continua com você por aqui.");
+  assert.match(textoQueixa({ nome: null, lojaAberta: false, falouMal: true }), /^Peço desculpas pelo atendimento 🙏 .*assim que a loja abrir/);
+});

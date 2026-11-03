@@ -52,7 +52,7 @@ import { consentirAviso, registrarInteresse } from "@/lib/servicos/interesses";
 import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "@/lib/ia/fila-espera";
 import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, semPerguntasDoSistema, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
-import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, falouMalDoAtendimento, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
 import { comMotoCitada, instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
@@ -1653,6 +1653,15 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
        com os dados daquele item (moto, carro, celular, outro), nunca valor; vai para um vendedor na hora. */
     const textoCli = semAberturaDoSite(c.textoBuffer);
     const nomeDoCliente = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+    /* falou mal do atendimento (Milton, 03/11/2026: "pede desculpa e diz que vai transferir para o atendimento humano.
+       Acabou"): antes de qualquer outra resposta, e também no pós-venda; a equipe recebe o aviso para revisar a IA */
+    if (!r.ctx.humano && falouMalDoAtendimento(c.textoBuffer)) {
+      const texto = textoQueixa({ nome: nomeDoCliente, lojaAberta: aberta, falouMal: true });
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
+      await mensagemSistema(db, c.conversaId, `REVISAR ATENDIMENTO DA IA: o cliente falou mal do atendimento ("${c.textoBuffer.slice(0, 160)}"). Veja o que a IA mandou antes.`, { revisarIa: true });
+      await tarefaRevisarIa(c, c.textoBuffer).catch(() => null);
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento, intencao, modeloDaConversa, ultimaDaLoja, motivoTransferencia: `O cliente falou mal do atendimento da IA: "${c.textoBuffer.slice(0, 200)}". Assumir a conversa.` }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, queixa: true } };
+    }
     /* iPhone é com a Gêmeos do iPhone (Milton, 29/10/2026): não trata, nem na troca; indica o Instagram (lib/ia/iphone.ts) */
     if (!r.ctx.humano && falouDeIphone(textoCli)) {
       const texto = textoIphone(nomeDoCliente);

@@ -182,10 +182,24 @@ export function tirarTriciclo(resposta: string[], triciclos: string[] = [], outr
    Pede desculpas e chama uma pessoa da equipe, em vez de seguir insistindo. */
 const RX_QUEIXA_ENVIO = /(?<![\p{L}])(?:n[ãa]o\s+(?:veio|chegou|apareceu|abriu)|s[óo]\s+(?:veio|chegou|mandou|mandaram)|veio\s+(?:errad[oa]|outr[ao])|mandou\s+(?:errad[oa]|outr[ao])|n[ãa]o\s+(?:[ée]|era)\s+(?:essa|esse|isso)|n[ãa]o\s+foi\s+(?:isso|essa|o\s+que\s+eu\s+pedi)|j[áa]\s+pedi|pedi\s+(?:outra|outro|a\s+foto)|voc[êe]\s+n[ãa]o\s+(?:entende|entendeu)|n[ãa]o\s+(?:me\s+)?entendeu)(?![\p{L}])/iu;
 const RX_DESCONFIOU = /(?<![\p{L}])(?:acho|parece|t[ôo]\s+vendo|percebi|deve\s+ser|s[óo]\s+pode\s+ser)[^.!?\n]{0,40}(?:atendente\s+virtual|rob[ôo]|autom[áa]tic[oa]|m[áa]quina|ia)(?![\p{L}])|(?:depois\s+(?:eu\s+)?passo\s+a[ií]|deixa\s+pra\s+l[áa]|desisto|esquece)/iu;
-export const reclamouDoAtendimento = (texto: string) => RX_QUEIXA_ENVIO.test(texto) || RX_DESCONFIOU.test(texto);
+/* Cliente falando mal do atendimento (Gabriel, 03/11/2026: "Que atendimento péssimo" e a IA seguiu vendendo; Milton:
+   "quando ele percebe que o cliente fala mal do atendimento, ele já pede desculpa e diz que vai transferir para o
+   atendimento humano. Acabou. Aí tira a responsabilidade da IA"). Atendimento/resposta + palavra ruim (nos dois
+   sentidos), ou xingamento à IA. Só "péssimo" solto fica de fora: pode ser da moto, do trânsito, do dia. */
+const RUIM = String.raw`(?:p[ée]ssim[oa]|horr[íi]vel|ruim|uma\s+(?:merda|bosta|porcaria|droga|vergonha|piada)|lixo|fraco|fraquinho|terr[íi]vel|horroroso|de\s+quinta|sofr[íi]vel|uma\s+palha[çc]ada|rid[íi]cul[oa])`;
+const RX_FALOU_MAL = new RegExp(
+  String.raw`(?<![\p{L}])(?:(?:atendimento|atendente|resposta|respostas|servi[çc]o)\s+(?:(?:t[áa]|est[áa]|foi|[ée]|ta|muito|bem|mais|que|meio|bem\s+)\s*)*${RUIM}|${RUIM}\s+(?:esse\s+|essa\s+|de\s+|o\s+|a\s+|seu\s+|teu\s+)?(?:atendimento|atendente|resposta|servi[çc]o)|(?:rob[ôo]|ia|bot|m[áa]quina|voc[êe]|vc)\s+(?:[ée]\s+|t[áa]\s+|muito\s+)*(?:burr[oa]|in[úu]til|lerd[oa]|lent[oa]|ruim|p[ée]ssim[oa]|uma\s+merda)|n[ãa]o\s+(?:entende|sabe)\s+nada|n[ãa]o\s+sabe\s+(?:responder|atender|o\s+que\s+fala)|que\s+(?:atendimento|aten[çc][ãa]o)\s+(?:p[ée]ssim[oa]|horr[íi]vel|ruim|fraco|chato|lixo)|falta\s+de\s+respeito|desrespeito)(?![\p{L}])`,
+  "iu",
+);
+export const falouMalDoAtendimento = (texto: string) => RX_FALOU_MAL.test(texto);
+export const reclamouDoAtendimento = (texto: string) => RX_QUEIXA_ENVIO.test(texto) || RX_DESCONFIOU.test(texto) || falouMalDoAtendimento(texto);
 
-export function textoQueixa(p: { nome: string | null; lojaAberta: boolean }): string {
+export function textoQueixa(p: { nome: string | null; lojaAberta: boolean; falouMal?: boolean }): string {
   const n = p.nome ? `, ${p.nome}` : "";
+  if (p.falouMal)
+    return p.lojaAberta
+      ? `Peço desculpas pelo atendimento${n} 🙏 Vou transferir agora a nossa conversa para uma pessoa da nossa equipe, que continua com você por aqui.`
+      : `Peço desculpas pelo atendimento${n} 🙏 Já transferi a nossa conversa para uma pessoa da nossa equipe, e assim que a loja abrir ela continua com você por aqui.`;
   return p.lojaAberta
     ? `Desculpa pela confusão${n} 🙏 Vou chamar agora alguém da nossa equipe para continuar com você por aqui e te mandar certinho o que você pediu.`
     : `Desculpa pela confusão${n} 🙏 Já deixei o seu pedido anotado com prioridade, e assim que a loja abrir alguém da nossa equipe te manda certinho o que você pediu.`;
