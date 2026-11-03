@@ -118,3 +118,36 @@ export async function apagarFotoCatalogo(url: string | null | undefined) {
 export async function lerFotoCatalogo(nome: string) {
   return ler(CATALOGO, nome);
 }
+
+/* Versão leve para o site (usuário, 02/11/2026: "as fotos do site demoram muito pra carregar"): as fotos do
+   catálogo estão guardadas como vieram (PNG de até 2 MB; o site somava 12 MB). A rota entrega uma cópia em webp
+   de no máximo 1000 px no lado maior (o card tem ~330 px na tela; 1000 cobre celular de 3x), ~10x menor e sem
+   diferença visível. O original continua guardado intacto. A cópia fica na memória: o nome muda a cada troca de
+   foto, então nunca fica velha; reinício do servidor só refaz na primeira visita. */
+const LADO_LEVE = 1000;
+const leves = new Map<string, Promise<{ bytes: Buffer; mime: string } | null>>();
+
+export function lerFotoCatalogoLeve(nome: string) {
+  let pronta = leves.get(nome);
+  if (!pronta) {
+    pronta = (async () => {
+      const foto = await lerFotoCatalogo(nome);
+      if (!foto) return null;
+      try {
+        const { default: sharp } = await import("sharp");
+        const bytes = await sharp(foto.bytes)
+          .rotate()
+          .resize({ width: LADO_LEVE, height: LADO_LEVE, fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 82 })
+          .toBuffer();
+        return bytes.byteLength < foto.bytes.byteLength ? { bytes, mime: "image/webp" } : foto;
+      } catch {
+        return foto;
+      }
+    })();
+    leves.set(nome, pronta);
+    /* nome que não existe não ocupa a memória */
+    pronta.then((r) => { if (!r) leves.delete(nome); });
+  }
+  return pronta;
+}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { lerFotoCatalogo } from "@/lib/fotos";
+import { lerFotoCatalogoLeve } from "@/lib/fotos";
 
 /* Foto da moto numa cor, PÚBLICA (a vitrine mostra sem login). O nome é validado
    pelo formato que o sistema grava (modelo-<id>-<aleatório>.webp), então não dá
@@ -13,7 +13,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ nome: string }
   } catch {
     decodificado = "";
   }
-  const foto = decodificado ? await lerFotoCatalogo(decodificado) : null;
+  const foto = decodificado ? await lerFotoCatalogoLeve(decodificado) : null;
   if (!foto) return NextResponse.json({ erro: "foto não encontrada" }, { status: 404, headers: { "Cache-Control": "no-store" } });
 
   return new Response(new Uint8Array(foto.bytes), {
