@@ -245,8 +245,11 @@ export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indic
  *  orçamento, era bom ele já mandar as opções dentro do orçamento... deixa o cliente decidir a moto"; Edimilson disse
  *  "Até 7 mil reais" e a IA ainda perguntou o km), quando tudo já foi perguntado, ou quando o cliente pede as opções
  *  pela 2ª vez (a 1ª vez ele recebe o "a partir de" e a pergunta). */
-export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean }): Passo {
+export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean; pedeFotoAgora?: boolean }): Passo {
   if (p.pedeOpcoesAgora && p.pediuOpcoesAntes) return { acao: "indicar" };
+  /* pediu foto e já disse o que quer: manda as opções com foto, sem pergunta antes (Milton, 04/11/2026: "Cliente quer foto.
+     Já disse produto. Aí ele vai levando com a barriga") */
+  if (p.pedeFotoAgora && sabe.tipo(n)) return { acao: "indicar" };
   if (sabeFaixa(n) || n.estilo === "retro" || n.idoso) return { acao: "indicar" };
   /* Milton (20/10/2026): "muita pergunta faz o cliente fugir. Pergunta a média de orçamento" (Dinho: uso, km, garupa duas
      vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */
@@ -254,7 +257,8 @@ export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, numbe
      faixa; o uso que o cliente contar sozinho ainda pesa na indicação */
   /* dono (21/10/2026, Marcela): "a IA não perguntou se o cliente teria interesse em moto elétrica, bicicleta elétrica,
      patinete": sem saber o tipo, pergunta primeiro o tipo e depois a faixa */
-  const falta = (["tipo", "faixa"] as ChavePergunta[]).find((k) => !sabe[k](n) && (feitas[k] ?? 0) < (k === "tipo" ? 1 : 2));
+  /* cada pergunta uma vez só (Milton, 04/11/2026: "Ela pergunta muito"): não respondeu a faixa, indica assim mesmo */
+  const falta = (["tipo", "faixa"] as ChavePergunta[]).find((k) => !sabe[k](n) && (feitas[k] ?? 0) < 1);
   return falta ? { acao: "perguntar", chave: falta } : { acao: "indicar" };
 }
 

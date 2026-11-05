@@ -332,3 +332,14 @@ test("pergunta aberta do orçamento (27/10/2026): a resposta solta vira a faixa"
   assert.equal(lerDoCliente("R$ 6.000", NECESSIDADE_VAZIA, p).faixaAte, 6000);
   assert.equal(lerDoCliente("12k", NECESSIDADE_VAZIA, p).faixaAte, 12000);
 });
+
+test("pediu foto e já disse o produto: manda as opções, sem pergunta antes; cada pergunta uma vez só (Milton, 04/11/2026)", () => {
+  const zero = { uso: 0, km: 0, garupa: 0, faixa: 0, tipo: 0 };
+  const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
+  assert.deepEqual(proximoPasso(lerDoCliente("manda foto do patinete"), zero, { ...p, pedeFotoAgora: true }), { acao: "indicar" });
+  assert.deepEqual(proximoPasso(lerDoCliente("quero ver foto de moto elétrica"), zero, { ...p, pedeFotoAgora: true }), { acao: "indicar" });
+  /* sem dizer o que quer, pergunta o tipo uma vez */
+  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, { ...p, pedeFotoAgora: true }), { acao: "perguntar", chave: "tipo" });
+  /* a faixa já foi perguntada e ele não respondeu: indica, não pergunta de novo */
+  assert.deepEqual(proximoPasso(lerDoCliente("quero uma moto"), { ...zero, faixa: 1 }, p), { acao: "indicar" });
+});

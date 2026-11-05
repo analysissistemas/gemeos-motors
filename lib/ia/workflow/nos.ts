@@ -53,7 +53,7 @@ import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotad
 import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, semPerguntasDoSistema, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, falouMalDoAtendimento, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
-import { comMotoCitada, instrucaoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
+import { comMotoCitada, instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
 import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
@@ -1560,13 +1560,16 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     const emDescoberta =
       intencao === "compra" &&
       (faixaNova || tipoNovo || (!modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento))) &&
-      !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes);
+      !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes) &&
+      /* pediu a foto de uma moto que dá para mandar: a foto vai, sem pergunta de orçamento antes (Milton, 04/11/2026) */
+      !(midia?.modelo && midia.itens.length);
     const motosQualif = emDescoberta ? await motosParaIndicar(c) : [];
     const passo = emDescoberta
       ? proximoPasso(necessidade, perguntasFeitas(falasDaLoja(c.memoria.historico)), {
           falouDeValor: RX_PERGUNTOU_VALOR.test([leadAntes, c.textoBuffer].join("\n")),
           pediuOpcoesAntes: pediuOpcoes(leadAntes),
           pedeOpcoesAgora: pediuOpcoes(semAberturaDoSite(c.textoBuffer)),
+          pedeFotoAgora: pedidoDeMidia(semAberturaDoSite(c.textoBuffer)).length > 0,
         })
       : null;
     let qualificacao: CtxWorkflow["qualificacao"];
