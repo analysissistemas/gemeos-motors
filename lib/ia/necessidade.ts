@@ -247,9 +247,9 @@ export type Passo = { acao: "perguntar"; chave: ChavePergunta } | { acao: "indic
  *  pela 2ª vez (a 1ª vez ele recebe o "a partir de" e a pergunta). */
 export function proximoPasso(n: Necessidade, feitas: Record<ChavePergunta, number>, p: { falouDeValor: boolean; pediuOpcoesAntes: boolean; pedeOpcoesAgora: boolean; pedeFotoAgora?: boolean }): Passo {
   if (p.pedeOpcoesAgora && p.pediuOpcoesAntes) return { acao: "indicar" };
-  /* pediu foto e já disse o que quer: manda as opções com foto, sem pergunta antes (Milton, 04/11/2026: "Cliente quer foto.
-     Já disse produto. Aí ele vai levando com a barriga") */
-  if (p.pedeFotoAgora && sabe.tipo(n)) return { acao: "indicar" };
+  /* pediu foto: manda as opções com foto, sem pergunta antes (Milton, 04/11/2026: "Cliente quer foto. Já disse produto. Aí
+     ele vai levando com a barriga"; Rafaelly escreveu "Fotos" e ouviu "Quanto você pretende investir?"). Sem o tipo, motos */
+  if (p.pedeFotoAgora) return { acao: "indicar" };
   if (sabeFaixa(n) || n.estilo === "retro" || n.idoso) return { acao: "indicar" };
   /* Milton (20/10/2026): "muita pergunta faz o cliente fugir. Pergunta a média de orçamento" (Dinho: uso, km, garupa duas
      vezes e nada de moto). Só o uso e a faixa; km e garupa que o cliente contar sozinho ainda pesam na indicação */

@@ -338,8 +338,8 @@ test("pediu foto e já disse o produto: manda as opções, sem pergunta antes; c
   const p = { falouDeValor: false, pediuOpcoesAntes: false, pedeOpcoesAgora: false };
   assert.deepEqual(proximoPasso(lerDoCliente("manda foto do patinete"), zero, { ...p, pedeFotoAgora: true }), { acao: "indicar" });
   assert.deepEqual(proximoPasso(lerDoCliente("quero ver foto de moto elétrica"), zero, { ...p, pedeFotoAgora: true }), { acao: "indicar" });
-  /* sem dizer o que quer, pergunta o tipo uma vez */
-  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, { ...p, pedeFotoAgora: true }), { acao: "perguntar", chave: "tipo" });
+  /* Rafaelly: só "Fotos", sem orçamento nem tipo: as opções com foto, não a pergunta do orçamento */
+  assert.deepEqual(proximoPasso(NECESSIDADE_VAZIA, zero, { ...p, pedeFotoAgora: true }), { acao: "indicar" });
   /* a faixa já foi perguntada e ele não respondeu: indica, não pergunta de novo */
   assert.deepEqual(proximoPasso(lerDoCliente("quero uma moto"), { ...zero, faixa: 1 }, p), { acao: "indicar" });
 });
