@@ -11,6 +11,7 @@ import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/li
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
 import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoAPartirDe, textoPergunta, resumoDaNecessidade, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { montarAcessorios, pedidoDeAcessorio, RX_ACESSORIO_DA_MOTO, RX_QUER_ACESSORIO } from "@/lib/ia/acessorios";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { duvidaDeEntrada, jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, perguntouEntrada, respostaDaEntrada, ROTULO_ITEM, textoDuvidaEntrada, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { jaDisseQuemAtende, perguntouQuemAtende, textoQuemAtende } from "@/lib/ia/identidade";
@@ -1726,6 +1727,30 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     /* "o que vocês têm?" ou "tem modelo parecido?" (dono, 19/10/2026): o site, não a lista do estoque. No site ele clica na
        moto e a mensagem chega com o modelo, mais fácil de atender. Uma vez: já foi o site nas últimas falas, a conversa segue */
     const textoLivre = semAberturaDoSite(c.textoBuffer);
+    /* acessório (capacete, baú): até 3 com foto e preço + o link do site, como as motos (Manu, 07/11/2026: a lista de 7
+       capacetes em texto, sem foto). Só quando ele pergunta para comprar ("valor dos capacetes", "tem baú?"), não "a moto
+       vem com capacete?"; citou um acessório pelo nome, a conversa segue normal */
+    const catAcessorio =
+      r.ctx.texto && !r.ctx.humano && intencao !== "assistencia" && !ultimaCitada(nomesCat, textoLivre) && RX_QUER_ACESSORIO.test(textoLivre) && !RX_ACESSORIO_DA_MOTO.test(textoLivre)
+        ? pedidoDeAcessorio(textoLivre)
+        : null;
+    if (catAcessorio) {
+      const m = schema.modelos;
+      const lista = await db
+        .select({ nome: m.nome, preco: m.precoTabela, foto: m.fotoUrl, fotoW: m.fotoWhatsappUrl, quantidade: m.quantidade })
+        .from(m)
+        .where(and(eq(m.ativo, true), eq(m.tipo, "acessorio"), eq(m.mostrarNoSite, true)));
+      const nomeAc = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      const ac = montarAcessorios(lista.map((x) => ({ nome: x.nome, preco: x.preco ? Number(x.preco) : null, foto: x.fotoW ?? x.foto, quantidade: x.quantidade })), catAcessorio, nomeAc);
+      if (ac) {
+        const itens: ItemMidia[] = ac.itens.filter((x) => x.foto).map((x) => ({ tipo: "foto", url: x.foto!, legenda: x.legenda }));
+        const emTexto = ac.itens.filter((x) => !x.foto).map((x) => x.legenda);
+        const texto = [ac.abertura, ...emTexto, ...(itens.length ? [] : [ac.pergunta])].join("\n\n");
+        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+        const midiaAc: PlanoMidia | null = itens.length ? { modelo: null, pedido: [], itens, maxItens: 3, depois: ac.pergunta } : null;
+        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaAc, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, acessorios: ac.itens.map((x) => x.nome) } };
+      }
+    }
     /* com o orçamento já dito, vão as opções dentro dele (Milton, 19/10/2026), não o site */
     const querOpcoes = !!r.ctx.texto && !r.ctx.humano && intencao === "compra" && passo?.acao !== "indicar" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3));
     /* site + IA (Milton, 04/11/2026: "Cliente quer foto"): quem pede as opções recebe 3 com foto e preço aqui mesmo, e o link

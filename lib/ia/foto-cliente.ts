@@ -27,7 +27,7 @@ export function linkDoSite(p: { modelo?: string | null; tipo?: string | null } =
   const base = "gemeosmotors.com.br";
   const modelo = (p.modelo ?? "").normalize("NFD").replace(/\p{M}/gu, "").replace(/[^\w\s.-]/g, " ").trim().replace(/\s+/g, "+");
   if (modelo) return `${base}/#m=${modelo}`;
-  if (p.tipo === "bicicleta" || p.tipo === "patinete" || p.tipo === "moto") return `${base}/#tipo=${p.tipo}`;
+  if (p.tipo === "bicicleta" || p.tipo === "patinete" || p.tipo === "moto" || p.tipo === "acessorio") return `${base}/#tipo=${p.tipo}`;
   return base;
 }
 export const textoSiteOpcoes = (nome?: string | null, link = "gemeosmotors.com.br") =>

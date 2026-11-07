@@ -1305,7 +1305,7 @@ Promise.all([
 
 /* ---------- LINK DIRETO (a IA do WhatsApp manda o cliente para o que ele perguntou) ----------
    gemeosmotors.com.br/#m=AG08         → o catálogo já filtrado no modelo
-   gemeosmotors.com.br/#tipo=bicicleta → só as bicicletas (patinete: #tipo=patinete; moto: #tipo=moto)
+   gemeosmotors.com.br/#tipo=bicicleta → só as bicicletas (patinete: #tipo=patinete; acessório: #tipo=acessorio; moto: #tipo=moto)
    Com # e não ?: o "?" no meio da mensagem da IA conta como pergunta para quem lê a frase. Aceita ?m= também.
    Roda depois do catálogo do sistema, para achar também o modelo que só existe lá. Sem parâmetro, nada muda. */
 function aplicarLinkDireto(){
@@ -1324,10 +1324,11 @@ function aplicarLinkDireto(){
     const alvoModelo = normal(modelo);
     filtroLink = modelo ? (p => normal(p.modelo) === alvoModelo)
       : tipo.startsWith("bici") ? ehBici
+      : tipo.startsWith("aces") ? (p => p.categoria === "Acessórios")
       : tipo.startsWith("pati") ? ehPati
       : null;
     if(!filtroLink) return;
-    const rotulo = modelo || (tipo.startsWith("bici") ? "Bicicletas" : "Patinetes");
+    const rotulo = modelo || (tipo.startsWith("bici") ? "Bicicletas" : tipo.startsWith("aces") ? "Acessórios" : "Patinetes");
     const campo = $("#buscaCat");
     if(campo){ campo.value = rotulo; $("#limparBusca").hidden = false; }
     pinta();
