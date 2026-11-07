@@ -28,6 +28,8 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLow
 
 const RX_PEDIU_ESCOLHA = /retir\w*[^?]{0,60}entreg|entreg\w*[^?]{0,60}retir|buscar[^?]{0,40}entreg|delivery/;
 const RX_PEDIU_DADOS = /nome completo/;
+/* "irei passa(r)", "vou passar", "vamos aparecer", "devo ir": ir à loja. "vou passar o pix/os dados" não é visita */
+const RX_VOU_PASSAR = /(?<![\p{L}])(?:irei|iremos|vou|vamos|pretendo|devo|posso)\s+(?:a[ií]\s+)?(?:passa\p{L}*|ir|aparecer|aparece|vir|dar\s+um\s+pulo)(?![\p{L}])(?!\s+(?:o|a|os|as|meu|minha|meus|minhas|seu|sua|um|uma|pix|dados|valor|cart[aã]o|contato|n[uú]mero)(?![\p{L}]))/iu;
 /* sem CPF (19/10/2026) o nome completo fecha a lista; "vou ver ainda" não é nome */
 /* pergunta também não é nome (Moura, 22/10/2026: "Só me passe quantos anos de garantia" virou o nome do cadastro) */
 const RX_NAO_E_NOME = /\b(vou|vai|nao|depois|quero|pode|sim|ok|obrigad\w*|pensar|ver|agora|hoje|amanha|ainda|tudo|bem|certo|beleza|me|passe?|manda|quant\w*|qual|quais|como|onde|quando|garantia|moto|preco|valor|tem|vem)\b/;
@@ -154,6 +156,9 @@ export function detectarMomento(p: { textoCliente: string; ultimaDaLoja: string;
   if (p.jaAgendou && !t.includes("?") && (dh.diaDito || dh.temHora) && ehRemarcacao(p.textoCliente)) return "informou_visita";
   /* "sexta vou aí" (Milton, 19/10/2026): com o dia dito, já vai para a agenda (horário a combinar) */
   if (RX_QUER_VISITAR.test(p.textoCliente)) return (dh.temDia && dh.temHora) || dh.diaDito ? "informou_visita" : "quer_visitar";
+  /* "Provavelmente irei passa n segunda feira ok" (Rafaelly, 07/11/2026): ouviu "Vou deixar tudo certinho aqui pra sua
+     visita", nada foi anotado e o Milton marcou o test drive à mão. Com o dia dito, "vou/irei passar" é a visita */
+  if (dh.diaDito && !t.includes("?") && RX_VOU_PASSAR.test(p.textoCliente)) return "informou_visita";
   /* perguntou onde fica: responde o endereço e já pergunta o dia e o horário (dono, 14/10/2026) */
   if (RX_PERGUNTA_ENDERECO.test(p.textoCliente)) return "quer_visitar";
   /* respondeu quantos km roda, depois do "me fala os km que eu faço a conta da economia" */

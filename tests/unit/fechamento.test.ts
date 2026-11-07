@@ -229,3 +229,9 @@ test("já disse como quer receber: não pergunta de novo (Simulador, 15/10/2026)
   assert.equal(jaDisseComoReceber("Quero comprar a N2 preta"), null);
   assert.equal(jaDisseComoReceber("posso buscar ou vocês entregam?"), null);
 });
+
+test("Rafaelly (07/11/2026): 'irei passa n segunda feira' é visita com o dia; 'vou passar o pix' não", () => {
+  for (const t of ["Provavelmente irei passa n segunda feira ok", "vou passar aí sábado", "segunda eu vou aparecer", "devo ir na segunda"]) assert.equal(m(t, "Qual delas te agradou mais? 😊", false), "informou_visita", t);
+  for (const t of ["vou passar o pix segunda", "segunda vou passar meus dados", "vou passar segunda?"]) assert.notEqual(m(t, "", true), "informou_visita", t);
+  assert.notEqual(m("vou passar aí", "", false), "informou_visita", "sem o dia, não marca nada");
+});
