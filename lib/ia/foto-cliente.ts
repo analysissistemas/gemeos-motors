@@ -20,10 +20,20 @@ export const TEXTO_CATALOGO_AUDIO =
    estoque ("aqui esse estoque pode deixar confuso"). No site o cliente clica na moto e a mensagem chega com o modelo. */
 export const RX_MODELO_PARECIDO = /(?:modelo|moto|algo|alguma|outra|outro)\s+(?:\p{L}+\s+)?(?:parecid[oa]|semelhante|igual|nesse estilo|desse tipo|tipo ess[ae])/iu;
 const comNome = (nome: string | null | undefined, frase: string) => (nome ? `${nome}, ${frase[0].toLowerCase()}${frase.slice(1)}` : frase);
-export const textoSiteOpcoes = (nome?: string | null) =>
-  `${comNome(nome, "Temos uma boa variedade de modelos! 😃")} No nosso site você vê todos, com foto, preço e cores: gemeosmotors.com.br\n\nÉ só clicar na moto que te agradar que ela chega aqui pra mim e eu te passo tudo certinho 😉`;
-export const textoSiteParecido = (nome?: string | null) =>
-  `${comNome(nome, "Temos uma grande variedade de modelos, com opções pra diferentes gostos e necessidades! 🛵")} Dá uma olhada no nosso site e veja se tem algum parecido: gemeosmotors.com.br\n\nAchou um que gostou? É só clicar nele que chega aqui pra mim e eu te ajudo 🤝`;
+/** Link do site já no que o cliente quer (vitrine.html, "link direto"): #m=modelo filtra o modelo; #tipo=bicicleta, patinete
+ *  ou moto abre só esse tipo. Com # e não ?, para o "?" não virar pergunta na frase. Modelo vai sem acento e com + no espaço
+ *  (o site compara sem acento). Sem nada, o site inteiro. */
+export function linkDoSite(p: { modelo?: string | null; tipo?: string | null } = {}): string {
+  const base = "gemeosmotors.com.br";
+  const modelo = (p.modelo ?? "").normalize("NFD").replace(/\p{M}/gu, "").replace(/[^\w\s.-]/g, " ").trim().replace(/\s+/g, "+");
+  if (modelo) return `${base}/#m=${modelo}`;
+  if (p.tipo === "bicicleta" || p.tipo === "patinete" || p.tipo === "moto") return `${base}/#tipo=${p.tipo}`;
+  return base;
+}
+export const textoSiteOpcoes = (nome?: string | null, link = "gemeosmotors.com.br") =>
+  `${comNome(nome, "Temos uma boa variedade de modelos! 😃")} No nosso site você vê todos, com foto, preço e cores: ${link}\n\nÉ só clicar na moto que te agradar que ela chega aqui pra mim e eu te passo tudo certinho 😉`;
+export const textoSiteParecido = (nome?: string | null, link = "gemeosmotors.com.br") =>
+  `${comNome(nome, "Temos uma grande variedade de modelos, com opções pra diferentes gostos e necessidades! 🛵")} Dá uma olhada no nosso site e veja se tem algum parecido: ${link}\n\nAchou um que gostou? É só clicar nele que chega aqui pra mim e eu te ajudo 🤝`;
 export const TEXTO_FOTO_NAO_CONFIRMA =
   "Pela foto eu não consigo confirmar qual é o modelo 😊 Me diz o nome dele, ou qual do catálogo te chamou atenção, que eu confiro pra você se a gente tem.";
 export const TEXTO_AUDIO_NAO_OUVE =

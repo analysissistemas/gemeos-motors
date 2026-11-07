@@ -199,11 +199,14 @@ export function instrucaoDeMidia(plano: PlanoMidia | null): string {
 const RX_PROMETE = /(?:segue[mn]?|aqui\s+est[aã]o?|te\s+mand(?:o|ei)|vou\s+(?:te\s+)?(?:mandar|enviar)|j[aá]\s+(?:te\s+)?(?:mando|envio)|enviei|mandei|envio)[^.!?\n]{0,40}(?:fotos?|v[ií]deos?|imagens?)|(?:fotos?|v[ií]deos?|imagens?)[^.!?\n]{0,25}(?:abaixo|a\s+seguir|logo\s+(?:abaixo|em\s+seguida)|👇)/iu;
 /* "Olha ela aí", "aqui está ela 👇": só faz sentido com a foto junto (usuário, 12/10/2026) */
 const RX_APONTA_FOTO = /^\s*(?:olha\s+(?:el[ae]|a\s+foto|s[óo])|aqui\s+est[áa]\s+(?:el[ae]|a\s+foto)|confere\s+a[ií])(?:\s+a[ií])?[!.\s]*(?:👇|👀|😍|😊|🙂)?\s*$/iu;
+/* "Já já vou mostrar as opções", "já vou focar em motos que combinem": promessa de opções que não vêm nesta resposta
+   (Rafaelly, 04/11/2026: duas promessas seguidas e nenhuma moto; Milton: "vai levando com a barriga") */
+const RX_PROMETE_OPCOES = /(?:j[aá]\s+j[aá]|vou\s+(?:j[aá]\s+)?(?:te\s+)?(?:mostrar|passar|separar|focar|buscar|procurar|trazer|apresentar))[^.!?\n]{0,60}(?:op[cç][oõ]es|modelos|motos|motinhas|bicicletas|patinetes|alternativas)/iu;
 export function tirarPromessaDeMidia(bloco: string): string {
   /* ponto colado em letra ou número ("gemeosmotors.com.br", "R$ 8.999") não encerra a frase (12/10/2026: a frase do site
      era cortada no ponto e sobrava "com.br", barrado como link) */
   const frases = bloco.match(/(?:[^.!?\n]|[.!?](?=[\p{L}\p{N}]))+[.!?]*\s*(?:\p{Extended_Pictographic}️?\s*)*|\n/gu) ?? [bloco];
-  return frases.filter((f) => !RX_PROMETE.test(f) && !RX_APONTA_FOTO.test(f)).join("").trim();
+  return frases.filter((f) => !RX_PROMETE.test(f) && !RX_APONTA_FOTO.test(f) && !(RX_PROMETE_OPCOES.test(f) && !/pagamento|pagar|parcel|cart[aã]o|pix|entrega/i.test(f))).join("").trim();
 }
 
 /* Texto e foto têm que bater (conversa real de 06/10/2026, Arine: "Aqui estão as fotos da DF17 e da AG08" e foi a T3).

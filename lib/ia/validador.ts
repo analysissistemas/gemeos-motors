@@ -99,7 +99,8 @@ const CHECAGENS = (Object.keys(RX) as (keyof typeof RX)[]).map((regra) => ({ reg
 
 /* sempre bloqueados, mesmo que a base cite: promessa que a loja não faz */
 const NUNCA = /sem juros|carn[êe]|boleto|fiado|garantid[oa]/iu;
-const RX_SITE_DA_LOJA = /^(?:https?:\/\/)?(?:www\.)?gemeosmotors\.com\.br\/?$/iu;
+/* com o link direto do site (#m=modelo, #tipo=bicicleta) também */
+const RX_SITE_DA_LOJA = /^(?:https?:\/\/)?(?:www\.)?gemeosmotors\.com\.br\/?(?:#(?:m|tipo)=[\w+.-]+)?$/iu;
 const AUTORIZAVEIS = new Set(["preco", "parcelamento", "desconto"]);
 const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ");
 function todos(t: string, regra: string) {

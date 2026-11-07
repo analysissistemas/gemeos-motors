@@ -301,6 +301,30 @@ export function textoPergunta(chave: ChavePergunta, p: { n: Necessidade; precos:
   }
 }
 
+/** "Temos ... a partir de" quando o cliente pergunta valor sem dizer o modelo (preços das unidades com estoque).
+ *  Disse o tipo: só o tipo dele ("moto a partir de" é preço de moto: bicicleta não conta, Simulador, 20/10/2026). Não disse
+ *  o tipo: o mais barato de cada um, do menor para o maior (Milton, 04/11/2026: a Amanda perguntou "Tem a partir de
+ *  quanto?" e ouviu só a N2 de R$ 5.890, sendo que a bicicleta dobrável, a mais barata da loja, estava no estoque). */
+export function textoAPartirDe(tipo: Necessidade["tipo"], motos: { nome: string; tipo: string; preco: number | null; descricao?: string | null }[]): string | null {
+  const ok = motos.filter((m) => m.preco && m.preco > 0);
+  const menor = (l: typeof ok) => (l.length ? Math.min(...l.map((m) => m.preco!)) : null);
+  /* moto de trilha e triciclo não são o "a partir de" da moto do dia a dia (como na indicação) */
+  const especial = (m: (typeof ok)[number]) => RX_OFF_ROAD.test(`${m.nome} ${m.descricao ?? ""}`) || RX_TRICICLO_MOTO.test(`${m.nome} ${m.descricao ?? ""}`);
+  const grupos = {
+    moto: menor(ok.filter((m) => m.tipo === "moto_eletrica" && !ehBicicleta(m) && !especial(m))),
+    bicicleta: menor(ok.filter((m) => m.tipo === "moto_eletrica" && ehBicicleta(m))),
+    patinete: menor(ok.filter((m) => m.tipo === "patinete")),
+  };
+  const nome = { moto: "moto elétrica", bicicleta: "bicicleta elétrica", patinete: "patinete elétrico" } as const;
+  const um = (k: keyof typeof grupos) => (grupos[k] ? `Temos ${nome[k]} a partir de *${brl(grupos[k]!)}*, com pronta entrega 😊` : null);
+  if (tipo === "patinete" || tipo === "bicicleta") return um(tipo);
+  if (tipo === "moto" || tipo === "triciclo") return um("moto");
+  const tem = (Object.keys(grupos) as (keyof typeof grupos)[]).filter((k) => grupos[k]).sort((a, b) => grupos[a]! - grupos[b]!);
+  if (tem.length <= 1) return tem.length ? um(tem[0]) : null;
+  const partes = tem.map((k) => `${nome[k]} a partir de *${brl(grupos[k]!)}*`);
+  return `Temos ${partes.slice(0, -1).join(", ")} e ${partes.at(-1)}, com pronta entrega 😊`;
+}
+
 /* ---------------- a indicação ---------------- */
 export type MotoParaIndicar = { nome: string; tipo: string; preco: number | null; autonomia: string | null; carga: string | null; velocidade: string | null; descricao: string | null };
 

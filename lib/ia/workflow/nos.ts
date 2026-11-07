@@ -10,7 +10,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
-import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoAPartirDe, textoPergunta, resumoDaNecessidade, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { duvidaDeEntrada, jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, perguntouEntrada, respostaDaEntrada, ROTULO_ITEM, textoDuvidaEntrada, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
 import { jaDisseQuemAtende, perguntouQuemAtende, textoQuemAtende } from "@/lib/ia/identidade";
@@ -52,10 +52,10 @@ import { consentirAviso, registrarInteresse } from "@/lib/servicos/interesses";
 import { citouSemEstoque, maisParecida, pediuAviso, perguntouAviso, textoEsgotado, textoNaFila, type ModeloSemEstoque } from "@/lib/ia/fila-espera";
 import { respostaSimNao } from "@/lib/ia/fechamento";
 import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDisseComoReceber, listaDeDados, MOMENTOS_SEM_TRANSFERIR, notaDeEntrega, parabens, PERGUNTAS_ENTREGA_OU_RETIRADA, PERGUNTA_PARCELAS, PERGUNTA_TEM_MODELO, PERGUNTAS_KM, PERGUNTAS_VISITA, RX_PARABENS, RX_PEDE_PESSOA, semPerguntaDeFechamento, soOQuePerguntou, pediuDadosDeRetirada, tirarPropostaAntiga, ultimaFalaDaLoja, textoDadosRecebidos, tirarAdiamento, semPerguntasDoSistema, jaPerguntouSoOQueFalta, textoRecusouSimulacao, objecoesDePrecoAntes, RX_ANUNCIO_PRECO, textoNegociacao, tirarFraseProibida, type Momento } from "@/lib/ia/fechamento";
-import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, falouMalDoAtendimento, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, type Intencao } from "@/lib/ia/intencao";
+import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, falouMalDoAtendimento, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, cardDoSite, instrucaoCardDoSite, instrucaoDisponibilidade, RX_DISPONIBILIDADE, type Intencao } from "@/lib/ia/intencao";
 import { comMotoCitada, instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
+import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, linkDoSite, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { corrigirDigitacao, perguntaDeIdade, soDespedida, textoDespedida, tirarFalaDeIdade, TEXTO_IDADE } from "@/lib/ia/limites";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -1562,7 +1562,9 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       (faixaNova || tipoNovo || (!modeloDaConversa && !jaIndicou(c.memoria.historico ?? "") && MOMENTOS_DA_DESCOBERTA.includes(momento))) &&
       !pedidoDeAvaliacao(semAberturaDoSite(c.textoBuffer), leadAntes) &&
       /* pediu a foto de uma moto que dá para mandar: a foto vai, sem pergunta de orçamento antes (Milton, 04/11/2026) */
-      !(midia?.modelo && midia.itens.length);
+      !(midia?.modelo && midia.itens.length) &&
+      /* clicou no card do site: já escolheu, nada de tipo nem orçamento (o preço do card não é a faixa dele) */
+      !cardDoSite(c.textoBuffer);
     const motosQualif = emDescoberta ? await motosParaIndicar(c) : [];
     const passo = emDescoberta
       ? proximoPasso(necessidade, perguntasFeitas(falasDaLoja(c.memoria.historico)), {
@@ -1575,16 +1577,16 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
     let qualificacao: CtxWorkflow["qualificacao"];
     /* perguntou outra coisa (onde fica, horário, entrega, pagamento, garantia): responde só isso, sem puxar o orçamento
        (usuário, 27/10/2026: "a pessoa só perguntou a localização" e ouviu o endereço + "você pensa em investir até 6 mil...?") */
-    const perguntaDeLado = RX_PERGUNTA_DE_LADO.test(textoQualif) && !RX_PERGUNTOU_VALOR.test(textoQualif) && !pediuOpcoes(textoQualif);
+    /* "acabou ou tem ainda?" também: responde se tem, sem orçamento (Anderso, 04/11/2026: ouviu de novo a troca do iPhone e
+       "quanto você pretende investir?") */
+    const perguntaDeLado = (RX_PERGUNTA_DE_LADO.test(textoQualif) || RX_DISPONIBILIDADE.test(textoQualif)) && !RX_PERGUNTOU_VALOR.test(textoQualif) && !pediuOpcoes(textoQualif);
     if (passo?.acao === "perguntar" && !perguntaDeLado) {
       const doTipo = motosQualif.filter((x) => (necessidade.tipo === "patinete" ? x.tipo === "patinete" : x.tipo === "moto_eletrica") && x.preco);
       const precos = doTipo.map((x) => x.preco!);
       /* perguntou valor ou as opções: "temos a partir de" (a mais em conta, do estoque) antes da pergunta, como o vendedor faz */
       const quis = RX_PERGUNTOU_VALOR.test(semAberturaDoSite(c.textoBuffer)) || pediuOpcoes(semAberturaDoSite(c.textoBuffer));
-      /* "moto a partir de" é preço de moto: a bicicleta elétrica (cadastrada como moto elétrica) não conta (Simulador, 20/10/2026) */
-      const deMoto = doTipo.filter((x) => !/bicicleta|\bbike/i.test(x.nome)).map((x) => x.preco!);
-      const aPartir = deMoto.length ? deMoto : precos;
-      const abertura = quis && aPartir.length && necessidade.tipo !== "bicicleta" ? `Temos ${necessidade.tipo === "patinete" ? "patinete elétrico" : "moto elétrica"} a partir de *${reais(Math.min(...aPartir))}*, com pronta entrega 😊` : null;
+      /* sem o tipo, o mais barato de cada (bicicleta, moto, patinete); com o tipo, só o dele (Milton, 04/11/2026) */
+      const abertura = quis ? textoAPartirDe(necessidade.tipo, motosQualif) : null;
       qualificacao = { pergunta: textoPergunta(passo.chave, { n: necessidade, precos: faixasDoEstoque(precos) ? precos : motosQualif.map((x) => x.preco ?? 0) }), abertura };
     }
     const g = criarGerador({
@@ -1593,7 +1595,7 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo a venda como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}
+${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}${instrucaoCardDoSite(c.textoBuffer)}${instrucaoDisponibilidade(semAberturaDoSite(c.textoBuffer))}
 
 ${instrucaoVariasPerguntas(semAberturaDoSite(c.textoBuffer))}# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
 Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
@@ -1725,17 +1727,29 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
        moto e a mensagem chega com o modelo, mais fácil de atender. Uma vez: já foi o site nas últimas falas, a conversa segue */
     const textoLivre = semAberturaDoSite(c.textoBuffer);
     /* com o orçamento já dito, vão as opções dentro dele (Milton, 19/10/2026), não o site */
-    if (r.ctx.texto && !r.ctx.humano && intencao === "compra" && passo?.acao !== "indicar" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3))) {
+    const querOpcoes = !!r.ctx.texto && !r.ctx.humano && intencao === "compra" && passo?.acao !== "indicar" && !ultimaCitada(nomesCat, textoLivre) && (pediuOpcoes(textoLivre) || RX_MODELO_PARECIDO.test(textoLivre)) && !/gemeosmotors\.com\.br/i.test(ultimasFalasDaLoja(c.memoria.historico, 3));
+    /* site + IA (Milton, 04/11/2026: "Cliente quer foto"): quem pede as opções recebe 3 com foto e preço aqui mesmo, e o link
+       do site já no tipo dele para ver o resto. Só o site quando já indicou nesta conversa ou quando quer "um parecido" */
+    const mostrarOpcoes = querOpcoes && !RX_MODELO_PARECIDO.test(textoLivre) && !jaIndicou(c.memoria.historico ?? "");
+    if (querOpcoes && !mostrarOpcoes) {
       const nomeCli = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
-      const texto = RX_MODELO_PARECIDO.test(textoLivre) ? textoSiteParecido(nomeCli) : textoSiteOpcoes(nomeCli);
+      const link = linkDoSite({ tipo: necessidade.tipo });
+      const texto = RX_MODELO_PARECIDO.test(textoLivre) ? textoSiteParecido(nomeCli, link) : textoSiteOpcoes(nomeCli, link);
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, site: true } };
     }
     /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
     /* vale mesmo sem texto da IA (a resposta é do sistema); só não indica quando ela passou ao vendedor sem escrever nada */
-    if (passo?.acao === "indicar" && (r.ctx.texto || !r.ctx.humano)) {
-      const indicadas = indicarMotos(necessidade, motosQualif, 3);
-      const ind = cartoesIndicacao({ nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), n: necessidade, indicadas });
+    if ((passo?.acao === "indicar" || mostrarOpcoes) && (r.ctx.texto || !r.ctx.humano)) {
+      const indicadas = indicarMotos(necessidade, motosQualif.length ? motosQualif : await motosParaIndicar(c), 3);
+      const nomeInd = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
+      let ind = cartoesIndicacao({ nome: nomeInd, n: necessidade, indicadas });
+      if (ind && mostrarOpcoes)
+        ind = {
+          ...ind,
+          abertura: resumoDaNecessidade(necessidade) ? ind.abertura : `${nomeInd ? `${nomeInd}, s` : "S"}eparei algumas com pronta entrega:`,
+          pergunta: `Todas as opções, com foto e preço, estão no nosso site: ${linkDoSite({ tipo: necessidade.tipo })}\n\n${ind.pergunta}`,
+        };
       if (ind) {
         /* Milton (19/10/2026): cada opção com foto, descrição e preço. O cartão vai como legenda da foto; moto sem foto (ou com
            a foto já mandada) vai em texto junto da abertura. A pergunta vai depois das fotos; sem foto nenhuma, no fim do texto */

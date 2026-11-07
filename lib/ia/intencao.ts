@@ -147,6 +147,34 @@ export function instrucaoDoSite(texto: string): string {
   return `${base} Além da frase pronta ele perguntou: "${resto.slice(0, 200)}". RESPONDA isso agora. NÃO pergunte "como posso te ajudar?" nem "o que você procura?": ele já disse.\n\n`;
 }
 
+/** Mensagem do botão do CARD do site (vitrine.html): "Olá! Tenho interesse nesta moto do site:" ou "Quero reservar esta
+ *  moto do site:", com o modelo em negrito na linha seguinte e a cor logo abaixo. Quem clicou no card já escolheu. */
+const RX_CARD_DO_SITE = /(?:tenho\s+interesse\s+n\p{L}+\s+\p{L}+|quero\s+reservar\s+\p{L}+\s+\p{L}+)\s+do\s+site:\s*\n+\s*\*([^*\n]{2,60})\*\s*\n([^\n]*)/iu;
+export function cardDoSite(texto: string): { modelo: string; cor: string | null } | null {
+  const m = RX_CARD_DO_SITE.exec(texto);
+  if (!m) return null;
+  /* a linha depois do modelo é o ano ou a cor; cor é a que não tem número nem é a condição */
+  const linha = m[2].trim();
+  const cor = linha && !/\d|zero km|sem uso|seminov|nov[oa]\b/i.test(linha) && linha.length <= 30 ? linha : null;
+  return { modelo: m[1].trim(), cor };
+}
+/** Instrução de quem clicou no card do site (S3, 06/11/2026): responde direto sobre ESSE modelo, sem qualificação. */
+export function instrucaoCardDoSite(texto: string): string {
+  const card = cardDoSite(texto);
+  if (!card) return "";
+  const cor = card.cor ? ` na cor ${card.cor}` : "";
+  return `# O CLIENTE CLICOU NO CARD DO SITE\nEle já escolheu: ${card.modelo}${cor}. NÃO pergunte o tipo, o orçamento nem o que ele procura. Responda direto pelo ESTOQUE AGORA: se tem ${card.modelo}${cor} com pronta entrega (se essa cor não tiver, diga quais cores têm) e o preço. Depois faça UMA pergunta para avançar a compra, como a forma de pagamento que ele prefere.\n\n`;
+}
+
+/* "tem ainda?", "acabou?", "tá disponível?": pergunta se tem, que se responde pelo estoque antes de qualquer outra coisa */
+export const RX_DISPONIBILIDADE =
+  /(?<![\p{L}])(?:tem\s+ainda|ainda\s+tem|acabou|esgotou|tem\s+(?:dispon[íi]vel|em\s+estoque|no\s+estoque|pronta\s+entrega)|t[áa]\s+dispon[íi]vel|est[áa]\s+dispon[íi]vel|ainda\s+(?:h[áa]|existe|vende[mn]?))(?![\p{L}])/iu;
+/** Instrução quando o cliente pergunta se ainda tem: a resposta começa por isso. */
+export function instrucaoDisponibilidade(textoCliente: string): string {
+  if (!RX_DISPONIBILIDADE.test(textoCliente)) return "";
+  return "# ELE PERGUNTOU SE AINDA TEM\nResponda isso PRIMEIRO, pelo ESTOQUE AGORA: diga se tem e o preço. Se você não sabe de qual modelo ele fala (ele não disse o nome e a conversa ainda não falou de nenhum), diga que temos modelos com pronta entrega e pergunte só qual modelo ele viu. Nesta resposta não fale de troca, de orçamento nem de forma de pagamento, e não repita o que a loja já disse.\n\n";
+}
+
 /* Triciclo (06/10/2026): a IA chamou a T3 Retrô (duas rodas) de triciclo. O dono confirmou que o MM3 tem TRÊS rodas.
    Triciclo é só o modelo cuja descrição no catálogo diz "triciclo" ou "três rodas" (hoje o MM3); nenhum outro.
    `triciclos` = nomes desses modelos com unidade no estoque. */
