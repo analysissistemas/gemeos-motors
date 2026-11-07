@@ -1131,7 +1131,10 @@ pintaAtalhos();
 let termo = "";
 const normal = s => (s||"").toString().normalize("NFD")
   .replace(/[̀-ͯ]/g,"").toLowerCase();
+/* filtro do link direto ("?tipo=bicicleta" pega "Bicicleta Dobrável" e "V8 BIKE"); sai quando o cliente mexe na busca */
+let filtroLink = null;
 function combina(p){
+  if(filtroLink) return filtroLink(p);
   if(!termo) return true;
   const e = esc(p);
   const alvo = normal(`${p.modelo} ${e.cor} ${e.arm} ${e.cond} ${p.categoria}`);
@@ -1298,7 +1301,47 @@ Promise.all([
   if(cores && typeof aplicarCoresDoSistema === "function") mudou = aplicarCoresDoSistema(PRODUTOS, escolha) || mudou;
   if(!mudou) return;
   pintaAtalhos(); pinta(); pintaLancamentos();
-});
+}).finally(aplicarLinkDireto);
+
+/* ---------- LINK DIRETO (a IA do WhatsApp manda o cliente para o que ele perguntou) ----------
+   gemeosmotors.com.br/#m=AG08         → o catálogo já filtrado no modelo
+   gemeosmotors.com.br/#tipo=bicicleta → só as bicicletas (patinete: #tipo=patinete; moto: #tipo=moto)
+   Com # e não ?: o "?" no meio da mensagem da IA conta como pergunta para quem lê a frase. Aceita ?m= também.
+   Roda depois do catálogo do sistema, para achar também o modelo que só existe lá. Sem parâmetro, nada muda. */
+function aplicarLinkDireto(){
+  try{
+    const q = new URLSearchParams(location.hash.includes("=") ? location.hash.slice(1) : location.search);
+    const modelo = (q.get("m") || "").trim().slice(0, 60);
+    const tipo = normal(q.get("tipo") || "");
+    if(!modelo && !tipo) return;
+    if(tipo === "moto" && !modelo){
+      const s = document.getElementById(idSecao("Motos elétricas"));
+      if(s) s.scrollIntoView({behavior:"smooth", block:"start"});
+      return;
+    }
+    const ehBici = p => /bicicleta|\bbike\b/.test(normal(p.modelo));
+    const ehPati = p => /patinete/.test(normal(`${p.modelo} ${p.tipo || ""} ${p.categoria}`));
+    const alvoModelo = normal(modelo);
+    filtroLink = modelo ? (p => normal(p.modelo) === alvoModelo)
+      : tipo.startsWith("bici") ? ehBici
+      : tipo.startsWith("pati") ? ehPati
+      : null;
+    if(!filtroLink) return;
+    const rotulo = modelo || (tipo.startsWith("bici") ? "Bicicletas" : "Patinetes");
+    const campo = $("#buscaCat");
+    if(campo){ campo.value = rotulo; $("#limparBusca").hidden = false; }
+    pinta();
+    /* modelo que não existe (link antigo, nome errado): volta o catálogo inteiro em vez de "nada encontrado" */
+    if(!document.querySelector("#secoes .prod")){
+      filtroLink = null;
+      if(campo){ campo.value = ""; $("#limparBusca").hidden = true; }
+      pinta();
+    }
+    const alvo = document.querySelector("#secoes .secao") || $("#catalogo");
+    if(alvo) alvo.scrollIntoView({behavior:"smooth", block:"start"});
+  }catch(e){}
+}
+window.addEventListener("hashchange", aplicarLinkDireto);
 
 /* ---------- RESERVA DE LANÇAMENTO ----------
    O formulário grava a reserva no sistema (a equipe vê em Reservas e o funil ganha o
@@ -1381,13 +1424,14 @@ formRes.addEventListener("submit", async ev=>{
   campo.addEventListener("input", ()=>{
     clearTimeout(timer);
     timer = setTimeout(()=>{
+      filtroLink = null;
       termo = campo.value.trim();
       limpar.hidden = !termo;
       Object.keys(limites).forEach(k=>delete limites[k]);   // busca nova recomeça a contagem
       pinta();
     }, 180);
   });
-  limpar.onclick = ()=>{ campo.value=""; termo=""; limpar.hidden=true; pinta(); campo.focus(); };
+  limpar.onclick = ()=>{ filtroLink = null; campo.value=""; termo=""; limpar.hidden=true; pinta(); campo.focus(); };
 })();
 
 document.addEventListener("click", e=>{
