@@ -67,3 +67,8 @@ test("Rafaelly: promessa de mostrar opções sem mandar nada sai da resposta", (
   const pagamento = "Vou te passar as opções de pagamento certinho.";
   assert.equal(tirarPromessaDeMidia(pagamento), pagamento, "opções de pagamento não é promessa de moto");
 });
+
+test("disse moto e a bicicleta sai mais em conta: oferece a bicicleta também (Milton, 05/11/2026)", () => {
+  assert.match(textoAPartirDe("moto", ESTOQUE)!, /^Temos moto elétrica a partir de \*R\$ 5\.890\* e, se quiser algo mais em conta, bicicleta elétrica a partir de \*R\$ 3\.990\*/);
+  assert.match(textoAPartirDe("moto", ESTOQUE.filter((m) => !/bicicleta|bike/i.test(m.nome)))!, /^Temos moto elétrica a partir de \*R\$ 5\.890\*, com pronta entrega/);
+});

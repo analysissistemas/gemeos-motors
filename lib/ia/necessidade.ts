@@ -318,7 +318,12 @@ export function textoAPartirDe(tipo: Necessidade["tipo"], motos: { nome: string;
   const nome = { moto: "moto elétrica", bicicleta: "bicicleta elétrica", patinete: "patinete elétrico" } as const;
   const um = (k: keyof typeof grupos) => (grupos[k] ? `Temos ${nome[k]} a partir de *${brl(grupos[k]!)}*, com pronta entrega 😊` : null);
   if (tipo === "patinete" || tipo === "bicicleta") return um(tipo);
-  if (tipo === "moto" || tipo === "triciclo") return um("moto");
+  /* disse moto e a bicicleta sai mais em conta: oferece também (Milton, 05/11/2026: "a gente tem aquela bicicleta dobrada...
+     só oferece ela, ela custa 4 mil, é uma das mais baratas") */
+  if (tipo === "moto" || tipo === "triciclo")
+    return grupos.moto && grupos.bicicleta && grupos.bicicleta < grupos.moto
+      ? `Temos moto elétrica a partir de *${brl(grupos.moto)}* e, se quiser algo mais em conta, bicicleta elétrica a partir de *${brl(grupos.bicicleta)}*, com pronta entrega 😊`
+      : um("moto");
   const tem = (Object.keys(grupos) as (keyof typeof grupos)[]).filter((k) => grupos[k]).sort((a, b) => grupos[a]! - grupos[b]!);
   if (tem.length <= 1) return tem.length ? um(tem[0]) : null;
   const partes = tem.map((k) => `${nome[k]} a partir de *${brl(grupos[k]!)}*`);

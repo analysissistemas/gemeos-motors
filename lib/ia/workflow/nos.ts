@@ -418,6 +418,8 @@ async function modelosSemUnidade(c: CtxWorkflow): Promise<ModeloSemEstoque[]> {
 /** As falas da loja (IA ou vendedor) no histórico, uma por bloco. */
 const falasDaLoja = (historico: string | null | undefined) => (historico ?? "").split(/\n\s*\n/).map((b) => b.trim()).filter((b) => /^(Agente IA|Vendedor):/.test(b));
 /* o cliente perguntou valor sem dizer o modelo ("vc tem moto a partir de quanto?", "valor das motos elétricas") */
+/* o mais em conta, sem modelo ("tem a partir de quanto?", "qual a mais barata?") */
+const RX_MAIS_EM_CONTA = /(?<![\p{L}])(?:a\s+partir\s+de\s+quanto|mais\s+barat\p{L}*|mais\s+em\s+conta|menor\s+(?:pre[çc]o|valor)|mais\s+acess[íi]vel)(?![\p{L}])/iu;
 const RX_PERGUNTOU_VALOR = /(?<![\p{L}])(?:valor(?:es)?|pre[çc]os?|quanto (?:custa|[ée]|sai|fica|t[áa])|a partir de quanto|mais barat\p{L}*|em conta)(?![\p{L}])/iu;
 /* momentos em que ainda se está descobrindo o que o cliente precisa */
 const MOMENTOS_DA_DESCOBERTA: (string | null)[] = [null, "pesquisando", "sem_modelo", "quer_parcelar", "objecao"];
@@ -1590,13 +1592,18 @@ export const NOS_ATENDIMENTO: Record<string, ImplNo<CtxWorkflow>> = {
       const abertura = quis ? textoAPartirDe(necessidade.tipo, motosQualif) : null;
       qualificacao = { pergunta: textoPergunta(passo.chave, { n: necessidade, precos: faixasDoEstoque(precos) ? precos : motosQualif.map((x) => x.preco ?? 0) }), abertura };
     }
+    /* "a partir de quanto?" fora das perguntas iniciais: a IA escrevia sozinha e dizia só a N2 (Amanda, 05/11/2026; Milton:
+       a bicicleta dobrável é uma das mais baratas e estava no estoque). Ela recebe os valores do estoque para responder */
+    const textoSemSite = semAberturaDoSite(c.textoBuffer);
+    const aPartirLivre = !qualificacao?.abertura && RX_MAIS_EM_CONTA.test(textoSemSite) && !ultimaCitada(nomesCat, textoSemSite) ? textoAPartirDe(necessidade.tipo, emDescoberta ? motosQualif : await motosParaIndicar(c)) : null;
+    const instrucaoAPartir = aPartirLivre ? `\n\n# A PARTIR DE QUANTO\nO cliente perguntou o valor mais em conta sem dizer o modelo. Responda com estes valores do estoque, do jeito que estão (não fale só da moto): "${aPartirLivre}". Depois, no máximo UMA pergunta curta.` : "";
     const g = criarGerador({
       promptSistema,
       memoria: c.memoria,
       agora: `# AGORA
 Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" : "FECHADA"} agora. Cumprimento certo agora: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}" (ex.: "${saudacaoDoHorario()[0].toUpperCase()}${saudacaoDoHorario().slice(1)}! Tudo certinho?").${aberta ? "" : " Loja fechada NÃO muda a venda: continue conduzindo a venda como se a loja estivesse aberta. Nunca adie (nada de \"conversamos amanhã\") e não comece a resposta dizendo que a loja está fechada. Só se o cliente quiser vir à loja ou falar com um vendedor, diga com naturalidade que a equipe responde assim que a loja abrir."}
 
-${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}${instrucaoCardDoSite(c.textoBuffer)}${instrucaoDisponibilidade(semAberturaDoSite(c.textoBuffer))}
+${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}${instrucaoCardDoSite(c.textoBuffer)}${instrucaoDisponibilidade(semAberturaDoSite(c.textoBuffer))}${instrucaoAPartir}
 
 ${instrucaoVariasPerguntas(semAberturaDoSite(c.textoBuffer))}# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
 Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
