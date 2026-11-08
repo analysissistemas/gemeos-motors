@@ -114,6 +114,17 @@ export async function acaoListarModelos() {
   });
 }
 
+/** Os campos do modelo "relatorio_manha" com os números de verdade (usuário, 08/11/2026: escolheu o modelo na conversa do
+ *  Milton e Ontem, Hoje e Sugestões vinham em branco). */
+export async function acaoCamposRelatorio(nome: string) {
+  return executar(async () => {
+    await autorizar("conversas.ver");
+    const { relatorioDaManha, resumoParaWhatsapp } = await import("@/lib/consultas/relatorio-manha");
+    const { parametrosRelatorio } = await import("@/lib/avisos/relatorio-texto");
+    return parametrosRelatorio(nome.trim() || "Milton", resumoParaWhatsapp(await relatorioDaManha()));
+  });
+}
+
 const esquemaModelo = z.object({
   nome: z.string().min(1).max(512),
   idioma: z.string().min(2).max(20),

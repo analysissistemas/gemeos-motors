@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { FileText, RefreshCw } from "lucide-react";
-import { acaoListarModelos } from "@/app/sistema/conversas/acoes";
+import { acaoCamposRelatorio, acaoListarModelos } from "@/app/sistema/conversas/acoes";
 import { montarTexto, type ModeloMensagem } from "@/lib/mensageria/modelos";
 import { Dialogo } from "@/components/ui/dialogo";
 import { Botao } from "@/components/ui/botao";
@@ -54,6 +54,11 @@ export function DialogoModelos({
     const novo = modelos?.find((x) => `${x.nome}|${x.idioma}` === chave);
     /* o primeiro campo quase sempre é o nome do cliente: já vem preenchido (dá para trocar) */
     setValores(novo ? novo.campos.map((c, i) => (i === 0 && primeiroNome && (!c.nomeado || /nome|name/i.test(c.chave)) ? primeiroNome : "")) : []);
+    /* relatório da manhã: Ontem, Hoje e Sugestões vêm preenchidos com os números do sistema (dá para trocar) */
+    if (novo?.nome === "relatorio_manha" && novo.campos.length === 4)
+      void acaoCamposRelatorio(primeiroNome).then((r) => {
+        if (r.ok) setValores((v) => [v[0] || r.dados[0], r.dados[1], r.dados[2], r.dados[3]]);
+      });
   }
 
   const faltando = m ? m.campos.some((_, i) => !(valores[i] ?? "").trim()) : true;
