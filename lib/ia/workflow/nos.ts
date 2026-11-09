@@ -1697,8 +1697,8 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
     }
     const avaliacao = jaPediuAvaliacao(c.memoria.historico ?? "") ? null : ((respondeuEntrada ? respostaDaEntrada(textoCli) : null) ?? pedidoDeAvaliacao(textoCli, leadAntes));
     if (avaliacao) {
-      const texto = textoPedidoAvaliacao({ ...avaliacao, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta });
       const relato = semAberturaDoSite(c.textoBuffer).replace(/\s+/g, " ").trim().slice(0, 300);
+      const texto = textoPedidoAvaliacao({ ...avaliacao, nome: primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome), lojaAberta: aberta, relato: semAberturaDoSite(c.textoBuffer) });
       const motivo = motivoAvaliacao({ ...avaliacao, modeloDeInteresse: modeloDaConversa, relato });
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: true, motivo: "modelo_pediu_transferencia" as const };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao: avaliacao.tipo === "troca" ? ("compra" as const) : null, modeloDaConversa, ultimaDaLoja, avaliacao, motivoTransferencia: motivo }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, transferir: true, avaliacao } };

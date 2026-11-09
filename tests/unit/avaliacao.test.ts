@@ -111,3 +111,13 @@ test("moto na troca (07/11/2026): 'minha moto é' não vira celular, e 'vcs pega
     assert.deepEqual(pedidoDeAvaliacao(t), { tipo: "troca", item: "moto" }, t);
   for (const t of ["a moto aceita garupa?", "essa moto aceita 2 pessoas?", "vcs aceitam cartão?", "aceita pix?"]) assert.equal(pedidoDeAvaliacao(t), null, t);
 });
+
+test("o que o cliente já contou não se pede de novo (Simulador, 09/11/2026)", () => {
+  const t = textoPedidoAvaliacao({ tipo: "troca", item: "moto", nome: null, lojaAberta: true, relato: "Boa tarde! Minha moto é uma CG 160 2019, vcs pegam na troca numa elétrica?" });
+  assert.match(t, /Já anotei o que você me contou ✅ Pra nossa equipe avaliar, falta só:/);
+  assert.doesNotMatch(t, /Marca e modelo|• Ano/);
+  assert.match(t, /• Km rodado\n• Está quitada/);
+  assert.ok(jaPediuAvaliacao(`Agente IA: ${t}`), "a lista curta também conta como já pedida");
+  const tudo = textoPedidoAvaliacao({ tipo: "troca", item: "moto", nome: null, lojaAberta: true, relato: "vcs pegam moto usada?" });
+  assert.match(tudo, /me manda por aqui:\n• Marca e modelo\n• Ano/, "não contou nada: a lista inteira");
+});

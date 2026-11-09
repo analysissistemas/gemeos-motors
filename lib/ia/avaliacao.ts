@@ -109,16 +109,38 @@ export function respostaDaEntrada(texto: string): PedidoAvaliacao | null {
 export const ROTULO_ITEM: Record<ItemAvaliacao, string> = { moto: "moto", carro: "carro", celular: "celular", outro: "produto" };
 
 /** Texto do sistema: aceita, pede os dados daquele tipo de item e diz quando a equipe responde. Sem valor. */
-export function textoPedidoAvaliacao(p: PedidoAvaliacao & { nome: string | null; lojaAberta: boolean }) {
+/* o que o cliente já contou não se pede de novo (Simulador, 09/11/2026: "Minha moto é uma CG 160 2019" e a lista pedia
+   marca, modelo e ano; usuário: "ela estava perguntando muito e se confundindo") */
+const GENERICO = /\b(?:motos?|motinha|moto\s?cicleta|motoca|scooter|carros?|automovel|caminhonete|picape|pick\s?up|eletric\w*)\b/g;
+const JA_DISSE: Record<string, (t: string, item: ItemAvaliacao) => boolean> = {
+  "Marca e modelo": (t, item) => itemDoTexto(t.replace(GENERICO, " ")) === item,
+  "Marca, modelo e versão": (t, item) => itemDoTexto(t.replace(GENERICO, " ")) === item,
+  Ano: (t) => /\b(?:19[89]\d|20[0-3]\d)\b/.test(t),
+  "Km rodado": (t) => /\d[\d.]*\s*(?:mil\s*)?(?:km|quilometr\w*)|\bkm\s*\d/.test(t),
+  "Está quitada e com o documento em dia?": (t) => /quitad|documento|financiad|alienad|atrasad/.test(t),
+  "Está quitado e com o documento em dia?": (t) => /quitad|documento|financiad|alienad|atrasad/.test(t),
+  "Quanto você quer nela?": (t) => /r\$|\bquero\s+\d|\d+\s*mil\b|\bpor\s+\d/.test(t),
+  "Quanto você quer nele?": (t) => /r\$|\bquero\s+\d|\d+\s*mil\b|\bpor\s+\d/.test(t),
+  "Modelo e quantos GB": (t) => /\d+\s?gb\b/.test(t) && itemDoTexto(t.replace(/\bcelular\b/g, " ")) === "celular",
+  "Saúde da bateria (no iPhone: Ajustes → Bateria)": (t) => /\d{2,3}\s?%|saude/.test(t),
+};
+const jaMandouFoto = (t: string) => /\[imagem/.test(t);
+
+/** Texto do sistema: aceita, pede os dados daquele tipo de item (só os que ele ainda não contou) e diz quando a equipe
+ *  responde. Sem valor. `relato`: o que o cliente escreveu (ele já pode ter dito modelo, ano, km). */
+export function textoPedidoAvaliacao(p: PedidoAvaliacao & { nome: string | null; lojaAberta: boolean; relato?: string }) {
   const frase = p.tipo === "troca" ? `aqui a gente faz venda facilitada com troca: ${DO_ITEM[p.item]} pode entrar como parte do pagamento 😊` : `a nossa equipe avalia ${DO_ITEM[p.item]} pra compra, sim 😊`;
   const abre = p.nome ? `${p.nome}, ${frase}` : frase[0].toUpperCase() + frase.slice(1);
-  const lista = DADOS[p.item].map((d) => `• ${d}`).join("\n");
+  const t = norm(p.relato ?? "");
+  const falta = DADOS[p.item].filter((d) => !(JA_DISSE[d]?.(t, p.item) ?? false) && !(/^Fotos/.test(d) && jaMandouFoto(p.relato ?? "")));
+  const lista = falta.map((d) => `• ${d}`).join("\n");
+  const pulou = falta.length < DADOS[p.item].length;
   const fim = p.lojaAberta ? "Com isso, um vendedor avalia e te passa o valor por aqui." : "A loja já fechou por hoje, mas pode mandar: assim que abrir, um vendedor avalia e te passa o valor por aqui.";
-  return `${abre}\n\nPra nossa equipe avaliar, me manda por aqui:\n${lista}\n\n${fim}`;
+  return `${abre}\n\n${pulou ? "Já anotei o que você me contou ✅ Pra nossa equipe avaliar, falta só:" : "Pra nossa equipe avaliar, me manda por aqui:"}\n${lista}\n\n${fim}`;
 }
 
 /** A loja já pediu os dados da avaliação nesta conversa (não pede de novo). */
-export const jaPediuAvaliacao = (historico: string) => /Pra nossa equipe avaliar, me manda por aqui/.test(historico);
+export const jaPediuAvaliacao = (historico: string) => /Pra nossa equipe avaliar, (?:me manda por aqui|falta só)/.test(historico);
 
 /** Motivo da transferência, para a anotação e a tarefa do vendedor. */
 export function motivoAvaliacao(p: PedidoAvaliacao & { modeloDeInteresse: string | null; relato: string }) {

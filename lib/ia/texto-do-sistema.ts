@@ -14,7 +14,7 @@ const FRASES_PRONTAS = [
   /essa eu prefiro confirmar com a equipe/i,
   /vou checar esse detalhe com a equipe/i,
   /j[áa] estou te encaminhando para o nosso vendedor/i,
-  /pra nossa equipe avaliar, me manda por aqui/i, // troca
+  /pra nossa equipe avaliar, (?:me manda por aqui|falta só)/i, // troca
   /(?:as que mais combinam|a que mais combina) com voc[êe]/i, // indicação da qualificação
   /recebi a sua foto|recebi o seu [áa]udio/i, // foto ou áudio do cliente
   /o seu caso j[áa] est[áa] (?:com os respons[áa]veis|anotado)/i, // pós-venda
