@@ -11,9 +11,13 @@ export type PedidoAvaliacao = { tipo: TipoAvaliacao; item: ItemAvaliacao };
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 
 /* o que o cliente tem; celular antes de moto ("moto g", "moto e" são celulares) */
-const RX_CELULAR = /\b(?:iphone|celular|smartphone|samsung|galaxy|xiaomi|redmi|poco|motorola|moto\s?[geg]\d*|ipad|tablet|apple\s?watch)\b/;
+/* "Minha moto é uma Factor": o "é" sem acento vira "e", e "moto e" sozinho virava celular (07/11/2026: a IA pedia GB e
+   saúde da bateria de quem tinha moto). Celular Motorola só com o número ou a linha: "moto g", "moto g54", "moto e7" */
+const RX_CELULAR = /\b(?:iphone|celular|smartphone|samsung|galaxy|xiaomi|redmi|poco|motorola|moto\s?g(?:\s?\d+|\s?(?:play|power|stylus|plus|pro))?|moto\s?e\s?\d+|moto\s?edge|moto\s?one|ipad|tablet|apple\s?watch)\b/;
+/* nomes que também são palavras comuns ("fazer", "pop", "start", "lead", "jet", "neo", "elite", "fan") só contam com a
+   cilindrada junto ("fazer 250", "pop 110"): "quero fazer uma simulação" não é moto. "Uma 125", "minha 160" é moto */
 const RX_MOTO =
-  /\b(?:motos?|motinha|moto\s?cicleta|scooter|cg|titan|fan|biz|pop|bros|xre|lander|factor|fazer|twister|tornado|cb\s?\d*|pcx|nmax|elite|lead|neo|crosser|start|ybr|xtz|burgman|jet|shineray|haojue|dafra|honda|yamaha|suzuki|kawasaki|ninja|bmw|triumph|harley|\d{2,4}\s?cc|cilindradas?)\b/;
+  /\b(?:motos?|motinha|moto\s?cicleta|motoca|scooter|cg|titan|biz|bros|broz|xre|lander|factor|twister|tornado|hornet|cbr?\s?\d*|xj6|mt\s?0?\d{1,2}|nxr|crf|fz\s?\d+|pcx|nmax|xmax|crosser|ybr|xtz|burgman|jet(?!s?ski)|shineray|haojue|dafra|honda|yamaha|suzuki|kawasaki|ninja|bmw|triumph|harley|(?:fazer|pop|start|lead|jet|neo|elite|fan|sh)\s?\d{2,3}|\d{2,4}\s?cc|cilindradas?)\b|\b(?:uma|minha|numa)\s+(?:50|100|110|125|150|155|160|190|250|300|400|500|600|660|1000|fan|pop|start|lead|fazer|elite|neo|jet)\b/;
 const RX_CARRO =
   /\b(?:carros?|automovel|gol|uno|palio|celta|onix|prisma|hb20|corsa|fiesta|sandero|logan|civic|corolla|fox|voyage|saveiro|strada|toro|hilux|s10|ranger|fiat|chevrolet|volkswagen|vw|ford|toyota|hyundai|renault|nissan|jeep|caminhonete|picape|pick\s?up)\b/;
 const RX_OUTRO =
@@ -38,7 +42,12 @@ const RX_TROCA_GERAL =
 const RX_ENTRADA_TROCA =
   /\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|da\s+pra\s+dar|botar|colocar|entra\w*)\b.{0,40}\b(?:de|como|na|pra)\s+entrada\b|\b(?:de|como)\s+entrada\b.{0,30}\b(?:pega\w*|aceita\w*)\b/;
 const RX_TROCA = /\b(?:troca|trocar|troco|trocaria|trocam|trocaram)\b/;
-const RX_ENTRADA_COM_ITEM = /\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|botar|colocar)\b.{0,50}\b(?:entrada|troca)\b/;
+const RX_ENTRADA_COM_ITEM = /\b(?:pega\w*|aceita\w*|recebe\w*|dar|dou|daria|botar|colocar)\b.{0,50}\b(?:entrada|troca)\b|\bentrada\b.{0,30}\b(?:com|minha|meu)\b/;
+/* "tenho uma CG 160, vcs pegam?", "aceitam uma XRE 300?", "vcs pegam moto usada?": a loja aceitar a moto ou o carro dele
+   é a troca (07/11/2026) */
+const RX_ACEITA_ITEM = /\b(?:voces|vcs|vc|voce|tu|a\s+loja)\s+(?:pega|aceita|recebe)\w*|\b(?:pegam|aceitam|recebem|pegariam|aceitariam|receberiam)\b|\b(?:pega\w*|aceita\w*|recebe\w*)\b.{0,30}\b(?:minha|meu|usad[ao])\b|\b(?:tenho|minha|meu)\b.{0,60}\b(?:pega\w*|aceita\w*|recebe\w*)\b/;
+/* "a moto aceita garupa?", "aguenta carga?": é a moto nova, não a dele */
+const RX_DA_MOTO_NOVA = /\b(?:garupa|passageir\w*|carga|peso|kg|bau|cesta)\b/;
 /* "posso trocar a moto se der defeito?": é garantia, não troca de entrada */
 const RX_DEFEITO = /\b(?:defeit\w*|garantia|problema\w*|quebr\w*|nao\s+(?:liga|funciona|carrega|gostar|gostei)|arrependi\w*|devolv\w*)\b/;
 /* a loja comprar o que ele tem */
@@ -56,7 +65,8 @@ export function pedidoDeAvaliacao(texto: string, antes = ""): PedidoAvaliacao | 
   const troca =
     RX_TROCA_GERAL.test(semOutra) ||
     (RX_TROCA.test(semOutra) && !!itemAgora && !RX_DEFEITO.test(semOutra)) ||
-    ((RX_ENTRADA_TROCA.test(semOutra) || RX_ENTRADA_COM_ITEM.test(semOutra)) && !!itemAgora);
+    ((RX_ENTRADA_TROCA.test(semOutra) || RX_ENTRADA_COM_ITEM.test(semOutra)) && !!itemAgora) ||
+    (RX_ACEITA_ITEM.test(semOutra) && (itemAgora === "moto" || itemAgora === "carro") && !RX_DEFEITO.test(semOutra) && !RX_LOJA_COMPRA.test(t) && !RX_DA_MOTO_NOVA.test(semOutra));
   if (troca) return { tipo: "troca", item: item ?? "outro" };
   const compra = (RX_LOJA_COMPRA.test(t) && !!item) || (RX_QUERO_VENDER.test(t) && !!item);
   if (compra) return { tipo: "compra", item: item ?? "outro" };

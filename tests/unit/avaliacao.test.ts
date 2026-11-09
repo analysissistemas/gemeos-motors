@@ -102,3 +102,12 @@ test("iPhone vai para a Gêmeos do iPhone (Milton, 29/10/2026)", async () => {
   for (const f of ["tenho um samsung pra dar na troca", "quanto custa a T1?"]) assert.ok(!falouDeIphone(f), f);
   assert.match(textoIphone("Anderso"), /@gemeosdoiphone/);
 });
+
+test("moto na troca (07/11/2026): 'minha moto é' não vira celular, e 'vcs pegam?' é troca", () => {
+  for (const t of ["minha moto é uma factor 125 2018", "Minha moto é uma Honda", "minha moto e uma biz"]) assert.equal(itemDoTexto(t), "moto", t);
+  assert.equal(itemDoTexto("quero fazer uma simulação dando entrada"), null, "'fazer' sozinho não é a Yamaha Fazer");
+  assert.equal(itemDoTexto("tenho um moto g54"), "celular");
+  for (const t of ["tenho uma cg 160, vcs pegam?", "vcs pegam moto usada?", "Tenho uma scooter elétrica, aceitam?", "tenho uma 125 pra dar de entrada", "vou fazer a entrada com minha moto", "aceitam uma xre 300 2020 quitada?", "vc pega minha fan?"])
+    assert.deepEqual(pedidoDeAvaliacao(t), { tipo: "troca", item: "moto" }, t);
+  for (const t of ["a moto aceita garupa?", "essa moto aceita 2 pessoas?", "vcs aceitam cartão?", "aceita pix?"]) assert.equal(pedidoDeAvaliacao(t), null, t);
+});

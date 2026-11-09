@@ -48,3 +48,6 @@ voltou a valer depois de cada uma:
 - 29/10/2026 (foto do card cortada) — a pedido do Milton ("o cliente só vê metade no celular"): a foto do card crescia
   mais que o quadro e a arte em pé mostrava só a metade de cima. `.prod-foto img` passa a ocupar o quadro (posição
   absoluta, `object-fit:contain`, margem do quadro herdada). Autorizado pelo usuário ("corrige, pode corrigir").
+- 06–07/11/2026 (site + IA conversando) — a pedido do usuário ("vamos sim", plano S1): link direto `#m=<modelo>` filtra o
+  catálogo no modelo; `#tipo=bicicleta|patinete|acessorio|moto` filtra o tipo (a IA manda esses links no WhatsApp).
+  Nome que não existe volta ao catálogo inteiro; mexer na busca desfaz o filtro. Autorizado pelo usuário.
