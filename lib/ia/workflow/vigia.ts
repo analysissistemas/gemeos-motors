@@ -183,10 +183,20 @@ export async function vigiarAtendimentos(agora = new Date()) {
       }
       if (cv.modo !== "humano") continue;
 
+      /* avaliação da troca em aberto (usuário, 09/11/2026: "quando o cliente quer dar uma moto na avaliação, somente perguntar
+         informações dessa moto e passar para o atendimento humano"): a IA já pediu os dados e passou ao vendedor. O cliente
+         mandando as fotos e o km de noite, ou voltando dias depois, NÃO traz a IA de volta (ela se perdia no meio da
+         avaliação): só o vendedor responde; o vigia apenas avisa a equipe. */
+      const [avaliando] = await db
+        .select({ id: schema.followUps.id })
+        .from(schema.followUps)
+        .where(and(eq(schema.followUps.conversaId, cv.id), eq(schema.followUps.status, "pendente"), eq(schema.followUps.tipo, "avaliacao")))
+        .limit(1);
+
       /* cliente que volta depois de muito tempo numa conversa que ficou com o vendedor (Nay, 22/10/2026: o vendedor
          assumiu em 20/10, ela voltou hoje às 19h com "Quais formas de pagamento" e ficou 1h30 sem resposta). A loja não
          falava com ele havia 12 h e ninguém respondeu em 10 min: a IA reassume (dono, 22/10/2026). */
-      if (iaPodeResponder && esperaMin >= RETORNO_ESPERA_MIN) {
+      if (iaPodeResponder && !avaliando && esperaMin >= RETORNO_ESPERA_MIN) {
         const [antes] = await db.select({ em: M.criadoEm }).from(M).where(and(eq(M.conversaId, cv.id), eq(M.direcao, "outgoing"), lt(M.id, primeira.id))).orderBy(desc(M.id)).limit(1);
         const horasSemLoja = antes ? (new Date(primeira.em).getTime() - new Date(antes.em).getTime()) / 3_600_000 : Infinity;
         if (horasSemLoja >= RETORNO_HORAS && !(await temMarca(cv.id, "vigiaAssumiu", ultima.id))) {
@@ -206,7 +216,8 @@ export async function vigiarAtendimentos(agora = new Date()) {
         avisoMin: config.avisoAtendenteMin,
         assumeMin: 0,
         jaAvisado: aberta ? await temMarca(cv.id, "esperaAviso", primeira.id) : true,
-        jaRespondidaFechada: aberta ? true : await temMarca(cv.id, "vigiaFechada", ultima.id),
+        /* avaliação em aberto: loja fechada não faz a IA responder (o cliente já sabe que o vendedor responde ao abrir) */
+        jaRespondidaFechada: aberta || !!avaliando ? true : await temMarca(cv.id, "vigiaFechada", ultima.id),
       });
 
       if (decisao === "avisar") {
