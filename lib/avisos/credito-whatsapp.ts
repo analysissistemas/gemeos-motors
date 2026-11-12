@@ -75,14 +75,26 @@ export async function criarModeloCredito() {
   return { status: j.status ?? "PENDING", motivo: null };
 }
 
-/* O vigia chama a cada minuto; a Meta só é consultada de 6 em 6 h (e logo depois de o servidor subir). */
+/** Mensagem de boas-vindas do aviso (botão "Avisar todos" em Minha conta). */
+export const FRASE_BOAS_VINDAS = "a partir de agora, este número será avisado sempre que o crédito (token) da IA estiver baixo, acabando ou acabar";
+
+/** As boas-vindas saíram em texto (modelo ainda em análise) e por isso não chegam a quem não escreveu nas 24 h. */
+const boasVindasPendentes = (g: Guardado) => !!g.ultimo && g.ultimo.frase === FRASE_BOAS_VINDAS && g.ultimo.envios.some((e) => !e.como.startsWith("modelo"));
+
+/* O vigia chama a cada minuto; a Meta é consultada de 6 em 6 h (e logo depois de o servidor subir), ou de 10 em 10 min
+   enquanto as boas-vindas esperam o modelo ser aprovado. Aprovou: reenvia as boas-vindas pelo modelo sozinho
+   (usuário, 12/11/2026: "quando aprovar me avise" — a mensagem chegando é o aviso). */
 let ultimaChecagem = 0;
 export async function garantirModeloCredito(agora = Date.now()) {
-  if (agora - ultimaChecagem < 6 * 3_600_000) return null;
+  const g = await lerAvisoCredito();
+  if (!g.telefones.length) return null;
+  const pendente = boasVindasPendentes(g);
+  if (agora - ultimaChecagem < (pendente ? 10 * 60_000 : 6 * 3_600_000)) return null;
   ultimaChecagem = agora;
   if ((await obterProvedor()).simulado) return null;
-  if ((await lerAvisoCredito()).telefones.length === 0) return null;
-  return criarModeloCredito();
+  const s = await criarModeloCredito();
+  if (pendente && s.status === "APPROVED") await enviarAvisoCreditoWhatsApp(FRASE_BOAS_VINDAS);
+  return s;
 }
 
 /** Manda o aviso para todos os números cadastrados: modelo aprovado; sem ele, texto (só chega dentro das 24 h). */

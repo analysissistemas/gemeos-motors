@@ -189,8 +189,8 @@ export async function acaoCriarModeloCredito() {
 export async function acaoTesteAvisoCredito() {
   return executar(async () => {
     const u = await autorizar("config.gerenciar");
-    const { enviarAvisoCreditoWhatsApp } = await import("@/lib/avisos/credito-whatsapp");
-    const envios = await enviarAvisoCreditoWhatsApp("a partir de agora, este número será avisado sempre que o crédito (token) da IA estiver baixo, acabando ou acabar");
+    const { enviarAvisoCreditoWhatsApp, FRASE_BOAS_VINDAS } = await import("@/lib/avisos/credito-whatsapp");
+    const envios = await enviarAvisoCreditoWhatsApp(FRASE_BOAS_VINDAS);
     if (!envios.length) throw new ErroRegra("Cadastre pelo menos um número primeiro.");
     const ok = envios.filter((e) => e.ok).length;
     await registrarLog(u, { acao: "avisos.credito", entidade: "configuracao", entidadeId: 0, descricao: `Enviou o aviso inicial do crédito da IA (${ok} de ${envios.length})` });
