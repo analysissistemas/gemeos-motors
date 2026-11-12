@@ -109,7 +109,9 @@ Callback cadastrado na Meta: `https://gemeosmotors.com.br/api/webhooks/whatsapp`
 10 arquivos do chat, com `scripts/copiar-banco.mjs` e `scripts/copiar-midia.mjs`). **Não repetir.**
 
 > **IA:** `lib/ia/cliente.ts` fala direto com a OpenAI quando `OPENAI_API_KEY` está no
-> Ambiente do EasyPanel (modelo `IA_MODELO`, padrão `gpt-4.1` desde 27/10/2026; `IA_MODELO=gpt-4.1-mini` volta ao mais barato). Sem a chave, cairia no AI
+> Ambiente do EasyPanel (modelo `IA_MODELO`, padrão `gpt-4.1-mini`; de 27/10 a 12/11/2026 foi `gpt-4.1`, 5x mais caro, e a
+> conta da OpenAI foi de ~4 para 12 recargas de US$ 5 em 16 dias). **Trocar o modelo muda o custo: avisar o dono
+> ANTES de mudar o padrão ou o `IA_MODELO`.** Sem a chave, cairia no AI
 > Gateway da Vercel, que não é mais usado. Depois da chave: ligar em Inteligência artificial → Controle.
 
 O site antigo do celular, `gemeos-do-iphone.vercel.app`, **continua no ar** numa
