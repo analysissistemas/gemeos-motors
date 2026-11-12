@@ -14,6 +14,7 @@ const SITUACAO: Record<string, string> = { APPROVED: "Aprovado pela Meta ✅", P
 const PARA_QUE: Record<string, string> = {
   confirmar_visita: "chama quem disse “talvez sábado” ou “sexta vou aí” sem horário",
   lembrete_visita: "lembra a visita ou o test drive marcado com horário",
+  primeiro_contato: "o vendedor puxa conversa com um número novo, pelo \"Enviar modelo\" do chat",
 };
 
 export function ModelosDoCliente() {

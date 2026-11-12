@@ -73,7 +73,7 @@ export function textoDoDia(p: { nome: string | null; modelo: string | null; peri
 
 /* ---------- modelos da Meta (fora da janela de 24 h) ---------- */
 
-type DefinicaoModelo = { nome: string; idioma: "pt_BR"; corpo: string; exemplo: string[] };
+type DefinicaoModelo = { nome: string; idioma: "pt_BR"; corpo: string; exemplo: string[]; categoria?: "UTILITY" | "MARKETING" };
 
 /** Contato do dia: "talvez" e visita avisada sem hora. {{1}} nome, {{2}} moto. */
 export const MODELO_CONFIRMAR_VISITA: DefinicaoModelo = {
@@ -89,11 +89,22 @@ export const MODELO_LEMBRETE_VISITA: DefinicaoModelo = {
   corpo: "Oi, {{1}}! Aqui é o Milton, da Gêmeos Motors. Passando pra lembrar {{2}} hoje, às {{3}}, aqui na loja. Se precisar mudar o horário, é só responder esta mensagem.",
   exemplo: ["Edimilson", "da sua visita", "15h"],
 };
-export const MODELOS_DO_CLIENTE = [MODELO_CONFIRMAR_VISITA, MODELO_LEMBRETE_VISITA];
+/** Primeiro contato do vendedor com um número novo (usuário, 12/11/2026). Só pelo "Enviar modelo" do chat, nunca
+ *  automático. Marketing: a Meta cobra cada envio e segura quando o número recebe propaganda demais.
+ *  O vendedor escreve a mensagem dele no {{2}} (usuário: "o vendedor que digitaria a mensagem"); a Meta não deixa a
+ *  primeira mensagem ser texto livre, então o modelo só emoldura o texto. {{1}} nome do cliente. */
+export const MODELO_PRIMEIRO_CONTATO: DefinicaoModelo = {
+  nome: "primeiro_contato",
+  idioma: "pt_BR",
+  categoria: "MARKETING",
+  corpo: "Olá, {{1}}! Aqui é da Gêmeos Motors, de Goiana.\n\n{{2}}\n\nQualquer dúvida, é só responder esta mensagem.",
+  exemplo: ["Maria", "Vi que você se interessou pela moto elétrica N2. Ela está com pronta entrega e posso te mandar as fotos e o valor por aqui"],
+};
+export const MODELOS_DO_CLIENTE = [MODELO_CONFIRMAR_VISITA, MODELO_LEMBRETE_VISITA, MODELO_PRIMEIRO_CONTATO];
 
-/** O que vai para a Meta na criação (categoria Utilidade: lembrete do que o cliente combinou). */
+/** O que vai para a Meta na criação (Utilidade: lembrete do que o cliente combinou; o primeiro contato é Marketing). */
 export function definicaoParaMeta(m: DefinicaoModelo) {
-  return { name: m.nome, language: m.idioma, category: "UTILITY", components: [{ type: "BODY", text: m.corpo, example: { body_text: [m.exemplo] } }] };
+  return { name: m.nome, language: m.idioma, category: m.categoria ?? "UTILITY", components: [{ type: "BODY", text: m.corpo, example: { body_text: [m.exemplo] } }] };
 }
 
 /** O modelo preenchido, como fica no chat. */
