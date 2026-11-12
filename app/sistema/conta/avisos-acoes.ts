@@ -138,3 +138,63 @@ export async function acaoCriarModelosCliente() {
     return r;
   });
 }
+
+/* ---------- aviso do crédito da IA no WhatsApp (programadores e dono, 12/11/2026; só administrador) ---------- */
+
+export async function acaoAvisoCredito() {
+  return executar(async () => {
+    await autorizar("config.gerenciar");
+    const { lerAvisoCredito, situacaoModeloCredito } = await import("@/lib/avisos/credito-whatsapp");
+    const g = await lerAvisoCredito();
+    let modelo: { status: string; motivo: string | null } | null = null;
+    let erroModelo: string | null = null;
+    try {
+      modelo = await situacaoModeloCredito();
+    } catch (x) {
+      erroModelo = x instanceof Error ? x.message : String(x);
+    }
+    return { telefones: g.telefones, ultimo: g.ultimo, modelo, erroModelo };
+  });
+}
+
+export async function acaoSalvarAvisoCredito(texto: string) {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const { lerListaTelefones, salvarTelefonesCredito } = await import("@/lib/avisos/credito-whatsapp");
+    const { telefones, invalidos } = lerListaTelefones(texto);
+    if (invalidos.length) throw new ErroRegra(`Número inválido: ${invalidos.join(", ")}. Use DDD + número, ex.: (81) 99999-9999.`);
+    await salvarTelefonesCredito(telefones);
+    await registrarLog(u, { acao: "avisos.credito", entidade: "configuracao", entidadeId: 0, descricao: `Cadastrou ${telefones.length} WhatsApp(s) para o aviso do crédito da IA` });
+    return telefones.length;
+  }, "Números salvos");
+}
+
+export async function acaoCriarModeloCredito() {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const { criarModeloCredito } = await import("@/lib/avisos/credito-whatsapp");
+    let r;
+    try {
+      r = await criarModeloCredito();
+    } catch (x) {
+      throw new ErroRegra(`A Meta recusou: ${x instanceof Error ? x.message : String(x)}`);
+    }
+    await registrarLog(u, { acao: "avisos.modelo", entidade: "configuracao", entidadeId: 0, descricao: `Criou o modelo de mensagem aviso_credito_ia na Meta (${r.status})` });
+    return r;
+  });
+}
+
+/** Primeira mensagem para todos (usuário, 12/11/2026: "a partir de agora todos serão avisados sobre o token da IA"):
+ *  serve também de teste de que o número recebe. */
+export async function acaoTesteAvisoCredito() {
+  return executar(async () => {
+    const u = await autorizar("config.gerenciar");
+    const { enviarAvisoCreditoWhatsApp } = await import("@/lib/avisos/credito-whatsapp");
+    const envios = await enviarAvisoCreditoWhatsApp("a partir de agora, este número será avisado sempre que o crédito (token) da IA estiver baixo, acabando ou acabar");
+    if (!envios.length) throw new ErroRegra("Cadastre pelo menos um número primeiro.");
+    const ok = envios.filter((e) => e.ok).length;
+    await registrarLog(u, { acao: "avisos.credito", entidade: "configuracao", entidadeId: 0, descricao: `Enviou o aviso inicial do crédito da IA (${ok} de ${envios.length})` });
+    if (!ok) throw new ErroRegra(`Não saiu para ninguém: ${envios[0].erro ?? "erro desconhecido"}`);
+    return `${ok} de ${envios.length}`;
+  });
+}

@@ -87,7 +87,7 @@ export function textoDoCredito(s: SituacaoCredito): string {
   }
 }
 
-/* Aviso no celular quando o crédito acaba (usuário, 12/11/2026: "criar uma automação para me lembrar quando tiver
+/* Aviso no WhatsApp dos programadores e do dono quando o crédito acaba (usuário, 12/11/2026: "criar uma automação para me lembrar quando tiver
    acabando... e quando acabar... para eu lembrar o dono de colocar os créditos"). A recarga automática da OpenAI foi
    desligada nesse dia, então sem este aviso a IA pararia sem ninguém saber. */
 const GRAVIDADE: Record<NivelCredito, number> = { sem_saldo: 0, ok: 0, baixo: 1, acabando: 2, acabou: 3 };
@@ -104,9 +104,17 @@ export function avisoDoCredito(s: SituacaoCredito, marca: MarcaAvisoCredito | nu
   const piorou = g > antes;
   const repetir = g >= 2 && marca?.dia !== hoje;
   if (!piorou && !repetir) return null;
-  const corpo = `${textoDoCredito(s)} Lembre o dono de colocar crédito em platform.openai.com → Billing → Buy credits e depois informe o novo saldo na Visão geral.`;
+  const corpo = textoDoCredito(s);
   if (s.nivel === "acabou") return { titulo: "🔴 Acabou o crédito da IA", corpo, urgente: true };
   if (s.nivel === "acabando") return { titulo: "🟠 Crédito da IA acabando", corpo, urgente: true };
   /* urgente: fora do horário da loja o aviso não urgente é descartado, e "baixo" avisa uma vez só */
   return { titulo: "🟡 Crédito da IA baixo", corpo, urgente: true };
+}
+
+/** Frase do aviso no WhatsApp (vai no {{1}} do modelo "aviso_credito_ia": sem quebra de linha, a Meta recusa). */
+export function fraseCreditoWhatsApp(s: SituacaoCredito): string {
+  const resto = `sobra ${usd(s.restante ?? 0)}${s.dias != null ? `, ${emDias(s.dias)} no ritmo atual` : ""}`;
+  if (s.nivel === "acabou") return "o crédito da IA ACABOU e ela parou de responder os clientes";
+  if (s.nivel === "acabando") return `o crédito da IA está acabando (${resto})`;
+  return `o crédito da IA está baixo (${resto})`;
 }

@@ -7,6 +7,7 @@ import { TrocarSenha } from "./trocar-senha";
 import { MinhaFoto } from "./minha-foto";
 import { AvisosNoCelular } from "./avisos-celular";
 import { RelatorioNoWhatsapp } from "./relatorio-whatsapp";
+import { CreditoNoWhatsapp } from "./credito-whatsapp";
 import { ModelosDoCliente } from "./modelos-cliente";
 
 export const metadata: Metadata = { title: "Minha conta" };
@@ -30,6 +31,7 @@ export default async function PaginaConta() {
       </Painel>
       <AvisosNoCelular />
       {u.papel === "admin" && <RelatorioNoWhatsapp />}
+      {u.papel === "admin" && <CreditoNoWhatsapp />}
       {u.papel === "admin" && <ModelosDoCliente />}
       <TrocarSenha />
     </Pagina>

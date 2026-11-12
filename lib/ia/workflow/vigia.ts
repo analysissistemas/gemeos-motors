@@ -130,6 +130,8 @@ export async function vigiarAtendimentos(agora = new Date()) {
   await avisosAgendados(agora).catch((e) => console.error("[vigia] avisos", e));
   /* modelos da Meta do contato do dia: criados sozinhos se faltarem (dono, 20/10/2026) */
   await import("@/lib/avisos/modelos-cliente").then((m) => m.garantirModelosCliente()).catch((e) => console.error("[vigia] modelos da Meta", e));
+  /* modelo da Meta do aviso de crédito da IA (12/11/2026): criado sozinho se houver número cadastrado */
+  await import("@/lib/avisos/credito-whatsapp").then((m) => m.garantirModeloCredito()).catch((e) => console.error("[vigia] modelo do crédito", e));
   const [config, controle, horario] = await Promise.all([lerConfigWorkflow(), lerControle(), lerHorario()]);
   const aberta = lojaAberta(horario, agora);
   const tarefasCobradas = await cobrarTarefasDaLoja(agora, aberta).catch((e) => {

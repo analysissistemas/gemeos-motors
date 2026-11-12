@@ -1,7 +1,7 @@
 /* Barrinha do crédito da IA na Visão geral (lib/ia/credito.ts, usuário 29/10/2026). Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { avisoDoCredito, custoAudioUsd, custoUsd, situacaoDoCredito, textoDoCredito } from "../../lib/ia/credito.ts";
+import { avisoDoCredito, custoAudioUsd, fraseCreditoWhatsApp, custoUsd, situacaoDoCredito, textoDoCredito } from "../../lib/ia/credito.ts";
 
 const agora = new Date("2026-10-29T12:00:00Z");
 const diasAtras = (d: number) => new Date(agora.getTime() - d * 86_400_000).toISOString();
@@ -73,11 +73,18 @@ test("aviso do crédito: avisa quando piora, repete 1x por dia só acabando/acab
   assert.equal(avisoDoCredito(baixo, { nivel: "baixo", dia: "2026-11-11" }, "2026-11-12"), null, "baixo avisa uma vez só");
   const a = avisoDoCredito(acabando, { nivel: "baixo", dia: "2026-11-12" }, "2026-11-12")!;
   assert.match(a.titulo, /acabando/);
-  assert.match(a.corpo, /Lembre o dono de colocar crédito/);
+  assert.match(a.corpo, /acabando/);
   assert.equal(avisoDoCredito(acabando, { nivel: "acabando", dia: "2026-11-12" }, "2026-11-12"), null, "no mesmo dia não repete");
   assert.ok(avisoDoCredito(acabando, { nivel: "acabando", dia: "2026-11-11" }, "2026-11-12"), "no dia seguinte repete");
   const z = avisoDoCredito(acabou, { nivel: "acabando", dia: "2026-11-12" }, "2026-11-12")!;
   assert.match(z.titulo, /Acabou/);
   assert.equal(z.urgente, true);
   assert.equal(avisoDoCredito(ok, { nivel: "acabou", dia: "2026-11-11" }, "2026-11-12"), null, "recarregou: não avisa");
+});
+
+test("frase do WhatsApp: sem quebra de linha e diz quanto sobra", () => {
+  const s = situacaoDoCredito({ saldo: { usd: 20, em: "2026-11-01T12:00:00Z" }, gastoDesdeSaldo: 19.5, gasto7Dias: 7, agora: new Date("2026-11-12T12:00:00Z"), semCreditoDesde: null });
+  assert.match(fraseCreditoWhatsApp(s), /^o crédito da IA está acabando \(sobra US\$ 0,50, menos de 1 dia no ritmo atual\)$/);
+  assert.equal(fraseCreditoWhatsApp({ ...s, nivel: "acabou" }), "o crédito da IA ACABOU e ela parou de responder os clientes");
+  assert.doesNotMatch(fraseCreditoWhatsApp({ ...s, nivel: "baixo" }), /\n/);
 });
