@@ -86,3 +86,26 @@ export function textoDoCredito(s: SituacaoCredito): string {
       return `Crédito da IA: ${usd(s.restante ?? 0)}${s.dias != null ? `, ${emDias(s.dias)} no ritmo atual` : ""}.`;
   }
 }
+
+/* Aviso no celular quando o crédito acaba (usuário, 12/11/2026: "criar uma automação para me lembrar quando tiver
+   acabando... e quando acabar... para eu lembrar o dono de colocar os créditos"). A recarga automática da OpenAI foi
+   desligada nesse dia, então sem este aviso a IA pararia sem ninguém saber. */
+const GRAVIDADE: Record<NivelCredito, number> = { sem_saldo: 0, ok: 0, baixo: 1, acabando: 2, acabou: 3 };
+export type MarcaAvisoCredito = { nivel: NivelCredito; dia: string };
+
+/**
+ * Decide se manda aviso agora. Avisa quando o nível PIORA (baixo → acabando → acabou) e, enquanto estiver acabando
+ * ou acabou, uma vez por dia (pode ter passado sem ninguém agir). Baixo avisa uma vez só. Melhorou: não avisa.
+ */
+export function avisoDoCredito(s: SituacaoCredito, marca: MarcaAvisoCredito | null, hoje: string): { titulo: string; corpo: string; urgente: boolean } | null {
+  const g = GRAVIDADE[s.nivel];
+  if (g === 0) return null;
+  const antes = marca ? GRAVIDADE[marca.nivel] : 0;
+  const piorou = g > antes;
+  const repetir = g >= 2 && marca?.dia !== hoje;
+  if (!piorou && !repetir) return null;
+  const corpo = `${textoDoCredito(s)} Lembre o dono de colocar crédito em platform.openai.com → Billing → Buy credits e depois informe o novo saldo na Visão geral.`;
+  if (s.nivel === "acabou") return { titulo: "🔴 Acabou o crédito da IA", corpo, urgente: true };
+  if (s.nivel === "acabando") return { titulo: "🟠 Crédito da IA acabando", corpo, urgente: true };
+  return { titulo: "🟡 Crédito da IA baixo", corpo, urgente: false };
+}

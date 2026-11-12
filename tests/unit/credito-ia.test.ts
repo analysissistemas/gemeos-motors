@@ -1,7 +1,7 @@
 /* Barrinha do crédito da IA na Visão geral (lib/ia/credito.ts, usuário 29/10/2026). Roda com `npm run test:ia`. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { custoAudioUsd, custoUsd, situacaoDoCredito, textoDoCredito } from "../../lib/ia/credito.ts";
+import { avisoDoCredito, custoAudioUsd, custoUsd, situacaoDoCredito, textoDoCredito } from "../../lib/ia/credito.ts";
 
 const agora = new Date("2026-10-29T12:00:00Z");
 const diasAtras = (d: number) => new Date(agora.getTime() - d * 86_400_000).toISOString();
@@ -54,4 +54,30 @@ test("OpenAI recusou por falta de crédito: acabou, mesmo com a conta dizendo qu
   const s = situacaoDoCredito({ saldo: { usd: 50, em: diasAtras(10) }, gastoDesdeSaldo: 10, gasto7Dias: 7, agora, semCreditoDesde: diasAtras(0) });
   assert.equal(s.nivel, "acabou");
   assert.match(textoDoCredito(s), /parou de responder/);
+});
+
+
+test("aviso do crédito: avisa quando piora, repete 1x por dia só acabando/acabou, e não avisa sem saldo informado", () => {
+  const sit = (usd: number, gasto: number, sem: string | null = null) =>
+    situacaoDoCredito({ saldo: { usd, em: "2026-11-01T12:00:00Z" }, gastoDesdeSaldo: gasto, gasto7Dias: 7, agora: new Date("2026-11-12T12:00:00Z"), semCreditoDesde: sem });
+  const ok = sit(100, 1);
+  const baixo = sit(20, 12);
+  const acabando = sit(20, 19.5);
+  const acabou = sit(20, 20, "2026-11-12T10:00:00Z");
+  assert.equal(ok.nivel, "ok");
+  assert.equal(baixo.nivel, "baixo");
+  assert.equal(acabando.nivel, "acabando");
+  assert.equal(avisoDoCredito(ok, null, "2026-11-12"), null);
+  assert.equal(avisoDoCredito(situacaoDoCredito({ saldo: null, gastoDesdeSaldo: 0, gasto7Dias: 7, agora: new Date(), semCreditoDesde: null }), null, "2026-11-12"), null);
+  assert.match(avisoDoCredito(baixo, null, "2026-11-12")!.titulo, /baixo/);
+  assert.equal(avisoDoCredito(baixo, { nivel: "baixo", dia: "2026-11-11" }, "2026-11-12"), null, "baixo avisa uma vez só");
+  const a = avisoDoCredito(acabando, { nivel: "baixo", dia: "2026-11-12" }, "2026-11-12")!;
+  assert.match(a.titulo, /acabando/);
+  assert.match(a.corpo, /Lembre o dono de colocar crédito/);
+  assert.equal(avisoDoCredito(acabando, { nivel: "acabando", dia: "2026-11-12" }, "2026-11-12"), null, "no mesmo dia não repete");
+  assert.ok(avisoDoCredito(acabando, { nivel: "acabando", dia: "2026-11-11" }, "2026-11-12"), "no dia seguinte repete");
+  const z = avisoDoCredito(acabou, { nivel: "acabando", dia: "2026-11-12" }, "2026-11-12")!;
+  assert.match(z.titulo, /Acabou/);
+  assert.equal(z.urgente, true);
+  assert.equal(avisoDoCredito(ok, { nivel: "acabou", dia: "2026-11-11" }, "2026-11-12"), null, "recarregou: não avisa");
 });

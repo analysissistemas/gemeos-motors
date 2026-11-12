@@ -96,6 +96,9 @@ export async function avisosAgendados(agora = new Date()) {
     await enviarAviso(avisoTarefa({ followUpId: t.id, notas: t.notas ?? "Retirada na loja hoje.", conversaId: t.conversaId, entrega: t.tipo === "entrega" }));
   }
 
+  /* crédito da IA acabando/acabou (12/11/2026, recarga automática da OpenAI desligada): conferido a cada volta do vigia */
+  await avisoDoCreditoIa(agora).catch((e) => console.error("[avisos] crédito", e));
+
   /* resumo das 8h (hora de Recife), uma vez por dia (dono, 15/10/2026: "toda manhã às 8") */
   const local = new Date(agora.getTime() - 3 * 3_600_000);
   const minutos = local.getUTCHours() * 60 + local.getUTCMinutes();
@@ -124,4 +127,24 @@ export async function avisosAgendados(agora = new Date()) {
   const { enviarRelatorioWhatsApp } = await import("./whatsapp-equipe");
   const w = await enviarRelatorioWhatsApp(resumoParaWhatsapp(r));
   if (!w.ok && w.como !== "nenhum") console.error("[relatorio whatsapp]", w.erro);
+}
+
+/** Manda o aviso do crédito da IA para os celulares inscritos (regra em lib/ia/credito.ts: piorou, ou 1x por dia
+ *  enquanto estiver acabando/acabou). Guarda o último nível avisado em configuracoes "avisos.credito". */
+async function avisoDoCreditoIa(agora: Date) {
+  const { lerSituacaoCredito } = await import("@/lib/ia/consumo");
+  const { avisoDoCredito } = await import("@/lib/ia/credito");
+  const s = await lerSituacaoCredito(agora);
+  const [l] = await db.select({ valor: schema.configuracoes.valor }).from(schema.configuracoes).where(eq(schema.configuracoes.chave, "avisos.credito")).limit(1);
+  const marca = (l?.valor as { nivel: typeof s.nivel; dia: string } | null) ?? null;
+  const hoje = diaLocal(agora);
+  const a = avisoDoCredito(s, marca, hoje);
+  /* melhorou (recarregou): guarda o nível novo, para o próximo "acabando" avisar de novo */
+  if (!a) {
+    if (marca && marca.nivel !== s.nivel) await db.update(schema.configuracoes).set({ valor: { nivel: s.nivel, dia: marca.dia }, atualizadoEm: new Date() }).where(eq(schema.configuracoes.chave, "avisos.credito"));
+    return;
+  }
+  const valor = { nivel: s.nivel, dia: hoje };
+  await db.insert(schema.configuracoes).values({ chave: "avisos.credito", valor }).onConflictDoUpdate({ target: schema.configuracoes.chave, set: { valor, atualizadoEm: new Date() } });
+  await enviarAviso({ ...a, tag: "credito-ia", url: "/sistema" });
 }

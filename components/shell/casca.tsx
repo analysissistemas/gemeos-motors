@@ -67,7 +67,7 @@ function ativo(pathname: string, href: string) {
   return href === "/sistema" ? pathname === "/sistema" : pathname === href || pathname.startsWith(href + "/");
 }
 
-export function Casca({ usuario, children }: { usuario: { nome: string; papel: Papel; fotoUrl?: string | null }; children: React.ReactNode }) {
+export function Casca({ usuario, children, seloTopo }: { usuario: { nome: string; papel: Papel; fotoUrl?: string | null }; children: React.ReactNode; seloTopo?: React.ReactNode }) {
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
   const contadores = useContadores();
@@ -137,6 +137,7 @@ export function Casca({ usuario, children }: { usuario: { nome: string; papel: P
             <Menu className="size-5" />
           </button>
           <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">{atual?.rotulo ?? "Sistema"}</p>
+          {seloTopo}
           <AlertasTopo followups={contadores.followups} />
           <BotaoTema />
         </header>
