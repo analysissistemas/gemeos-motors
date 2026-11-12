@@ -107,5 +107,6 @@ export function avisoDoCredito(s: SituacaoCredito, marca: MarcaAvisoCredito | nu
   const corpo = `${textoDoCredito(s)} Lembre o dono de colocar crédito em platform.openai.com → Billing → Buy credits e depois informe o novo saldo na Visão geral.`;
   if (s.nivel === "acabou") return { titulo: "🔴 Acabou o crédito da IA", corpo, urgente: true };
   if (s.nivel === "acabando") return { titulo: "🟠 Crédito da IA acabando", corpo, urgente: true };
-  return { titulo: "🟡 Crédito da IA baixo", corpo, urgente: false };
+  /* urgente: fora do horário da loja o aviso não urgente é descartado, e "baixo" avisa uma vez só */
+  return { titulo: "🟡 Crédito da IA baixo", corpo, urgente: true };
 }
