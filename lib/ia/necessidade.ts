@@ -544,7 +544,8 @@ export function fonteDaFaixa(n: Necessidade): string {
 }
 
 /** A loja já indicou as motos nesta conversa (o sistema não indica de novo). */
-export const jaIndicou = (historico: string) => /(?:as que mais combinam|a que mais combina) com voc[eê]|as que eu te indico s[aã]o|a que eu te indico [eé]/i.test(historico);
+/* desde 13/11/2026 a indicação é o link do site (textoSiteIndicacao): "No nosso site você vê todas" também conta */
+export const jaIndicou = (historico: string) => /(?:as que mais combinam|a que mais combina) com voc[eê]|as que eu te indico s[aã]o|a que eu te indico [eé]|no nosso site voc[eê] v[eê] tod[ao]s/i.test(historico);
 
 /** O que já se sabe, para a instrução da IA e o painel ("Uso: trabalho · 20 km/dia · garupa: sim · faixa: até 7 mil"). */
 export function fichaDaNecessidade(n: Necessidade): string {

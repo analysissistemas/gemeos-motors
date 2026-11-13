@@ -32,6 +32,10 @@ export function linkDoSite(p: { modelo?: string | null; tipo?: string | null } =
 }
 export const textoSiteOpcoes = (nome?: string | null, link = "gemeosmotors.com.br") =>
   `${comNome(nome, "Temos uma boa variedade de modelos! 😃")} No nosso site você vê todos, com foto, preço e cores: ${link}\n\nÉ só clicar na moto que te agradar que ela chega aqui pra mim e eu te passo tudo certinho 😉`;
+/** Na hora de indicar, o site (Milton, 13/11/2026: "Essa sugestão dela é muito fraca. Bom ela não opinar. Mandar ir ao
+ *  catálogo"; "faz que o cliente vá pro site a todo custo"). Disse a faixa: diz que tem opções nela, sem escolher por ele. */
+export const textoSiteIndicacao = (nome: string | null | undefined, link: string, faixa: string | null) =>
+  `${comNome(nome, faixa ? `Temos opções ${faixa}, com pronta entrega! 😃` : "Temos uma boa variedade de modelos, com pronta entrega! 😃")} No nosso site você vê todas, com foto, preço e cores: ${link}\n\nÉ só clicar na que te agradar que ela chega aqui pra mim e eu te passo tudo certinho 😉`;
 export const textoSiteParecido = (nome?: string | null, link = "gemeosmotors.com.br") =>
   `${comNome(nome, "Temos uma grande variedade de modelos, com opções pra diferentes gostos e necessidades! 🛵")} Dá uma olhada no nosso site e veja se tem algum parecido: ${link}\n\nAchou um que gostou? É só clicar nele que chega aqui pra mim e eu te ajudo 🤝`;
 export const TEXTO_FOTO_NAO_CONFIRMA =

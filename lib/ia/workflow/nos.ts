@@ -10,7 +10,7 @@ import { lerControle } from "@/lib/ia/controle";
 import { enviarLocalizacaoDaIa, enviarMidiaDaIa, enviarRespostaDaIa } from "@/lib/ia/envio";
 import { agendarAquecimento } from "./aquecimento";
 import { MOTIVO_NAO_CLIENTE, naoEhCliente, TEXTO_OFERTA_SERVICO, type NaoCliente } from "@/lib/ia/nao-cliente";
-import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, indicarMotos, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, cartoesIndicacao, fonteDaFaixa, textoAPartirDe, textoPergunta, resumoDaNecessidade, type MotoParaIndicar } from "@/lib/ia/necessidade";
+import { faixaDoTexto, respondendoFaixa, perguntouEntrega, TEXTO_ENTREGA_REGIAO, faixasDoEstoque, instrucaoQualificacao, jaIndicou, lerDoCliente, lerNecessidade, limparParaQualificacao, pediuOpcoes, perguntasFeitas, proximoPasso, fonteDaFaixa, textoAPartirDe, textoPergunta, type MotoParaIndicar } from "@/lib/ia/necessidade";
 import { montarAcessorios, pedidoDeAcessorio, RX_ACESSORIO_DA_MOTO, RX_QUER_ACESSORIO } from "@/lib/ia/acessorios";
 import { ehTextoDoSistema } from "@/lib/ia/texto-do-sistema";
 import { duvidaDeEntrada, jaPediuAvaliacao, motivoAvaliacao, pedidoDeAvaliacao, perguntouEntrada, respostaDaEntrada, ROTULO_ITEM, textoDuvidaEntrada, textoPedidoAvaliacao, type PedidoAvaliacao } from "@/lib/ia/avaliacao";
@@ -56,7 +56,7 @@ import { detectarMomento, RX_SEPARAR, ehSoOEstado, instrucaoDeFechamento, jaDiss
 import { assistenciaClara, instrucaoDeIntencao, instrucaoIntermediario, intencaoDoTexto, TEXTO_PEDE_RELATO, PERGUNTAS_INTENCAO, RX_DETALHE_PROBLEMA, RX_IRRITADO, RX_NAO_PODE_VIR, RX_RECADO, falouMalDoAtendimento, reclamouDoAtendimento, semAberturaDoSite, textoPosVenda, textoQueixa, textoRecado, tirarOfertaDeProduto, instrucaoDoSite, instrucaoDoSiteBase, instrucaoTriciclo, tirarTriciclo, tirarListaSemPedido, veioDoSite, cardDoSite, instrucaoCardDoSite, instrucaoDisponibilidade, RX_DISPONIBILIDADE, type Intencao } from "@/lib/ia/intencao";
 import { comMotoCitada, instrucaoDeMidia, pedidoDeMidia, planejarApresentacao, planejarPedido, tirarPromessaDeMidia, tirarPromessaDeOutras, semNomesDeModelo, ultimaCitada, type ItemMidia, type ModeloComMidia, type PlanoMidia } from "@/lib/ia/midia-tipos";
 import { artigo } from "@/lib/ia/estoque-tipos";
-import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, linkDoSite, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
+import { candidatosPorPista, escritoPeloCliente, instrucaoDeAudio, instrucaoDeFoto, respostaParaMidia, RX_MODELO_PARECIDO, TEXTO_DA_RESPOSTA, linkDoSite, textoSiteIndicacao, textoSiteOpcoes, textoSiteParecido, type ItemDisponivel } from "@/lib/ia/foto-cliente";
 import { corrigirGarantiaSemFonte, corrigirKmSemFonte } from "@/lib/ia/ficha-fatos";
 import { corrigirDigitacao, perguntaDeIdade, soDespedida, textoDespedida, tirarFalaDeIdade, TEXTO_IDADE } from "@/lib/ia/limites";
 import { avancarEtapaPelaIa, criarNegocio } from "@/lib/servicos/negocios";
@@ -1606,7 +1606,7 @@ Hoje é ${agora.extenso} (horário de Recife). A loja está ${aberta ? "ABERTA" 
 ${qualificacao ? instrucaoDoSiteBase(textoDoCliente(c)) + instrucaoQualificacao(necessidade) : instrucaoDoSite(textoDoCliente(c))}${instrucaoDeFoto(c.textoBuffer)}${instrucaoDeAudio(c.textoBuffer)}${instrucaoIntermediario(textoDoCliente(c))}${instrucaoTriciclo(c.textoBuffer, await triciclosComEstoque(c))}${instrucaoDeIntencao(intencao)}${instrucaoCardDoSite(c.textoBuffer)}${instrucaoDisponibilidade(semAberturaDoSite(c.textoBuffer))}${instrucaoAPartir}
 
 ${instrucaoVariasPerguntas(semAberturaDoSite(c.textoBuffer))}# ESTILO DE VENDEDOR (dono, 19/10/2026: "está enviando muitas mensagens, sobrecarregando o cliente")
-Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Nunca peça CPF, documento ou data de nascimento.
+Fale como um vendedor experiente no WhatsApp: resposta CURTA, no máximo 2 frases e UMA pergunta. Primeiro entenda o que o cliente precisa, depois ofereça. Responda só o que ele perguntou. Não repita benefício, preço ou informação que a loja já mandou na conversa. Nada de frase de enchimento ("estou aqui para ajudar", "qualquer dúvida estou à disposição", "fico no aguardo"). Não liste o estoque: quem quer ver as opções vai para o site gemeosmotors.com.br. Não dê opinião nem escolha a moto por ele ("a ideal pra você é", "eu indico", "combina com você"): passe só os fatos (preço, autonomia, velocidade) e, para escolher, mande ao site gemeosmotors.com.br, onde ele vê todas e clica na que gostar (Milton, 13/11/2026: "Bom ela não opinar. Mandar ir ao catálogo"). Nunca peça CPF, documento ou data de nascimento.
 Não pergunte se ele quer retirar na loja ou receber por entrega, não peça nome, endereço nem dia (só se o MOMENTO DA COMPRA abaixo mandar), e não diga "vou simular" ou "vou encaminhar a simulação": o sistema faz isso na hora certa (a simulação quando ele pede, a entrega só depois que ele decide comprar). Não confirme de novo o que o cliente já respondeu ("só para confirmar...", "posso seguir?"): se ele disse "sim", "isso" ou a bandeira, siga.
 
 ${respondeuSoONome(c.textoBuffer, ultimaDaLoja) ? "# O CLIENTE SÓ DISSE O NOME\nEle acabou de responder só o nome. Responda CURTO: cumprimente pelo nome e retome a conversa com UMA pergunta sobre o que vocês estavam falando. NÃO repita preço, ficha, cores, disponibilidade nem nada que a loja já mandou.\n\n" : ""}${emDescoberta ? "" : instrucaoDeFechamento(momento, modeloDaConversa)}
@@ -1770,37 +1770,18 @@ ${intencao === "compra" && !emDescoberta ? instrucaoDeMidia(midia) : instrucaoDe
       const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
       return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, site: true } };
     }
-    /* qualificação completa: o sistema indica as motos (no máximo 2, com o porquê de cada uma). Sem moto que sirva, a IA segue */
+    /* qualificação completa ou pediu as opções: o site, já no tipo dele (Milton, 13/11/2026: "Essa sugestão dela é muito
+       fraca. Bom ela não opinar. Mandar ir ao catálogo"; "faz que o cliente vá pro site a todo custo"). Antes iam até 3 motos
+       escolhidas pelo sistema, com foto e o porquê (19/10/2026). O cliente clica na moto no site e ela chega aqui com o nome */
     /* vale mesmo sem texto da IA (a resposta é do sistema); só não indica quando ela passou ao vendedor sem escrever nada */
     if ((passo?.acao === "indicar" || mostrarOpcoes) && (r.ctx.texto || !r.ctx.humano)) {
-      const indicadas = indicarMotos(necessidade, motosQualif.length ? motosQualif : await motosParaIndicar(c), 3);
       const nomeInd = primeiroNome(ultimo?.fatos?.nome || c.memoria.fatos.nome);
-      let ind = cartoesIndicacao({ nome: nomeInd, n: necessidade, indicadas });
-      if (ind && mostrarOpcoes)
-        ind = {
-          ...ind,
-          abertura: resumoDaNecessidade(necessidade) ? ind.abertura : `${nomeInd ? `${nomeInd}, s` : "S"}eparei algumas com pronta entrega:`,
-          pergunta: `Todas as opções, com foto e preço, estão no nosso site: ${linkDoSite({ tipo: necessidade.tipo })}\n\n${ind.pergunta}`,
-        };
-      if (ind) {
-        /* Milton (19/10/2026): cada opção com foto, descrição e preço. O cartão vai como legenda da foto; moto sem foto (ou com
-           a foto já mandada) vai em texto junto da abertura. A pergunta vai depois das fotos; sem foto nenhuma, no fim do texto */
-        const modelos = await motosComMidia(c);
-        const jaEnviadas = await midiasJaEnviadas(c.conversaId);
-        const itens: ItemMidia[] = [];
-        const emTexto: string[] = [];
-        for (const k of ind.cartoes) {
-          const foto = modelos.find((x) => x.nome.trim().toLowerCase() === k.nome.trim().toLowerCase())?.fotos.find((f) => !jaEnviadas.includes(f.url));
-          if (foto) itens.push({ tipo: "foto", url: foto.url, legenda: k.legenda });
-          else emTexto.push(k.legenda);
-        }
-        /* a pergunta da entrega que veio junto não se perde (Sidney, 22/10/2026: "fazem entrega pra Pernambuco?" + 2 perguntas de moto) */
-        const entregaAntes = perguntouEntrega(semAberturaDoSite(c.textoBuffer)) ? [TEXTO_ENTREGA_REGIAO] : [];
-        const texto = [...entregaAntes, ind.abertura, ...emTexto, ...(itens.length ? [] : [ind.pergunta])].join("\n\n");
-        const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
-        const midiaIndicacao: PlanoMidia | null = itens.length ? { modelo: null, pedido: [], itens, maxItens: 3, depois: ind.pergunta } : null;
-        return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: midiaIndicacao, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, cartoes: ind.cartoes.map((k) => k.legenda), qualificacao: { indicou: true, necessidade } } };
-      }
+      const faixa = necessidade.faixaAte ? `até uns ${Math.round(necessidade.faixaAte / 1000)} mil` : null;
+      /* a pergunta da entrega que veio junto não se perde (Sidney, 22/10/2026: "fazem entrega pra Pernambuco?" + 2 perguntas de moto) */
+      const entregaAntes = perguntouEntrega(semAberturaDoSite(c.textoBuffer)) ? [TEXTO_ENTREGA_REGIAO] : [];
+      const texto = [...entregaAntes, textoSiteIndicacao(nomeInd, linkDoSite({ tipo: necessidade.tipo }), faixa)].join("\n\n");
+      const pipe = { ...r.ctx, texto, textoCatalogo: texto, humano: false, motivo: null };
+      return { ctx: { pipe, aprendido, saudacao: g.saudacao(), midia: null, momento: null, intencao, modeloDaConversa: null, ultimaDaLoja, motivoTransferencia: null }, entrada: { texto: c.textoBuffer }, saida: { ...saida, resposta: texto, site: true, qualificacao: { indicou: true, necessidade } } };
     }
     const paraMidia = respostaParaMidia({ textoBuffer: c.textoBuffer, ultimaDaLoja, modelos: nomesCat.map((m) => m.nome), foraDaVenda: intencao === "assistencia" || reclamouDoAtendimento(c.textoBuffer) || RX_RECADO.test(semAberturaDoSite(c.textoBuffer)) || RX_PEDE_PESSOA.test(semAberturaDoSite(c.textoBuffer)) });
     /* foto sem o nome: a moto da conversa (a que o cliente ou o vendedor já citou) ou, com pista no texto ("a preta, uma

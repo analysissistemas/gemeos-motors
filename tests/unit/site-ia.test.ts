@@ -72,3 +72,13 @@ test("disse moto e a bicicleta sai mais em conta: oferece a bicicleta também (M
   assert.match(textoAPartirDe("moto", ESTOQUE)!, /^Temos moto elétrica a partir de \*R\$ 5\.890\* e, se quiser algo mais em conta, bicicleta elétrica a partir de \*R\$ 3\.990\*/);
   assert.match(textoAPartirDe("moto", ESTOQUE.filter((m) => !/bicicleta|bike/i.test(m.nome)))!, /^Temos moto elétrica a partir de \*R\$ 5\.890\*, com pronta entrega/);
 });
+
+test("na hora de indicar vai o site, sem opinião (Milton, 13/11/2026: 'Bom ela não opinar. Mandar ir ao catálogo')", async () => {
+  const { textoSiteIndicacao } = await import("../../lib/ia/foto-cliente.ts");
+  const { jaIndicou } = await import("../../lib/ia/necessidade.ts");
+  const t = textoSiteIndicacao("Ana", linkDoSite({ tipo: "moto" }), "até uns 6 mil");
+  assert.match(t, /^Ana, temos opções até uns 6 mil, com pronta entrega! 😃 No nosso site você vê todas, com foto, preço e cores: gemeosmotors\.com\.br\/#tipo=moto/);
+  assert.doesNotMatch(t, /indico|combina|ideal/i);
+  assert.ok(jaIndicou(`Loja: ${t}`), "depois do site a IA não volta a perguntar o orçamento");
+  assert.match(textoSiteIndicacao(null, "gemeosmotors.com.br", null), /^Temos uma boa variedade de modelos/);
+});
